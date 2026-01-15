@@ -12,11 +12,16 @@ export default function Home() {
       <Stack.Screen options={{ title: 'Home' }} />
       <Container>
         <Text className='text-2xl font-bold'>Home</Text>
-        <Link href='/login' className='text-blue-500'>Login</Link>
-        <Link href='/sign-up' className='text-blue-500'>Sign Up</Link>
-        <Link href='/otp-verify' className='text-blue-500'>otp verification</Link>
-        <Link href='/forgot-password' className='text-blue-500'>forgot-password</Link>
-        <Link href='/reset-password' className='text-blue-500'>reset-password</Link>
+        <Link href='/auth/login' className='text-blue-500'>Login</Link>
+        <Link href='/auth/sign-up' className='text-blue-500'>Sign Up</Link>
+        <Link href='/auth/otp-verify' className='text-blue-500'>otp verification</Link>
+        <Link href='/auth/forgot-password' className='text-blue-500'>forgot-password</Link>
+        <Link href='/auth/reset-password' className='text-blue-500'>reset-password</Link>
+
+        <Text>Customers</Text>
+        <Link href={'/(tabs)/customer'} className='text-blue-500'>Customer Home</Link>
+        <Link href={'/(tabs)/customer/category/'} className='text-blue-500'>Customer Category</Link>
+        <Link href={'/(tabs)/customer/category/250'} className='text-blue-500'>Customer 1 Category</Link>
       </Container>
     </View>
   );
