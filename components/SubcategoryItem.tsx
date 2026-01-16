@@ -14,6 +14,8 @@ export default function SubcategoryItem({
   isActive,
   onPress,
 }: SubcategoryItemProps) {
+  console.log("Ok");
+  
   return (
     <TouchableOpacity
       onPress={onPress}

@@ -6,6 +6,8 @@ import { StatusBar } from "expo-status-bar"
 // Components
 import CategoryProductCard from "@/components/CategoryProductCard"
 import SubcategoryItem from "@/components/SubcategoryItem"
+import useCartStore from "@/store/cartStore"
+import useWishlistStore from "@/store/wishlistStore"
 
 
 // Subcategory type
@@ -114,6 +116,10 @@ const products: Product[] = [
 export default function CategoryScreen() {
   const { categoryId } = useLocalSearchParams()
   console.log("categoryId from params", categoryId)
+  
+  const {cart,addToCart,updateQuantity,totalItems,totalPrice,cartItems}=useCartStore()
+  const {wishlist,toggleWishlist}=useWishlistStore()
+  
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>("1")
   const categoryTitle = "Vegetables & Fruits"
 
@@ -123,7 +129,7 @@ export default function CategoryScreen() {
   return (
     <View className="flex-1 bg-white">
       <StatusBar style='auto' />
-      <Stack.Screen options={{headerTitle:categoryTitle}}/>
+      <Stack.Screen options={{headerTitle:categoryTitle+`#${categoryId}`}}/>
       {/* Header */}
       {/* <View className="flex-row items-center justify-between px-4 pt-14 pb-4 bg-white border-b border-gray-100">
         <TouchableOpacity className="p-2 -ml-2">
@@ -157,7 +163,7 @@ export default function CategoryScreen() {
             numColumns={2}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 100 }}
-            renderItem={({ item }) => <CategoryProductCard product={item} />}
+            renderItem={({ item }) => <CategoryProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             ListEmptyComponent={
               <View className="flex-1 items-center justify-center py-20">
                 <Text className="text-gray-400">No products found</Text>

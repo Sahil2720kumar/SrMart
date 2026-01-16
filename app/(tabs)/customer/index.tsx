@@ -11,6 +11,10 @@ import { router } from "expo-router"
 
 // Components
 import ProductCard from "@/components/ProductCard"
+import SkeletonImage from "@/components/SkeletonImage"
+import useWishlistStore from "@/store/wishlistStore"
+import useCartStore from "@/store/cartStore"
+import OfferProductCard from "@/components/OfferProductCard"
 
 
 // Category data
@@ -67,23 +71,22 @@ const bestDeals = [
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [wishlist, setWishlist] = useState<string[]>([])
+  
+  const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
+  const { wishlist, toggleWishlist } = useWishlistStore()
 
-  const toggleWishlist = (productId: string) => {
-    setWishlist((prev) => (prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]))
-  }
 
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity onPress={() => router.push(`/customer/category/${item.id}`)} className="items-center w-[80px] mr-2 mb-4">
       <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
-        <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-[50px] h-[50px]" resizeMode="contain" />
+        {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-[50px] h-[50px]" resizeMode="contain" /> */}
+        <SkeletonImage size="small"   />
       </View>
       <Text className="text-xs text-gray-700 text-center leading-4">{item.name}</Text>
     </TouchableOpacity>
   )
 
   
-
   return (
     <View className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -133,7 +136,7 @@ export default function HomeScreen() {
         <View className="px-4 mb-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Shop By Category</Text>
-            <TouchableOpacity onPress={()=>router.push("/(tabs)/customer/category")}>
+            <TouchableOpacity onPress={()=>router.navigate("/(tabs)/customer/category")}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
@@ -157,7 +160,8 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             <View className="w-[120px] h-[100px]">
-              <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-full h-full" resizeMode="contain" />
+              {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-full h-full" resizeMode="contain" /> */}
+              <SkeletonImage size="large"/>
             </View>
           </View>
         </View>
@@ -166,14 +170,14 @@ export default function HomeScreen() {
         <View className="mb-6">
           <View className="flex-row items-center justify-between px-4 mb-4">
             <Text className="text-lg font-bold text-gray-900">Best Deal</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={()=>router.navigate('/(tabs)/customer/offers/1')}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
 
           <FlatList
             data={bestDeals}
-            renderItem={({ item }) => <ProductCard item={item} toggleWishlist={toggleWishlist} wishlist={wishlist} />}
+            renderItem={({item})=><ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -192,7 +196,7 @@ export default function HomeScreen() {
 
           <FlatList
             data={bestDeals}
-            renderItem={({ item }) => <ProductCard item={item} toggleWishlist={toggleWishlist} wishlist={wishlist} />}
+            renderItem={({item})=><ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}

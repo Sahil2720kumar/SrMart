@@ -22,6 +22,12 @@ export default function Home() {
         <Link href={'/(tabs)/customer'} className='text-blue-500'>Customer Home</Link>
         <Link href={'/(tabs)/customer/category/'} className='text-blue-500'>Customer Category</Link>
         <Link href={'/(tabs)/customer/category/250'} className='text-blue-500'>Customer 1 Category</Link>
+        <Link href={'/(tabs)/customer/offers/'} className='text-blue-500'>Offers </Link>
+        <Link href={'/(tabs)/customer/offers/1'} className='text-blue-500'>Offers 1</Link>
+        <Link href={'/(tabs)/customer/search/'} className='text-blue-500'>Search</Link>
+        <Link href={'/(tabs)/customer/search/search-results'} className='text-blue-500'>Search Results</Link>
+        <Link href={'/(tabs)/customer/products/'} className='text-blue-500'>Products</Link>
+        <Link href={'/(tabs)/customer/products/1'} className='text-blue-500'>Specific Product</Link>
       </Container>
     </View>
   );

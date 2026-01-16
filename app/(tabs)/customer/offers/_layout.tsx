@@ -1,7 +1,7 @@
 import { router, Stack } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 
-export default function CategoryLayout() {
+export default function OffersLayout() {
   return (
     <Stack screenOptions={{
       headerLeft(props) {
@@ -19,7 +19,7 @@ export default function CategoryLayout() {
         name="index"
         options={{
           headerShown: true,
-          title: 'Categories',
+          title: 'Offers',
           headerBackTitle: 'Back',
           // Optional: customize header
           headerStyle: {
@@ -30,10 +30,10 @@ export default function CategoryLayout() {
         }}
       />
       <Stack.Screen
-        name="[categoryId]"
+        name="[offerId]"
         options={{
           headerShown: true,
-          title: 'Category Details',
+          title: 'Offer Name',
           headerBackTitle: 'Back',
           // Optional: customize header
           headerStyle: {

@@ -3,9 +3,11 @@ import { Tabs, TabList, TabTrigger, TabSlot } from "expo-router/ui"
 import { View, Text, Pressable } from "react-native"
 import { Svg, Path, Circle } from "react-native-svg"
 import { usePathname } from "expo-router"
+import AntDesign from '@expo/vector-icons/AntDesign';
+import Foundation from '@expo/vector-icons/Foundation';
 
 // Tab Icons
-function HomeIcon({ focused=false }: { focused?: boolean }) {
+function HomeIcon({ focused = false }: { focused?: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Path
@@ -27,7 +29,7 @@ function HomeIcon({ focused=false }: { focused?: boolean }) {
   )
 }
 
-function SearchIcon({ focused=false }: { focused?: boolean }) {
+function SearchIcon({ focused = false }: { focused?: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Circle
@@ -49,7 +51,7 @@ function SearchIcon({ focused=false }: { focused?: boolean }) {
   )
 }
 
-function CartIcon({ focused=false, itemCount = 0 }: { focused?: boolean; itemCount?: number }) {
+function CartIcon({ focused = false, itemCount = 0 }: { focused?: boolean; itemCount?: number }) {
   return (
     <View className="relative">
       <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -83,7 +85,7 @@ function CartIcon({ focused=false, itemCount = 0 }: { focused?: boolean; itemCou
   )
 }
 
-function OrdersIcon({ focused=false }: { focused?: boolean }) {
+function OrdersIcon({ focused = false }: { focused?: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Path
@@ -108,7 +110,7 @@ function OrdersIcon({ focused=false }: { focused?: boolean }) {
   )
 }
 
-function ProfileIcon({ focused=false }: { focused?: boolean }) {
+function ProfileIcon({ focused = false }: { focused?: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Path
@@ -155,7 +157,7 @@ function TabButton({
 export default function TabLayout() {
   const pathname = usePathname();
   console.log(pathname);
-  
+
   return (
     <Tabs>
       {/* Main content area */}
@@ -185,17 +187,35 @@ export default function TabLayout() {
         </TabTrigger>
 
         <TabTrigger name="category" href="/(tabs)/customer/category/index" asChild>
-          <Pressable className="flex-1">
+          <Pressable className="flex-1 hidden">
             <TabButton label="Category" focused={pathname === "/(tabs)/customer/category/index"}>
               <SearchIcon focused={pathname === "/(tabs)/customer/category/index"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="search" href="/search" asChild>
+
+        <TabTrigger name="offers" href='/customer/offers' asChild>
           <Pressable className="flex-1">
-            <TabButton label="Search" focused={pathname === "/search"}>
-              <SearchIcon focused={pathname === "/search"} />
+            <TabButton label="offers" focused={pathname === "/customer/offers"}>
+              <Foundation name="burst-sale" size={30} color={pathname === "/customer/offers" ? "#16a34a" : "#9ca3af"} />
+            </TabButton>
+          </Pressable>
+        </TabTrigger>
+
+        <TabTrigger name="products" href="/customer/products" asChild>
+          <Pressable className="flex-1">
+            <TabButton label="products" focused={pathname === "/customer/products"}>
+              <AntDesign name="product" size={24} color={pathname === "/customer/products" ? "#16a34a" : "#9ca3af"} />
+            </TabButton>
+          </Pressable>
+        </TabTrigger>
+
+
+        <TabTrigger name="search" href="/customer/search" asChild>
+          <Pressable className="flex-1">
+            <TabButton label="Search" focused={pathname === "/customer/search"}>
+              <SearchIcon focused={pathname === "/customer/search"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
@@ -223,7 +243,7 @@ export default function TabLayout() {
             </TabButton>
           </Pressable>
         </TabTrigger>
-      
+
       </TabList>
     </Tabs>
   )

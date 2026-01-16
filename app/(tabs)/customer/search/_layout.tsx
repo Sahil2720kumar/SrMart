@@ -1,7 +1,8 @@
 import { router, Stack } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-export default function CategoryLayout() {
+export default function SearchLayout() {
   return (
     <Stack screenOptions={{
       headerLeft(props) {
@@ -11,7 +12,7 @@ export default function CategoryLayout() {
       },
       headerRight(props) {
         return (
-          <Feather name="search" size={24} color="black" />
+          <Ionicons name="filter" size={24} color="black" />
         )
       },
     }}>
@@ -19,28 +20,28 @@ export default function CategoryLayout() {
         name="index"
         options={{
           headerShown: true,
-          title: 'Categories',
+          title: 'Search',
           headerBackTitle: 'Back',
           // Optional: customize header
           headerStyle: {
             backgroundColor: '#fff',
           },
           headerTitleAlign: 'center',
-          headerTintColor: '#000', 
+          headerTintColor: '#000',
         }}
       />
       <Stack.Screen
-        name="[categoryId]"
+        name="search-results"
         options={{
           headerShown: true,
-          title: 'Category Details',
+          title: 'Search Query',
           headerBackTitle: 'Back',
           // Optional: customize header
           headerStyle: {
             backgroundColor: '#fff',
           },
           headerTitleAlign: 'center',
-          headerTintColor: '#000', 
+          headerTintColor: '#000',
         }}
       />
     </Stack>
