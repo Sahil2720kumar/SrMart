@@ -195,51 +195,51 @@ export default function TabLayout() {
         </TabTrigger>
 
 
-        <TabTrigger name="offers" href='/customer/offers' asChild>
+        <TabTrigger name="offers" href='/customer/offers/index' asChild>
           <Pressable className="flex-1">
-            <TabButton label="offers" focused={pathname === "/customer/offers"}>
-              <Foundation name="burst-sale" size={30} color={pathname === "/customer/offers" ? "#16a34a" : "#9ca3af"} />
+            <TabButton label="offers" focused={pathname.startsWith("/customer/offers")}>
+              <Foundation name="burst-sale" size={30} color={pathname.startsWith("/customer/offers") ? "#16a34a" : "#9ca3af"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
         <TabTrigger name="products" href="/customer/products" asChild>
           <Pressable className="flex-1">
-            <TabButton label="products" focused={pathname === "/customer/products"}>
-              <AntDesign name="product" size={24} color={pathname === "/customer/products" ? "#16a34a" : "#9ca3af"} />
+            <TabButton label="products" focused={pathname.startsWith("/customer/products")}>
+              <AntDesign name="product" size={24} color={pathname.startsWith("/customer/products") ? "#16a34a" : "#9ca3af"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
 
         <TabTrigger name="search" href="/customer/search" asChild>
-          <Pressable className="flex-1">
-            <TabButton label="Search" focused={pathname === "/customer/search"}>
-              <SearchIcon focused={pathname === "/customer/search"} />
+          <Pressable className="flex-1 hidden">
+            <TabButton label="Search" focused={pathname.startsWith("/customer/search")}>
+              <SearchIcon focused={pathname.startsWith("/customer/search")} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="cart" href="/cart" asChild>
+        {/* <TabTrigger name="cart" href="/customer/order/cart" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Cart" focused={pathname === "/cart"}>
-              <CartIcon focused={pathname === "/cart"} itemCount={3} />
+            <TabButton label="Cart" focused={pathname === "/customer/order/cart"}>
+              <CartIcon focused={pathname === "/customer/order/cart"} itemCount={3} />
+            </TabButton>
+          </Pressable>
+        </TabTrigger> */}
+
+        <TabTrigger name="orders" href="/customer/order/orders/index" asChild>
+          <Pressable className="flex-1">
+            <TabButton label="Orders" focused={pathname.startsWith("/customer/order/orders")}>
+              <OrdersIcon focused={pathname.startsWith("/customer/order/orders")} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="orders" href="/orders" asChild>
+        <TabTrigger name="profile" href="/(tabs)/customer/account" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Orders" focused={pathname === "/orders"}>
-              <OrdersIcon focused={pathname === "/orders"} />
-            </TabButton>
-          </Pressable>
-        </TabTrigger>
-
-        <TabTrigger name="profile" href="/profile" asChild>
-          <Pressable className="flex-1">
-            <TabButton label="Profile" focused={pathname === "/profile"}>
-              <ProfileIcon focused={pathname === "/profile"} />
+            <TabButton label="Profile" focused={pathname.startsWith("/customer/account")}>
+              <ProfileIcon focused={pathname.startsWith("/customer/account")} />
             </TabButton>
           </Pressable>
         </TabTrigger>

@@ -1,6 +1,5 @@
 module.exports = function (api) {
   api.cache(true);
-
   return {
     presets: [
       ['babel-preset-expo', { jsxImportSource: 'nativewind' }],
@@ -8,9 +7,8 @@ module.exports = function (api) {
     ],
     plugins: [
       'babel-plugin-react-compiler',
-
-      // 🚨 MUST BE LAST
-      'react-native-worklets/plugin',
+      // NOTE: reanimated plugin MUST be listed last
+      'react-native-reanimated/plugin'
     ],
   };
 };

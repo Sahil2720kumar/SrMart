@@ -4,6 +4,7 @@ import { Product } from "@/types/product.types";
 import SkeletonImage from "./SkeletonImage";
 import { CartItem } from "@/types/cart.types";
 import Feather from "@expo/vector-icons/Feather";
+import { router } from "expo-router";
 
 interface ProductCardProps {
   item: Product
@@ -19,7 +20,7 @@ const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, add
   const isInCart = !!cartItem
 
   return (
-    <View className="w-[165px] bg-white rounded-2xl mr-3 border border-gray-100 overflow-hidden shadow-sm">
+    <TouchableOpacity onPress={()=>router.push(`/(tabs)/customer/products/${item.id}`)} className="w-[165px] bg-white rounded-2xl mr-3 border border-gray-100 overflow-hidden shadow-sm">
       {/* Wishlist button */}
       <TouchableOpacity
         className="absolute top-2 right-2 z-10 w-8 h-8 bg-white rounded-full items-center justify-center shadow-sm"
@@ -49,7 +50,7 @@ const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, add
           {isInCart ? (
             <View className="flex-row items-center">
               <TouchableOpacity
-                className="w-8 h-8 bg-green-500 rounded-full items-center justify-center"
+                className="w-7 h-7 bg-green-500 rounded-full items-center justify-center"
                 onPress={() => updateQuantity(item.id, -1)}
               >
                 <Feather name="minus" size={18} color="white" />
@@ -58,7 +59,7 @@ const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, add
                 {cartItem.quantity}
               </Text>
               <TouchableOpacity
-                className="w-8 h-8 bg-green-500 rounded-full items-center justify-center"
+                className="w-7 h-7 bg-green-500 rounded-full items-center justify-center"
                 onPress={() => updateQuantity(item.id, 1)}
               >
                 <Feather name="plus" size={18} color="white" />
@@ -71,7 +72,7 @@ const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, add
           )}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   )
 }
 

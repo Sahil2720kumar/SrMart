@@ -1,3 +1,8 @@
+import ProductCard from "@/components/ProductCard"
+import SkeletonImage from "@/components/SkeletonImage"
+import useCartStore from "@/store/cartStore"
+import useWishlistStore from "@/store/wishlistStore"
+import { Stack, useLocalSearchParams } from "expo-router"
 import { useState, useRef } from "react"
 import { View, Text, TouchableOpacity, ScrollView, Dimensions, FlatList } from "react-native"
 
@@ -55,12 +60,15 @@ const sampleReviews: Review[] = [
 ]
 
 const similarProducts = [
-  { id: "s1", name: "Fortune Soyabean Refined Oil", weight: "5 L", price: 10, originalPrice: 12 },
-  { id: "s2", name: "Fortune Rice Bran Refined Oil", weight: "5 L", price: 15, originalPrice: 18 },
-  { id: "s3", name: "Saffola Gold Oil", weight: "1 L", price: 8, originalPrice: 10 },
+  { id: "2", name: "Fortune Soyabean Refined Oil", weight: "5 L", price: 10, originalPrice: 12 },
+  { id: "3", name: "Fortune Rice Bran Refined Oil", weight: "5 L", price: 15, originalPrice: 18 },
+  { id: "4", name: "Saffola Gold Oil", weight: "1 L", price: 8, originalPrice: 10 },
 ]
 
 export default function ProductDetailScreen() {
+  const {productId}=useLocalSearchParams()
+  console.log("productId: ",productId);
+  
   const defaultProduct: Product = {
     id: "1",
     name: "Fortune Sun Lite Refined Sunflower Oil",
@@ -70,11 +78,14 @@ export default function ProductDetailScreen() {
     rating: 4.0,
     reviews: 146,
     description:
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Orci, sem feugiat ut nullam nisl orci, volutpat, felis. Nunc elit, et mattis commodo condimentum tellus et.",
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Orci, Lorem ipsum dolor sit amet, consectetur adipiscing elit. Orci sem feugiat ut nullam nisl orci, volutpat, felis. Nunc elit, et mattis commodo condimentum tellus et.",
     images: ["img1", "img2", "img3", "img4", "img5"],
   }
 
   const product = defaultProduct
+  const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
+  const { wishlist, toggleWishlist } = useWishlistStore()
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [quantity, setQuantity] = useState(1)
@@ -84,16 +95,6 @@ export default function ProductDetailScreen() {
   const flatListRef = useRef<FlatList>(null)
 
   const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-
-  const toggleSimilarWishlist = (productId: string) => {
-    setSimilarWishlist((prev) =>
-      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId],
-    )
-  }
-
-  const addSimilarToCart = (productId: string) => {
-    setSimilarCart((prev) => ({ ...prev, [productId]: 1 }))
-  }
 
   const onScroll = (event: any) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / (width - 32))
@@ -114,6 +115,7 @@ export default function ProductDetailScreen() {
 
   return (
     <View className="flex-1 bg-white">
+      <Stack.Screen options={{headerTitle:`Product Name${productId}`}}/>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Header */}
 
@@ -130,9 +132,9 @@ export default function ProductDetailScreen() {
             renderItem={() => (
               <View
                 style={{ width: width - 32, marginHorizontal: 16 }}
-                className="h-64 bg-gray-50 rounded-2xl items-center justify-center"
+                className="h-96 bg-gray-50 rounded-2xl items-center justify-center"
               >
-                <View className="w-40 h-40 bg-gray-200 rounded-xl" />
+                <SkeletonImage size="xlarge" />
               </View>
             )}
             keyExtractor={(_, index) => index.toString()}
@@ -162,8 +164,8 @@ export default function ProductDetailScreen() {
 
           {/* Price */}
           <View className="flex-row items-center mb-4">
-            <Text className="text-2xl font-bold text-gray-900">${product.price}</Text>
-            <Text className="text-lg text-gray-400 line-through ml-2">${product.originalPrice}</Text>
+            <Text className="text-2xl font-bold text-gray-900">${cart.get(productId)?.price}</Text>
+            <Text className="text-lg text-gray-400 line-through ml-2">${cart.get(productId)?.originalPrice}</Text>
             <View className="bg-green-500 rounded-md px-2 py-1 ml-3">
               <Text className="text-xs font-semibold text-white">{discount}% OFF</Text>
             </View>
@@ -184,7 +186,7 @@ export default function ProductDetailScreen() {
         {/* Reviews & Ratings */}
         <View className="px-4 mt-6">
           <Text className="text-lg font-bold text-gray-900 mb-4">Reviews & Ratings</Text>
-
+ 
           {/* Overall Rating */}
           <View className="flex-row items-center mb-4">
             <Text className="text-4xl font-bold text-gray-900 mr-2">4.2</Text>
@@ -195,7 +197,7 @@ export default function ProductDetailScreen() {
           </View>
 
           {/* Individual Reviews */}
-          {sampleReviews.slice(0, 1).map((review) => (
+          {sampleReviews.slice(0, sampleReviews.length).map((review) => (
             <View key={review.id} className="bg-gray-50 rounded-2xl p-4 mb-3">
               <View className="flex-row items-center mb-2">
                 {/* Avatar Skeleton */}
@@ -221,65 +223,14 @@ export default function ProductDetailScreen() {
         {/* Similar Products */}
         <View className="mt-6">
           <Text className="text-lg font-bold text-gray-900 px-4 mb-4">Similar Products</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
-          >
-            {similarProducts.map((item) => (
-              <View key={item.id} className="w-40 mr-3 bg-white rounded-2xl border border-gray-100 p-3">
-                {/* Wishlist */}
-                <TouchableOpacity
-                  onPress={() => toggleSimilarWishlist(item.id)}
-                  className="absolute top-3 right-3 z-10"
-                >
-                  <View
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: "#f3f4f6",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text style={{ fontSize: 14, color: similarWishlist.includes(item.id) ? "#ef4444" : "#9ca3af" }}>
-                      {similarWishlist.includes(item.id) ? "♥" : "♡"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* Image Skeleton */}
-                <View className="w-full h-24 bg-gray-100 rounded-xl mb-2 items-center justify-center">
-                  <View className="w-16 h-16 bg-gray-200 rounded-lg" />
-                </View>
-
-                <Text className="text-sm font-medium text-gray-900 mb-0.5" numberOfLines={2}>
-                  {item.name}
-                </Text>
-                <Text className="text-xs text-gray-400 mb-2">{item.weight}</Text>
-
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <Text className="text-sm font-bold text-gray-900">${item.price}</Text>
-                    <Text className="text-xs text-gray-400 line-through">${item.originalPrice}</Text>
-                  </View>
-                  {similarCart[item.id] ? (
-                    <View className="bg-green-100 rounded-full px-2 py-1">
-                      <Text className="text-green-600 text-xs font-medium">Added</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => addSimilarToCart(item.id)}
-                      className="bg-green-500 rounded-full px-3 py-1.5"
-                    >
-                      <Text className="text-white text-xs font-medium">Add</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
+            <FlatList
+              data={similarProducts}
+              renderItem={({ item }) => <ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+            />
         </View>
       </ScrollView>
 
@@ -292,14 +243,14 @@ export default function ProductDetailScreen() {
           {/* Quantity Selector */}
           <View className="flex-row items-center mr-4">
             <TouchableOpacity
-              onPress={() => setQuantity(Math.max(1, quantity - 1))}
+              onPress={() => updateQuantity(productId,-1)}
               className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center"
             >
               <Text className="text-gray-700 font-bold text-xl">−</Text>
             </TouchableOpacity>
-            <Text className="mx-4 text-lg font-semibold">{quantity}</Text>
+            <Text className="mx-4 text-lg font-semibold">{cart.get(productId)?.quantity}</Text>
             <TouchableOpacity
-              onPress={() => setQuantity(quantity + 1)}
+              onPress={() => updateQuantity(productId,1)}
               className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center"
             >
               <Text className="text-gray-700 font-bold text-xl">+</Text>
@@ -313,7 +264,7 @@ export default function ProductDetailScreen() {
           >
             <Text className="text-white font-semibold text-base mr-4">Add to Cart</Text>
             <View className="h-5 w-px bg-white/40" />
-            <Text className="text-white font-bold text-base ml-4">${product.price * quantity}</Text>
+            <Text className="text-white font-bold text-base ml-4">{cart.get(productId)?.quantity * cart.get(productId)?.price}</Text>
           </TouchableOpacity>
         </View>
       </View>

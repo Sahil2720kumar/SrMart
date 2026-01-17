@@ -31,8 +31,10 @@ const allProducts: Product[] = [
 ]
 
 export default function SearchResultsScreen() {
-  const { query } = useLocalSearchParams()
+  const { query,sort  } = useLocalSearchParams()
   console.log("query", query);
+  console.log("sort",sort);
+  
 
   const [searchQuery, setSearchQuery] = useState(query || "")
   const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()

@@ -15,6 +15,9 @@ import SkeletonImage from "@/components/SkeletonImage"
 import useWishlistStore from "@/store/wishlistStore"
 import useCartStore from "@/store/cartStore"
 import OfferProductCard from "@/components/OfferProductCard"
+import { Address } from "@/types/address.types"
+import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
+import { BlurView } from "expo-blur"
 
 
 // Category data
@@ -69,45 +72,63 @@ const bestDeals = [
   },
 ]
 
+const addresses: Address[] = [
+  { id: "1", label: "Home", address: "6391 Elgin St. Celina, Delaware 10299", isDefault: true },
+  { id: "2", label: "Office", address: "123 Business Ave. New York, NY 10001", isDefault: false },
+  { id: "3", label: "Apartment", address: "456 Oak Lane. Los Angeles, CA 90001", isDefault: false },
+]
+
 export default function HomeScreen() {
+
   const [searchQuery, setSearchQuery] = useState("")
-  
+
   const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
   const { wishlist, toggleWishlist } = useWishlistStore()
+
+  const [showAddressSheet, setShowAddressSheet] = useState(false)
+  const [selectedAddress, setSelectedAddress] = useState(addresses[0])
+
+
 
 
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity onPress={() => router.push(`/customer/category/${item.id}`)} className="items-center w-[80px] mr-2 mb-4">
       <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
         {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-[50px] h-[50px]" resizeMode="contain" /> */}
-        <SkeletonImage size="small"   />
+        <SkeletonImage size="small" />
       </View>
       <Text className="text-xs text-gray-700 text-center leading-4">{item.name}</Text>
     </TouchableOpacity>
   )
 
-  
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      router.push(`/(tabs)/customer/search/search-results?query=${searchQuery}`)
+    }
+  }
+
+
   return (
     <View className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {/* Header */}
-      <View className="px-4 pt-12 pb-3">
+      <View className="px-4 pt-14 pb-3">
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center">
             <LocationIcon />
             <View className="ml-2">
-              <TouchableOpacity className="flex-row items-center">
-                <Text className="text-md font-medium text-gray-900">Home</Text>
+              <TouchableOpacity onPress={()=>setShowAddressSheet(!showAddressSheet)} className="flex-row items-center">
+                <Text className="text-md font-medium text-gray-900">{selectedAddress.label}</Text>
                 <View className="ml-1">
                   <ChevronDownIcon />
                 </View>
               </TouchableOpacity>
-              <Text className="text-sm text-gray-500 mt-0.5">6391 Elgin St. Celina, Delaware 10299</Text>
+              <Text className="text-sm text-gray-500 mt-0.5">{selectedAddress.address}</Text>
             </View>
           </View>
-          <TouchableOpacity className="w-10 h-10 items-center justify-center">
-            <BagIcon />
+          <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/order/cart")} className="w-10 h-10 items-center justify-center">
+            <BagIcon itemCount={totalItems} />
           </TouchableOpacity>
         </View>
       </View>
@@ -123,6 +144,7 @@ export default function HomeScreen() {
               placeholderTextColor="#9ca3af"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
             />
           </View>
           {/* <TouchableOpacity className="w-12 h-12 bg-green-500 rounded-xl items-center justify-center">
@@ -136,7 +158,7 @@ export default function HomeScreen() {
         <View className="px-4 mb-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Shop By Category</Text>
-            <TouchableOpacity onPress={()=>router.navigate("/(tabs)/customer/category")}>
+            <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/category")}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
@@ -161,7 +183,7 @@ export default function HomeScreen() {
             </View>
             <View className="w-[120px] h-[100px]">
               {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-full h-full" resizeMode="contain" /> */}
-              <SkeletonImage size="large"/>
+              <SkeletonImage size="large" />
             </View>
           </View>
         </View>
@@ -170,14 +192,14 @@ export default function HomeScreen() {
         <View className="mb-6">
           <View className="flex-row items-center justify-between px-4 mb-4">
             <Text className="text-lg font-bold text-gray-900">Best Deal</Text>
-            <TouchableOpacity onPress={()=>router.navigate('/(tabs)/customer/offers/1')}>
+            <TouchableOpacity onPress={() => router.navigate('/(tabs)/customer/offers/1')}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
 
           <FlatList
             data={bestDeals}
-            renderItem={({item})=><ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
+            renderItem={({ item }) => <ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -196,7 +218,7 @@ export default function HomeScreen() {
 
           <FlatList
             data={bestDeals}
-            renderItem={({item})=><ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
+            renderItem={({ item }) => <ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -204,6 +226,28 @@ export default function HomeScreen() {
           />
         </View>
 
+        {showAddressSheet && (
+          <BlurView
+            intensity={10}
+            experimentalBlurMethod='dimezisBlurView'
+            style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+          />
+        )}
+
+        {/* Address Selection Bottom Sheet */}
+        <SelectAddressBottomSheet
+          isVisible={showAddressSheet}
+          addresses={addresses}
+          selectedAddress={selectedAddress}
+          onSelectAddress={(address) => {
+            setSelectedAddress(address)
+            setShowAddressSheet(false)
+          }}
+          onClose={() => setShowAddressSheet(false)}
+          onAddNewAddress={() => {
+            setShowAddressSheet(false)
+          }}
+        />
 
         {/* Add some bottom padding for tab bar */}
         <View className="h-24" />

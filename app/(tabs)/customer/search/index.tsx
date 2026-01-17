@@ -70,7 +70,7 @@ export default function SearchScreen({ navigation }: { navigation?: any }) {
 
   const handleRecentSearch = (term: string) => {
     setSearchQuery(term)
-    navigation?.navigate("SearchResults", { query: term })
+    router.push(`/(tabs)/customer/search/search-results?query=${term}`)
   }
 
   return (

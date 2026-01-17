@@ -319,6 +319,7 @@ export default function SignUpScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      
       {showPhoneModal && (
         <BlurView
           intensity={10}

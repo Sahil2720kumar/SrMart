@@ -28,7 +28,7 @@ const OfferProductCard = ({ item,cart,wishlist,toggleWishlist,updateQuantity,add
   const isInCart = !!cartItem
 
   return (
-    <TouchableOpacity onPress={()=>router.push(`/(tabs)/customer/products/${item.id}`)} className="flex-1 max-w-[48%] m-2 bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
+    <TouchableOpacity onPress={()=>router.push(`/customer/products/${item.id}`)} className="flex-1 max-w-[48%] m-2 bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
       {/* Wishlist Button */}
       <TouchableOpacity className="absolute top-3 right-3 z-10" onPress={() => toggleWishlist(item.id)}>
         <HeartIcon filled={wishlist.has(item.id)} />
@@ -56,16 +56,16 @@ const OfferProductCard = ({ item,cart,wishlist,toggleWishlist,updateQuantity,add
         {isInCart ? (
           <View className="flex-row items-center">
             <TouchableOpacity
-              className="w-8 h-8 bg-green-500 rounded-full items-center justify-center"
+              className="w-7 h-7 bg-green-500 rounded-full items-center justify-center"
               onPress={() => updateQuantity(item.id, -1)}
             >
               <Feather name="minus" size={18} color="white" />
             </TouchableOpacity>
-            <Text className="mx-3 text-gray-900 font-semibold text-base min-w-[20px] text-center">
+            <Text className=" text-gray-900 font-semibold text-base min-w-[20px] text-center">
               {cartItem.quantity}
             </Text>
             <TouchableOpacity
-              className="w-8 h-8 bg-green-500 rounded-full items-center justify-center"
+              className="w-7 h-7 bg-green-500 rounded-full items-center justify-center"
               onPress={() => updateQuantity(item.id, 1)}
             >
               <Feather name="plus" size={18} color="white" />

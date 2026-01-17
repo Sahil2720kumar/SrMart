@@ -5,6 +5,7 @@ import { HeartIcon } from "@/assets/svgs/HeartIcon"
 import SkeletonImage from "@/components/SkeletonImage"
 import { CartItem } from "@/types/cart.types"
 import Feather from "@expo/vector-icons/Feather"
+import { router } from "expo-router"
 
 
 interface CategoryProductCardProps{
@@ -21,7 +22,7 @@ export default function CategoryProductCard({ item,cart,wishlist,toggleWishlist,
   const isInCart = !!cartItem
 
   return (
-    <View className="bg-white  rounded-2xl p-3 mb-3 mr-2 flex-1 max-w-[48%] shadow-sm border border-gray-100">
+    <TouchableOpacity onPress={()=>router.push(`/(tabs)/customer/products/${item.id}`)} className="bg-white  rounded-2xl p-3 mb-3 mr-2 flex-1 max-w-[48%] shadow-sm border border-gray-100">
       {/* Wishlist button */}
       <TouchableOpacity className="absolute top-3 right-3 z-10" onPress={() => toggleWishlist(item.id)}>
         <HeartIcon filled={wishlist.has(item.id)} />
@@ -69,6 +70,6 @@ export default function CategoryProductCard({ item,cart,wishlist,toggleWishlist,
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   )
 }
