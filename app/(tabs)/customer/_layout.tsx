@@ -186,7 +186,7 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="category" href="/(tabs)/customer/category/index" asChild>
+        <TabTrigger name="category" href="/(tabs)/customer/category" asChild>
           <Pressable className="flex-1 hidden">
             <TabButton label="Category" focused={pathname === "/(tabs)/customer/category/index"}>
               <SearchIcon focused={pathname === "/(tabs)/customer/category/index"} />
@@ -195,7 +195,7 @@ export default function TabLayout() {
         </TabTrigger>
 
 
-        <TabTrigger name="offers" href='/customer/offers/index' asChild>
+        <TabTrigger name="offers" href='/customer/offers' asChild>
           <Pressable className="flex-1">
             <TabButton label="offers" focused={pathname.startsWith("/customer/offers")}>
               <Foundation name="burst-sale" size={30} color={pathname.startsWith("/customer/offers") ? "#16a34a" : "#9ca3af"} />
@@ -228,10 +228,10 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger> */}
 
-        <TabTrigger name="orders" href="/customer/order/orders/index" asChild>
+        <TabTrigger name="orders" href="/customer/order/orders" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Orders" focused={pathname.startsWith("/customer/order/orders")}>
-              <OrdersIcon focused={pathname.startsWith("/customer/order/orders")} />
+            <TabButton label="Orders" focused={pathname.startsWith("/customer/order")}>
+              <OrdersIcon focused={pathname.startsWith("/customer/order")} />
             </TabButton>
           </Pressable>
         </TabTrigger>

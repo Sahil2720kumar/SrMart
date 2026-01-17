@@ -4,14 +4,11 @@ import Feather from '@expo/vector-icons/Feather';
 export default function OffersLayout() {
   return (
     <Stack screenOptions={{
-      headerLeft(props) {
-        return (
-          <Feather onPress={() => router.back()} name="chevron-left" size={24} color="black" />
-        )
-      },
       headerRight(props) {
         return (
-          <Feather name="search" size={24} color="black" />
+          <Feather onPress={() =>
+            router.push("/(tabs)/customer/search")
+          } name="search" size={24} color="black" />
         )
       },
     }}>
@@ -27,6 +24,11 @@ export default function OffersLayout() {
           },
           headerTitleAlign: 'center',
           headerTintColor: '#000', 
+          headerLeft(props) {
+            return (
+              <Feather onPress={() => router.push("/customer")} name="chevron-left" size={24} color="black" />
+            )
+          },
         }}
       />
       <Stack.Screen
@@ -40,7 +42,12 @@ export default function OffersLayout() {
             backgroundColor: '#fff',
           },
           headerTitleAlign: 'center',
-          headerTintColor: '#000', 
+          headerTintColor: '#000',
+          headerLeft(props) {
+            return (
+              <Feather onPress={() => router.back()} name="chevron-left" size={24} color="black" />
+            )
+          }, 
         }}
       />
     </Stack>

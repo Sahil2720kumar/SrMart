@@ -4,7 +4,7 @@ import ProductCard from "@/components/ProductCard"
 import useCartStore from "@/store/cartStore"
 import useWishlistStore from "@/store/wishlistStore"
 import Feather from "@expo/vector-icons/Feather"
-import { router, Stack } from "expo-router"
+import { router, Stack, useFocusEffect, useSegments } from "expo-router"
 import { useMemo, useCallback, useRef, useState } from "react"
 import { View, Text, TouchableOpacity, ScrollView, FlatList } from "react-native"
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
@@ -47,7 +47,6 @@ export default function CartScreen() {
   const itemTotal = totalPrice
   const deliveryFee = itemTotal > 50 ? 0 : 5
   const grandTotal = itemTotal + deliveryFee - discountAmount
-
 
   const handlePlaceOrder = useCallback(() => {
     router.navigate("/(tabs)/customer/order/checkout")
@@ -133,9 +132,9 @@ export default function CartScreen() {
                 <Text className="text-xs text-gray-500 mt-1">{selectedAddress.address}</Text>
               </View>
             </View>
-            <TouchableOpacity>
+            <View>
               <Text className="text-green-500 text-sm font-medium">Change</Text>
-            </TouchableOpacity>
+            </View>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -150,7 +149,7 @@ export default function CartScreen() {
           <Text className="text-white text-lg">→</Text>
         </TouchableOpacity>
       </View>
-      
+
 
       {showAddressSheet && (
         <BlurView
@@ -172,7 +171,7 @@ export default function CartScreen() {
         onClose={() => setShowAddressSheet(false)}
         onAddNewAddress={() => {
           setShowAddressSheet(false)
-          
+
         }}
       />
     </View>

@@ -11,7 +11,9 @@ export default function CategoryLayout() {
       },
       headerRight(props) {
         return (
-          <Feather name="search" size={24} color="black" />
+          <Feather onPress={() =>
+            router.push("/(tabs)/customer/search")
+          } name="search" size={24} color="black" />
         )
       },
     }}>
@@ -26,7 +28,7 @@ export default function CategoryLayout() {
             backgroundColor: '#fff',
           },
           headerTitleAlign: 'center',
-          headerTintColor: '#000', 
+          headerTintColor: '#000',
         }}
       />
       <Stack.Screen
@@ -40,7 +42,7 @@ export default function CategoryLayout() {
             backgroundColor: '#fff',
           },
           headerTitleAlign: 'center',
-          headerTintColor: '#000', 
+          headerTintColor: '#000',
         }}
       />
     </Stack>

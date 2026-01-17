@@ -8,21 +8,28 @@ import Feather from "@expo/vector-icons/Feather"
 import { router } from "expo-router"
 
 
-interface CategoryProductCardProps{
+interface CategoryProductCardProps {
+  layoutMode?: "horizontal" | "vertical"
   item: Product
-  cart:Map<string, CartItem>
-  wishlist:Set<string>
-  toggleWishlist:(productId: string)=>void
-  updateQuantity:(productId: string, delta: number)=>void
-  addToCart: (product: Product)=>void
+  cart: Map<string, CartItem>
+  wishlist: Set<string>
+  toggleWishlist: (productId: string) => void
+  updateQuantity: (productId: string, delta: number) => void
+  addToCart: (product: Product) => void
 
 }
-export default function CategoryProductCard({ item,cart,wishlist,toggleWishlist,updateQuantity,addToCart }: CategoryProductCardProps) {
+export default function CategoryProductCard({ layoutMode,item, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: CategoryProductCardProps) {
   const cartItem = cart.get(item.id)
   const isInCart = !!cartItem
+  const isHorizontal = layoutMode === "horizontal" ? true : false
 
   return (
-    <TouchableOpacity onPress={()=>router.push(`/(tabs)/customer/products/${item.id}`)} className="bg-white  rounded-2xl p-3 mb-3 mr-2 flex-1 max-w-[48%] shadow-sm border border-gray-100">
+    <TouchableOpacity onPress={() => {
+      router.push(`/products/${item.id}`)
+      // router.push(`/(tabs)/customer/category/product/${item.id}`)
+    }}
+      className={`${isHorizontal?"flex-1 max-w-[48%]":"max-w-[48%]"} bg-white  rounded-2xl p-3 mb-3 mr-2 flex-1  shadow-sm border border-gray-100`}
+    >
       {/* Wishlist button */}
       <TouchableOpacity className="absolute top-3 right-3 z-10" onPress={() => toggleWishlist(item.id)}>
         <HeartIcon filled={wishlist.has(item.id)} />

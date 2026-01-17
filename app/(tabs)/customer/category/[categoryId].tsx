@@ -163,7 +163,7 @@ export default function CategoryScreen() {
             numColumns={2}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 100 }}
-            renderItem={({ item }) => <CategoryProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+            renderItem={({ item }) => <CategoryProductCard layoutMode="vertical" item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             ListEmptyComponent={
               <View className="flex-1 items-center justify-center py-20">
                 <Text className="text-gray-400">No products found</Text>

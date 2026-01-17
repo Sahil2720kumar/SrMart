@@ -109,7 +109,7 @@ export default function OfferScreen() {
       {/* Products Grid */}
       <FlatList
         data={PRODUCTS}
-        renderItem={({item})=><OfferProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
+        renderItem={({item})=><OfferProductCard item={item} layoutMode="vertical" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart}/>}
         keyExtractor={(item) => item.id}
         numColumns={2}
         contentContainerStyle={{ padding: 8, paddingBottom: totalItems > 0 ? 100 : 20 }}

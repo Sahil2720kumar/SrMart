@@ -23,7 +23,7 @@ export default function OrderLayout() {
           },
           headerTitleAlign: 'center',
           headerTintColor: '#000',
-
+          
           headerLeft(props) {
             return (
               <Feather onPress={() => router.navigate("/(tabs)/customer")} name="chevron-left" size={24} color="black" />

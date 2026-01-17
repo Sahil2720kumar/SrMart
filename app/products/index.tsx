@@ -221,7 +221,7 @@ export default function AllProductsScreen({ navigation }: { navigation?: any }) 
           renderItem={({ item }) => <ProductCard layoutMode="vertical" item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: totalItems > 0 ? 100 : 20,gap:12 }}
+          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: totalItems > 0 ? 100 : 20 }}
           showsVerticalScrollIndicator={false}
         />
       ) : (

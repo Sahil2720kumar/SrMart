@@ -199,7 +199,7 @@ export default function HomeScreen() {
 
           <FlatList
             data={bestDeals}
-            renderItem={({ item }) => <ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+            renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -218,7 +218,7 @@ export default function HomeScreen() {
 
           <FlatList
             data={bestDeals}
-            renderItem={({ item }) => <ProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+            renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}

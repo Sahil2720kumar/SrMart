@@ -1,5 +1,6 @@
 import FloatingCartBar from "@/components/FloatingCartBar"
 import OfferProductCard from "@/components/OfferProductCard"
+import ProductCard from "@/components/ProductCard"
 import useCartStore from "@/store/cartStore"
 import useWishlistStore from "@/store/wishlistStore"
 import Feather from "@expo/vector-icons/Feather"
@@ -84,10 +85,10 @@ export default function SearchResultsScreen() {
       {filteredProducts.length > 0 ? (
         <FlatList
           data={filteredProducts}
-          renderItem={({ item }) => <OfferProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+          renderItem={({ item }) => <ProductCard from="serachStack" layoutMode="vertical" item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 20 }}
+          contentContainerStyle={{ paddingHorizontal:8, paddingBottom: 20,gap:12 }}
           showsVerticalScrollIndicator={false}
         />
       ) : (

@@ -5,13 +5,14 @@ import { Product } from "@/types/product.types";
 import { CartItem } from "@/types/cart.types";
 import { router } from "expo-router";
 
-interface OfferProductCardProps{
+interface OfferProductCardProps {
+  layoutMode?: "horizontal" | "vertical"
   item: Product
-  cart:Map<string, CartItem>
-  wishlist:Set<string>
-  toggleWishlist:(productId: string)=>void
-  updateQuantity:(productId: string, delta: number)=>void
-  addToCart: (product: Product)=>void
+  cart: Map<string, CartItem>
+  wishlist: Set<string>
+  toggleWishlist: (productId: string) => void
+  updateQuantity: (productId: string, delta: number) => void
+  addToCart: (product: Product) => void
 
 }
 
@@ -23,12 +24,16 @@ const SkeletonImage = () => (
   </View>
 )
 
-const OfferProductCard = ({ item,cart,wishlist,toggleWishlist,updateQuantity,addToCart }: OfferProductCardProps) => {
+const OfferProductCard = ({ layoutMode="horizontal", item, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: OfferProductCardProps) => {
   const cartItem = cart.get(item.id)
   const isInCart = !!cartItem
+  const isHorizontal = layoutMode === "horizontal" ? true : false
 
   return (
-    <TouchableOpacity onPress={()=>router.push(`/customer/products/${item.id}`)} className="flex-1 max-w-[48%] m-2 bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
+    <TouchableOpacity onPress={() => {
+      router.push(`/products/${item.id}`)
+    }
+    } className={`${isHorizontal ? "w-[165px]" : "flex-1 max-w-[48%]"}  m-2 bg-white rounded-2xl p-3 shadow-sm border border-gray-100`}>
       {/* Wishlist Button */}
       <TouchableOpacity className="absolute top-3 right-3 z-10" onPress={() => toggleWishlist(item.id)}>
         <HeartIcon filled={wishlist.has(item.id)} />

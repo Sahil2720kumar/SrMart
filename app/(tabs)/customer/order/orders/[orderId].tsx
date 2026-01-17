@@ -2,7 +2,7 @@ import Feather from "@expo/vector-icons/Feather"
 import { useState } from "react"
 import { View, Text, TouchableOpacity, ScrollView, FlatList } from "react-native"
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 
 // ============= MOCK DATA =============
 type Order = {
@@ -104,7 +104,9 @@ export default function OrderDetailsScreen() {
   ]
 
   const renderOrderItem = ({ item }: { item: OrderItem }) => (
-    <View className="flex-row items-center py-3 border-b border-gray-100">
+    <TouchableOpacity onPress={()=>{
+      router.push(`/products/${item.id}`)
+    }} className="flex-row items-center py-3 border-b border-gray-100">
       {/* Product Image Placeholder */}
       <View className="w-16 h-16 bg-gray-100 rounded-xl mr-3 items-center justify-center">
         <View className="w-12 h-12 bg-gray-200 rounded-lg" />
@@ -123,7 +125,7 @@ export default function OrderDetailsScreen() {
 
       {/* Total Price */}
       <Text className="text-base font-bold text-gray-900">${(item.price * item.quantity).toFixed(2)}</Text>
-    </View>
+    </TouchableOpacity>
   )
 
   return (

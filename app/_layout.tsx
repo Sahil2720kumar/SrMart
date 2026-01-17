@@ -32,6 +32,12 @@ export default function Layout() {
               headerShown: false
             }}
           />
+          <Stack.Screen
+            name='products'
+            options={{
+              headerShown: false
+            }}
+          />
         </Stack>
       </BottomSheetModalProvider>
     </GestureHandlerRootView >

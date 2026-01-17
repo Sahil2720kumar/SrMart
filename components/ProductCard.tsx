@@ -7,6 +7,8 @@ import Feather from "@expo/vector-icons/Feather";
 import { router } from "expo-router";
 
 interface ProductCardProps {
+  from:string
+  layoutMode?: "horizontal" | "vertical"
   item: Product
   cart: Map<string, CartItem>
   wishlist: Set<string>
@@ -15,12 +17,18 @@ interface ProductCardProps {
   addToCart: (product: Product) => void
 }
 
-const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: ProductCardProps) => {
+const ProductCard = ({ from,item, layoutMode, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: ProductCardProps) => {
   const cartItem = cart.get(item.id)
   const isInCart = !!cartItem
+  const isHorizontal = layoutMode === "horizontal" ? true : false
 
   return (
-    <TouchableOpacity onPress={()=>router.push(`/(tabs)/customer/products/${item.id}`)} className="w-[165px] bg-white rounded-2xl mr-3 border border-gray-100 overflow-hidden shadow-sm">
+    <TouchableOpacity
+      onPress={() => {
+        router.push(`/products/${item.id}`)
+      }}
+      className={`${isHorizontal ? "flex-1 max-w-[48%]" : "w-[173px]"} bg-white rounded-2xl mr-3 border border-gray-100 overflow-hidden shadow-sm`}
+    >
       {/* Wishlist button */}
       <TouchableOpacity
         className="absolute top-2 right-2 z-10 w-8 h-8 bg-white rounded-full items-center justify-center shadow-sm"
@@ -30,7 +38,7 @@ const ProductCard = ({ item, cart, wishlist, toggleWishlist, updateQuantity, add
       </TouchableOpacity>
 
       {/* Product image */}
-      <View className="h-[120px] items-center justify-center bg-gray-50 pt-4">
+      <View className="min-h-[120px] flex-auto items-center justify-center bg-gray-50 pt-4">
         {/* <Image source={require(`@/assets/images/aashirvaad-atta-wheat-flour-bag.jpg`)} className="w-[80px] h-[100px]" resizeMode="contain" /> */}
         <SkeletonImage size="large" />
       </View>

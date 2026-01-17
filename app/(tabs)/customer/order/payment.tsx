@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur"
+import { useFocusEffect, useSegments } from "expo-router"
 import { router } from "expo-router"
 import { useState } from "react"
 import { View, Text, TouchableOpacity, ScrollView, Modal } from "react-native"
@@ -6,7 +7,9 @@ import { View, Text, TouchableOpacity, ScrollView, Modal } from "react-native"
 export default function PaymentScreen() {
   const [selectedPayment, setSelectedPayment] = useState("")
   const [showSuccess, setShowSuccess] = useState(false)
-
+  const segments=useSegments()
+  console.log("segments",segments);
+  
   const handlePlaceOrder = () => {
     if (selectedPayment) {
       setShowSuccess(true)
