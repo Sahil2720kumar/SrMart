@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { View } from "react-native"
 
 type SkeletonSize = "small" | "medium" | "large" | "xlarge"
@@ -6,7 +7,7 @@ interface SkeletonImageProps {
   size?: SkeletonSize
 }
 
-export default function SkeletonImage({ 
+function SkeletonImage({ 
   size = "medium"
 }: SkeletonImageProps) {
   
@@ -25,3 +26,6 @@ export default function SkeletonImage({
     </View>
   )
 }
+
+
+export default SkeletonImage

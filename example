@@ -1,0 +1,23 @@
+app/
+├── vendor/                
+│   ├── _layout.tsx           
+│
+│   ├── (tabs)/              
+│   │   ├── _layout.tsx
+│   │   ├── dashboard.tsx  
+│   │   ├── products.tsx
+│   │   ├── orders.tsx
+│   │   └── profile.tsx
+│
+│   ├── product/
+│   │   ├── add.tsx
+│   │   ├── edit/[productId].tsx
+│   │   └── [productId].tsx
+│
+│   ├── order/
+│   │   └── [orderId].tsx
+│
+│   ├── inventory/
+│   │   └── index.tsx
+│
+│   └── earnings.tsx

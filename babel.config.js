@@ -6,7 +6,9 @@ module.exports = function (api) {
       'nativewind/babel',
     ],
     plugins: [
-      'babel-plugin-react-compiler',
+      ['babel-plugin-react-compiler', {
+        target: '19' // or '19' depending on your React version
+      }],
       // NOTE: reanimated plugin MUST be listed last
       'react-native-reanimated/plugin'
     ],
