@@ -41,7 +41,10 @@ export default function Home() {
         <Link href={"/vendor/order/1"} className='text-blue-500'>Vendor Orders Details</Link>
         <Link href={"/vendor/(tabs)/products"} className='text-blue-500'>Vendor Products</Link>
         <Link href={"/vendor/product/1"} className='text-blue-500'>Vendor Products Details</Link>
-        
+        <Link href={"/vendor/product/add"} className='text-blue-500'>Vendor Product Add</Link>
+        <Link href={"/vendor/product/edit/1"} className='text-blue-500'>Vendor Product Edit</Link>
+        <Link href={"/vendor/earnings"} className='text-blue-500'>Vendor Earnings</Link>
+        <Link href={"/vendor/inventory"} className='text-blue-500'>Vendor inventory</Link>
       </Container>
     </View>
   );
