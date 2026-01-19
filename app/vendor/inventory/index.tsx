@@ -1,5 +1,6 @@
 import VendorInventoryCard from '@/components/VendorInventoryCard';
 import { Feather } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -158,7 +159,7 @@ export default function InventoryScreen() {
             <Text className="text-sm text-gray-600">Stock Management</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={()=>router.push("/vendor/product/add")} className='items-center'>
+        <TouchableOpacity onPress={() => router.push("/vendor/product/add")} className='items-center'>
           <Feather name='plus-circle' size={24} color={"#000"} />
         </TouchableOpacity>
       </View>
@@ -295,6 +296,14 @@ export default function InventoryScreen() {
         }
       />
 
+
+      {updateModalVisible && (
+        <BlurView
+          intensity={10}
+          experimentalBlurMethod='dimezisBlurView'
+          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+        />
+      )}
       {/* Stock Update Modal */}
       <Modal
         visible={updateModalVisible}
@@ -302,7 +311,7 @@ export default function InventoryScreen() {
         animationType="slide"
         onRequestClose={() => setUpdateModalVisible(false)}
       >
-        <View className="flex-1 bg-black bg-opacity-50 justify-end">
+        <View className="flex-1 bg-transparent bg-opacity-50 justify-end">
           <View className="bg-white rounded-t-3xl p-6 pb-8">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-2xl font-bold text-gray-900">Update Stock</Text>
