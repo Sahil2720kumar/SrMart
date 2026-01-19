@@ -1,10 +1,42 @@
-import { Order, statusConfig } from "@/app/vendor/(tabs)/orders";
 import { router } from "expo-router";
 import { Text, TouchableOpacity, View } from "react-native";
 
 
+export const statusConfig = {
+  new: {
+    label: 'New',
+    badge: 'bg-orange-500',
+    color: 'bg-orange-100',
+    textColor: 'text-orange-700',
+  },
+  preparing: {
+    label: 'Preparing',
+    badge: 'bg-blue-500',
+    color: 'bg-blue-100',
+    textColor: 'text-blue-700',
+  },
+  ready: {
+    label: 'Ready',
+    badge: 'bg-purple-500',
+    color: 'bg-purple-100',
+    textColor: 'text-purple-700',
+  },
+  completed: {
+    label: 'Completed',
+    badge: 'bg-emerald-500',
+    color: 'bg-emerald-100',
+    textColor: 'text-emerald-700',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    badge: 'bg-red-500',
+    color: 'bg-red-100',
+    textColor: 'text-red-700',
+  },
+};
 
-const VendorOrderCardWithButtons = ({ item }: { item: Order }) => {
+
+const VendorOrderCardWithButtons = ({ item }: { item: any }) => {
   const getActionButtons = (status: string) => {
     switch (status) {
       case 'new':

@@ -42,7 +42,6 @@ export default function Layout() {
             name='vendor'
             options={{
               headerShown: false,
-              headerBackVisible:false
             }}
           />
         </Stack>

@@ -1,5 +1,6 @@
 import VendorProductCard from '@/components/VendorProductCard';
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -122,6 +123,7 @@ export default function ProductsScreen() {
             </Text>
           </View>
           <TouchableOpacity
+            onPress={() => router.push("/vendor/product/add")}
             activeOpacity={0.7}
             className="bg-emerald-500 rounded-xl px-4 py-2.5 flex-row items-center gap-2"
           >

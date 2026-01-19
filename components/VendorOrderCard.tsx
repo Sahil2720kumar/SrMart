@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons"
+import { router } from "expo-router"
 import { Text, TouchableOpacity, View } from "react-native"
 
 
@@ -46,7 +47,7 @@ function VendorOrderCard({
         : <Ionicons name="hourglass" size={12} color="#92400e" />
 
   return (
-    <View className={`flex-row items-center justify-between p-4 border-l-4 ${borderColor} ${bgColor} border-b border-gray-100`}>
+    <TouchableOpacity onPress={()=>router.push(`/vendor/order/1`)} className={`flex-row items-center justify-between p-4 border-l-4 ${borderColor} ${bgColor} border-b border-gray-100`}>
       <View className="flex-1">
         <View className="flex-row items-center gap-2 mb-2">
           <Text className="font-bold text-gray-900 text-sm">{orderId}</Text>
@@ -78,7 +79,7 @@ function VendorOrderCard({
           <Feather name="chevron-right" size={12} color="white" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   )
 }
 

@@ -178,10 +178,10 @@ export default function TabLayout() {
           elevation: 10,
         }}
       >
-        <TabTrigger name="home" href="/vendor/(tabs)/dashboard" asChild>
+        <TabTrigger name="home" href="/vendor/dashboard" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Home" focused={pathname === '/vendor/(tabs)/dashboard'}>
-              <HomeIcon focused={pathname === "/vendor/(tabs)/dashboard"} />
+            <TabButton label="Home" focused={pathname === '/vendor/dashboard'}>
+              <HomeIcon focused={pathname === "/vendor/dashboard"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
@@ -220,26 +220,26 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger> */}
 
-        <TabTrigger name="products" href="/vendor/(tabs)/products" asChild>
+        <TabTrigger name="products" href="/vendor/products" asChild>
           <Pressable className="flex-1">
-            <TabButton label="products" focused={pathname.startsWith("/vendor/(tabs)/products")}>
-              <AntDesign name="product" size={24} color={pathname.startsWith("/vendor/(tabs)/products") ? "#16a34a" : "#9ca3af"} />
+            <TabButton label="products" focused={pathname.startsWith("/vendor/products")}>
+              <AntDesign name="product" size={24} color={pathname.startsWith("/vendor/products") ? "#16a34a" : "#9ca3af"} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="orders" href="/vendor/(tabs)/orders" asChild>
+        <TabTrigger name="orders" href="/vendor/orders" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Orders" focused={pathname.startsWith("/vendor/(tabs)/orders")}>
-              <OrdersIcon focused={pathname.startsWith("/vendor/(tabs)/orders")} />
+            <TabButton label="Orders" focused={pathname.startsWith("/vendor/orders")}>
+              <OrdersIcon focused={pathname.startsWith("/vendor/orders")} />
             </TabButton>
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="profile" href="/vendor/(tabs)/profile" asChild>
+        <TabTrigger name="profile" href="/vendor/profile" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Profile" focused={pathname.startsWith("/vendor/(tabs)/profile")}>
-              <ProfileIcon focused={pathname.startsWith("/vendor/(tabs)/profile")} />
+            <TabButton label="Profile" focused={pathname.startsWith("/vendor/profile")}>
+              <ProfileIcon focused={pathname.startsWith("/vendor/profile")} />
             </TabButton>
           </Pressable>
         </TabTrigger>

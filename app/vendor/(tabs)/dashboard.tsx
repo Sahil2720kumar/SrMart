@@ -8,13 +8,14 @@ import {
   Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons'
+import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient';
 import QuickInfoBox from '@/components/QuickInfoBox';
 import VendorStatCard from '@/components/VendorStatCard';
 import VendorOrderCard from '@/components/VendorOrderCard';
 import AlertItem from '@/components/AlertItem';
 import QuickActionButton from '@/components/QuickActionButton';
+import { router } from 'expo-router';
 
 
 const { width } = Dimensions.get('window')
@@ -22,6 +23,12 @@ const { width } = Dimensions.get('window')
 // Main Dashboard Component
 export default function VendorDashboard() {
   const [isOpen, setIsOpen] = useState(true)
+  
+  // Verification status - you can fetch this from your backend
+  const [verificationStatus, setVerificationStatus] = useState({
+    isAdminVerified: true,  // Change to false to see unverified state
+    isKycVerified: true,     // Change to false to see unverified state
+  })
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -41,7 +48,14 @@ export default function VendorDashboard() {
                   <Ionicons name="storefront" size={24} color="white" />
                 </View>
                 <View>
-                  <Text className="text-2xl font-bold text-gray-900">Green Mart</Text>
+                  <View className="flex-row items-center gap-2 ">
+                    <Text className="text-2xl font-bold text-gray-900">Green Mart</Text>
+                    {verificationStatus.isAdminVerified && (
+                      <View className=" rounded-full p-1 ">
+                       <MaterialIcons  name="verified" size={24} color="#10b981" />
+                      </View>
+                    )}
+                  </View>
                   <Text className="text-xs text-gray-500">Vendor Dashboard</Text>
                 </View>
               </View>
@@ -78,6 +92,122 @@ export default function VendorDashboard() {
                 label="Rating"
                 value="4.8"
               />
+            </View>
+          </View>
+        </View>
+
+        {/* VERIFICATION STATUS BANNER */}
+        {(!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) && (
+          <View className="px-4 pt-4">
+            <View className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <View className="flex-row items-start gap-3">
+                <View className="bg-amber-100 rounded-full p-2">
+                  <Ionicons name="warning" size={20} color="#f59e0b" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-bold text-amber-900 mb-1">
+                    Action Required
+                  </Text>
+                  <Text className="text-xs text-amber-700 mb-3">
+                    Complete verification to access all features
+                  </Text>
+                  <View className="gap-2">
+                    {!verificationStatus.isAdminVerified && (
+                      <View className="flex-row items-center gap-2">
+                        <Ionicons name="close-circle" size={16} color="#dc2626" />
+                        <Text className="text-xs text-gray-700">Admin verification pending</Text>
+                      </View>
+                    )}
+                    {!verificationStatus.isKycVerified && (
+                      <View className="flex-row items-center gap-2">
+                        <Ionicons name="close-circle" size={16} color="#dc2626" />
+                        <Text className="text-xs text-gray-700">KYC verification pending</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* VERIFICATION STATUS CARDS */}
+        <View className="px-4 pt-4">
+          <View className="flex-row gap-3">
+            {/* Admin Verification */}
+            <View className={`flex-1 rounded-xl p-4 border ${
+              verificationStatus.isAdminVerified 
+                ? 'bg-blue-50 border-blue-200' 
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                  <Ionicons 
+                    name="shield-checkmark" 
+                    size={20} 
+                    color={verificationStatus.isAdminVerified ? '#3b82f6' : '#9ca3af'} 
+                  />
+                  <Text className={`text-xs font-semibold ${
+                    verificationStatus.isAdminVerified ? 'text-blue-900' : 'text-gray-600'
+                  }`}>
+                    Admin
+                  </Text>
+                </View>
+                {verificationStatus.isAdminVerified ? (
+                  <View className="bg-blue-500 rounded-full px-2 py-0.5">
+                    <Text className="text-white text-[10px] font-bold">Verified</Text>
+                  </View>
+                ) : (
+                  <View className="bg-gray-400 rounded-full px-2 py-0.5">
+                    <Text className="text-white text-[10px] font-bold">Pending</Text>
+                  </View>
+                )}
+              </View>
+              <Text className={`text-[10px] ${
+                verificationStatus.isAdminVerified ? 'text-blue-700' : 'text-gray-500'
+              }`}>
+                {verificationStatus.isAdminVerified 
+                  ? 'Your shop is verified' 
+                  : 'Awaiting admin approval'}
+              </Text>
+            </View>
+
+            {/* KYC Verification */}
+            <View className={`flex-1 rounded-xl p-4 border ${
+              verificationStatus.isKycVerified 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                  <Ionicons 
+                    name="document-text" 
+                    size={20} 
+                    color={verificationStatus.isKycVerified ? '#10b981' : '#9ca3af'} 
+                  />
+                  <Text className={`text-xs font-semibold ${
+                    verificationStatus.isKycVerified ? 'text-green-900' : 'text-gray-600'
+                  }`}>
+                    KYC
+                  </Text>
+                </View>
+                {verificationStatus.isKycVerified ? (
+                  <View className="bg-green-500 rounded-full px-2 py-0.5">
+                    <Text className="text-white text-[10px] font-bold">Verified</Text>
+                  </View>
+                ) : (
+                  <View className="bg-gray-400 rounded-full px-2 py-0.5">
+                    <Text className="text-white text-[10px] font-bold">Pending</Text>
+                  </View>
+                )}
+              </View>
+              <Text className={`text-[10px] ${
+                verificationStatus.isKycVerified ? 'text-green-700' : 'text-gray-500'
+              }`}>
+                {verificationStatus.isKycVerified 
+                  ? 'Documents approved' 
+                  : 'Submit KYC documents'}
+              </Text>
             </View>
           </View>
         </View>
@@ -173,7 +303,7 @@ export default function VendorDashboard() {
             </View>
 
             {/* Footer */}
-            <TouchableOpacity className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
+            <TouchableOpacity onPress={()=>router.push("/vendor/(tabs)/orders")} className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
               <Text className="text-emerald-600 font-medium text-sm">
                 View All Orders
               </Text>
@@ -236,7 +366,7 @@ export default function VendorDashboard() {
             </View>
 
             {/* Footer */}
-            <TouchableOpacity className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
+            <TouchableOpacity onPress={()=>router.push("/vendor/inventory")} className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
               <Text className="text-red-600 font-medium text-sm">
                 Manage Inventory
               </Text>
@@ -246,7 +376,7 @@ export default function VendorDashboard() {
         </View>
 
         {/* QUICK ACTIONS */}
-        <View className="px-4 pb-10">
+        <View  className="px-4 pb-10">
           <View className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <Text className="text-lg font-bold text-gray-900 mb-4">Quick Actions</Text>
 
@@ -254,18 +384,21 @@ export default function VendorDashboard() {
               <QuickActionButton
                 icon={<Ionicons name="add-circle-outline" size={24} color="#059669" />}
                 label="Add Product"
+                route='/vendor/product/add'
               />
               <QuickActionButton
                 icon={<MaterialCommunityIcons name="package-variant" size={24} color="#059669" />}
                 label="Inventory"
+                route='/vendor/inventory'
               />
-              <QuickActionButton
+              {/* <QuickActionButton
                 icon={<Ionicons name="bar-chart-outline" size={24} color="#059669" />}
                 label="Analytics"
-              />
+              /> */}
               <QuickActionButton
                 icon={<Ionicons name="time-outline" size={24} color="#059669" />}
                 label="Shop Hours"
+                route='/vendor/(tabs)/profile/edit'
               />
             </View>
           </View>
@@ -274,11 +407,3 @@ export default function VendorDashboard() {
     </SafeAreaView>
   )
 }
-
-
-
-
-
-
-
-

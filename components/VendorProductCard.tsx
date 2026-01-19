@@ -36,7 +36,7 @@ const VendorProductCard = ({ item }: { item: typeof mockProducts[0] }) => {
 
 
   return (
-    <TouchableOpacity onPress={()=>router.push(`/vendor/product/${item.id}`)} className="bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100 overflow-hidden">
+    <TouchableOpacity onPress={() => router.push(`/vendor/product/${item.id}`)} className="bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100 overflow-hidden">
       {/* Product Image & Info Header */}
       <View className="flex-row gap-3 mb-3">
         <View className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-emerald-50 rounded-xl items-center justify-center">
@@ -70,6 +70,7 @@ const VendorProductCard = ({ item }: { item: typeof mockProducts[0] }) => {
       {/* Quick Actions */}
       <View className="flex-row gap-2">
         <TouchableOpacity
+          onPress={() => router.push("/vendor/product/edit/10")}
           activeOpacity={0.7}
           className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl py-2.5 items-center justify-center flex-row gap-2"
         >
@@ -78,6 +79,7 @@ const VendorProductCard = ({ item }: { item: typeof mockProducts[0] }) => {
         </TouchableOpacity>
 
         <TouchableOpacity
+          onPress={() => router.push("/vendor/inventory")}
           activeOpacity={0.7}
           className="flex-1 bg-blue-50 border border-blue-200 rounded-xl py-2.5 items-center justify-center flex-row gap-2"
         >
