@@ -1,23 +1,37 @@
-app/
-├── vendor/                
-│   ├── _layout.tsx           
-│
-│   ├── (tabs)/              
-│   │   ├── _layout.tsx
-│   │   ├── dashboard.tsx  
-│   │   ├── products.tsx
-│   │   ├── orders.tsx
-│   │   └── profile.tsx
-│
-│   ├── product/
-│   │   ├── add.tsx
-│   │   ├── edit/[productId].tsx
-│   │   └── [productId].tsx
-│
-│   ├── order/
-│   │   └── [orderId].tsx
-│
-│   ├── inventory/
-│   │   └── index.tsx
-│
-│   └── earnings.tsx
+app
+|── delivery
+|   |── _layout.tsx
+|   |
+|   |── (tabs)
+|   |   |── _layout.tsx
+|   |   |── home.tsx
+|   |   |── orders.tsx
+|   |   |── earnings.tsx
+|   |   |── profile.tsx
+|   |
+|   |── order
+|   |   |── [orderId].tsx
+|   |
+|   |── onboarding
+|   |   |── index.tsx
+|   |   |── personal-details.tsx
+|   |   |── vehicle-details.tsx
+|   |   |── documents.tsx
+|   |   |── approval-pending.tsx
+|   |
+|   |── auth
+|   |   |── login.tsx
+|   |   |── verify-otp.tsx
+|   |
+|   |── navigation
+|   |   |── index.tsx
+|   |
+|   |── profile
+|   |   |── index.tsx
+|   |   |── edit.tsx
+|   |   |── vehicle.tsx
+|   |   |── bank.tsx
+|   |
+|   |── support
+|       |── index.tsx
+|       |── ticket.tsx

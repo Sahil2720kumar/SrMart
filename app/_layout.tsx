@@ -4,12 +4,13 @@ import '../global.css';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 // Run this ONCE in your app to clear old data
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// AsyncStorage.removeItem('cart-store').then(() => {
+// AsyncStorage.removeItem('delivery-store').then(() => {
 //   console.log('Cart store cleared!');
 // });
 
@@ -40,6 +41,12 @@ export default function Layout() {
           />
           <Stack.Screen
             name='vendor'
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name='delivery'
             options={{
               headerShown: false,
             }}

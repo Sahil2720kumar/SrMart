@@ -45,6 +45,13 @@ export default function Home() {
         <Link href={"/vendor/product/edit/1"} className='text-blue-500'>Vendor Product Edit</Link>
         <Link href={"/vendor/earnings"} className='text-blue-500'>Vendor Earnings</Link>
         <Link href={"/vendor/inventory"} className='text-blue-500'>Vendor inventory</Link>
+
+        <Text>Delivery</Text>
+        <Link href={"/delivery/home"} className='text-blue-500'>Delivery Home</Link>
+        <Link href={"/delivery/orders"} className='text-blue-500'>Delivery orders</Link>
+        <Link href={"/delivery/order/0"} className='text-blue-500'>Delivery orders id</Link>
+      <Link href={"/delivery/earning"} className='text-blue-500'>Delivery Earning</Link>
+        
       </Container>
     </View>
   );
