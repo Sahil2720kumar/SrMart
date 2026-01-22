@@ -11,6 +11,8 @@ export default function Home() {
     <View className='flex flex-1 bg-white'>
       <Stack.Screen options={{ title: 'Home' }} />
       <Container>
+        <Text className='text-2xl font-bold'>Mahaa Home</Text>
+        <Link href='/home' className='text-blue-500'>Homepage</Link>
         <Text className='text-2xl font-bold'>Home</Text>
         <Link href='/auth/login' className='text-blue-500'>Login</Link>
         <Link href='/auth/sign-up' className='text-blue-500'>Sign Up</Link>

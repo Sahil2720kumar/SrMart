@@ -18,6 +18,7 @@ import { EmailIcon } from "@/assets/svgs/EmailIcon"
 import { LockIcon } from "@/assets/svgs/LockIcon"
 import { EyeIcon } from "@/assets/svgs/EyeIcon"
 import { router, Stack } from "expo-router"
+import { AntDesign } from "@expo/vector-icons"
 
 
 interface LoginScreenProps {
@@ -34,6 +35,15 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+
+
+  const [selectedRole, setSelectedRole] = useState<"vendor" | "customer" | "delivery">("customer");
+
+  const roles = [
+    { key: "customer", label: "Customer", icon: "user", route: "/auth/login" },
+    { key: "vendor", label: "Vendor", icon: "shop", route: "/vendor/auth/login" },
+    { key: "delivery", label: "Delivery", icon: "truck", route: "/delivery/auth/login" },
+  ];
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {}
@@ -84,6 +94,23 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
           <View className="flex-1 px-6 pt-12 pb-8 justify-between">
+
+            {/* sticky switch button */}
+            <View className="absolute top-0 right-4 flex-row bg-gray-100 rounded-full p-1 shadow-md">
+              {roles.map(({ key, icon, label, route }) => {
+                const isActive = selectedRole === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => router.push(route)}
+                    className={`flex-row items-center justify-center px-3 py-2 rounded-full ${isActive ? 'bg-green-500 shadow-lg' : 'bg-gray-100'}`}
+                    activeOpacity={0.8}
+                  >
+                    <AntDesign name={icon as any} size={16} color={isActive ? "white" : "black"} />
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
             {/* Header Section */}
             <View className="items-center pt-8">
               <View className="absolute top-0 right-0 opacity-30">
@@ -180,7 +207,7 @@ export default function LoginScreen() {
               </View>
 
               {/* Forgot Password */}
-              <TouchableOpacity onPress={() => {}} className="self-end mb-6">
+              <TouchableOpacity onPress={() => { }} className="self-end mb-6">
                 <Text className="text-gray-500 text-sm font-medium">Forgot password?</Text>
               </TouchableOpacity>
 

@@ -11,7 +11,7 @@ import {
   Modal,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { router, Stack } from "expo-router"
+import { Stack } from "expo-router"
 import { GroceryLogo } from "@/assets/svgs/GroceryLogo"
 import { GoogleLogo } from "@/assets/svgs/GoogleLogo"
 import { EmailIcon } from "@/assets/svgs/EmailIcon"
@@ -22,6 +22,8 @@ import { CloseIcon } from "@/assets/svgs/CloseIcon"
 import { PhoneIcon } from "@/assets/svgs/PhoneIcon"
 import Svg, { Path } from "react-native-svg"
 import { BlurView } from "expo-blur"
+import { AntDesign, Feather } from "@expo/vector-icons"
+import { useRouter } from "expo-router";
 
 export default function SignUpScreen() {
   const [name, setName] = useState("")
@@ -39,11 +41,19 @@ export default function SignUpScreen() {
     confirmPassword?: string
     terms?: string
   }>({})
-
+  const router = useRouter()
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState("")
   const [phoneError, setPhoneError] = useState("")
   const [isVerifying, setIsVerifying] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<"vendor" | "customer" | "delivery">("customer");
+
+  const roles = [
+    { key: "customer", label: "Customer", icon: "user",route:"/auth/signup" },
+    { key: "vendor", label: "Vendor", icon: "shop",route:"/vendor/auth/signup" },
+    { key: "delivery", label: "Delivery", icon: "truck",route:"/delivery/auth/signup" },
+  ];
+
 
   const validateForm = () => {
     const newErrors: typeof errors = {}
@@ -93,7 +103,7 @@ export default function SignUpScreen() {
   }
 
   const handleConfirmPhone = async () => {
-    
+
     setIsVerifying(true)
 
     try {
@@ -125,6 +135,24 @@ export default function SignUpScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
           <View className="flex-1 px-6 pt-8 pb-8">
+
+            {/* sticky switch button */}
+            <View className="absolute top-0 right-4 flex-row bg-gray-100 rounded-full p-1 shadow-md">
+              {roles.map(({ key, icon, label,route }) => {
+                const isActive = selectedRole === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={()=>router.push(route)}
+                    className={`flex-row items-center justify-center px-3 py-2 rounded-full ${isActive ? 'bg-green-500 shadow-lg' : 'bg-gray-100'}`}
+                    activeOpacity={0.8}
+                  >
+                    <AntDesign name={icon as any} size={16} color={isActive ? "white" : "black"} />
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+
             {/* Header Section */}
             <View className="items-center pt-4 mb-6">
               <View className="w-20 h-20 rounded-3xl items-center justify-center mb-6 shadow-lg">
@@ -319,7 +347,7 @@ export default function SignUpScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      
+
       {showPhoneModal && (
         <BlurView
           intensity={10}
@@ -361,9 +389,9 @@ export default function SignUpScreen() {
 
 
             {/* Phone Number */}
-           <View  className="mb-4">
-            <Text className="text-3xl font-bold text-center text-black">{"987654321"}</Text>
-           </View>
+            <View className="mb-4">
+              <Text className="text-3xl font-bold text-center text-black">{"987654321"}</Text>
+            </View>
 
             {/* Action Buttons */}
             <View className="flex-row gap-3 mt-2">
