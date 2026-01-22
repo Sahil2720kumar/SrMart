@@ -239,10 +239,10 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger>
 
-        <TabTrigger name="profile" href="/vendor/profile" asChild>
+        <TabTrigger name="profile" href="/delivery/profile" asChild>
           <Pressable className="flex-1">
-            <TabButton label="Profile" focused={pathname.startsWith("/vendor/profile")}>
-              <ProfileIcon focused={pathname.startsWith("/vendor/profile")} />
+            <TabButton label="Profile" focused={pathname.startsWith("/delivery/profile")}>
+              <ProfileIcon focused={pathname.startsWith("/delivery/profile")} />
             </TabButton>
           </Pressable>
         </TabTrigger>

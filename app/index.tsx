@@ -36,6 +36,10 @@ export default function Home() {
         <Link href={"/(tabs)/customer/order/orders/1"} className='text-blue-500'>Order Specific</Link>
 
         <Text>Vendor </Text>
+        <Link href={"/vendor/auth/login"} className='text-blue-500'>Vendor login</Link>
+        <Link href={"/vendor/auth/signup"} className='text-blue-500'>Vendor signup</Link>
+        <Link href={"/vendor/auth/reset-password"} className='text-blue-500'>Vendor reset password</Link>
+       
         <Link href={"/vendor/(tabs)/dashboard"} className='text-blue-500'>Vendor Dashboard</Link>
         <Link href={"/vendor/(tabs)/orders"} className='text-blue-500'>Vendor Orders</Link>
         <Link href={"/vendor/order/1"} className='text-blue-500'>Vendor Orders Details</Link>
@@ -47,6 +51,8 @@ export default function Home() {
         <Link href={"/vendor/inventory"} className='text-blue-500'>Vendor inventory</Link>
 
         <Text>Delivery</Text>
+        <Link href={"/delivery/auth/login"} className='text-blue-500'>Delivery login</Link>
+        <Link href={"/delivery/auth/signup"} className='text-blue-500'>Delivery Signup</Link>
         <Link href={"/delivery/home"} className='text-blue-500'>Delivery Home</Link>
         <Link href={"/delivery/orders"} className='text-blue-500'>Delivery orders</Link>
         <Link href={"/delivery/order/0"} className='text-blue-500'>Delivery orders id</Link>
