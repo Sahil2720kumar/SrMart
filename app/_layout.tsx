@@ -4,6 +4,8 @@ import '../global.css';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
@@ -15,44 +17,46 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // });
 
 export default function Layout() {
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <BottomSheetModalProvider>
 
-        <StatusBar style="auto" />
-        <Stack >
-          <Stack.Screen
-            name='index'
-            options={{
-              headerShown: true
-            }}
-          />
-          <Stack.Screen
-            name='(tabs)/customer'
-            options={{
-              headerShown: false
-            }}
-          />
-          <Stack.Screen
-            name='products'
-            options={{
-              headerShown: false
-            }}
-          />
-          <Stack.Screen
-            name='vendor'
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name='delivery'
-            options={{
-              headerShown: false,
-            }}
-          />
-        </Stack>
-      </BottomSheetModalProvider>
-    </GestureHandlerRootView >
+  return (
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <BottomSheetModalProvider>
+          <StatusBar style="auto" />
+          <Stack >
+            <Stack.Screen
+              name='index'
+              options={{
+                headerShown: true
+              }}
+            />
+            <Stack.Screen
+              name='(tabs)/customer'
+              options={{
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name='products'
+              options={{
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name='vendor'
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name='delivery'
+              options={{
+                headerShown: false,
+              }}
+            />
+          </Stack>
+        </BottomSheetModalProvider>
+      </GestureHandlerRootView >
+    </QueryClientProvider>
   )
 }
