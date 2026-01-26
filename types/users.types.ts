@@ -1,17 +1,18 @@
 import { Gender, KycStatus, UserRole, VehicleType } from "./enums.types";
 
 export interface User {
-  id: string;
+  id?: string;
   email: string;
   phone: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  auth_id?:string
 }
-
+ 
 export interface Customer {
-  id: string;
+  id?: string;
   user_id: string;
   first_name: string;
   last_name: string;
@@ -23,7 +24,7 @@ export interface Customer {
 }
 
 export interface Vendor {
-  id: string;
+  id?: string;
   user_id: string;
   store_name: string;
   store_description?: string;
@@ -52,7 +53,7 @@ export interface Vendor {
 }
 
 export interface DeliveryBoy {
-  id: string;
+  id? : string;
   user_id: string;
   first_name: string;
   last_name: string;

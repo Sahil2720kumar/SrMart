@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
@@ -17,16 +18,14 @@ import { GoogleLogo } from "@/assets/svgs/GoogleLogo"
 import { EmailIcon } from "@/assets/svgs/EmailIcon"
 import { LockIcon } from "@/assets/svgs/LockIcon"
 import { EyeIcon } from "@/assets/svgs/EyeIcon"
-import { router, Stack } from "expo-router"
+import { Redirect, router, Stack } from "expo-router"
 import { AntDesign } from "@expo/vector-icons"
+import { supabase } from "@/lib/supabase"
+import { useAuthStore } from "@/store/authStore"
+import { useCustomerProfile } from "@/hooks/queries"
+import { User } from "@/types/users.types"
+import { useProfileStore } from "@/store/profileStore"
 
-
-interface LoginScreenProps {
-  onGoogleSignIn?: () => Promise<void>
-  onEmailSignIn?: (email: string, password: string) => Promise<void>
-  onForgotPassword?: () => void
-  onSignUp?: () => void
-}
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("")
@@ -35,10 +34,9 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
-
-
   const [selectedRole, setSelectedRole] = useState<"vendor" | "customer" | "delivery">("customer");
-
+  const { setSession } = useAuthStore()
+  const { setUser, setCustomerProfile } = useProfileStore()
   const roles = [
     { key: "customer", label: "Customer", icon: "user", route: "/auth/login" },
     { key: "vendor", label: "Vendor", icon: "shop", route: "/vendor/auth/login" },
@@ -64,29 +62,85 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0
   }
 
+
   const handleEmailSignIn = async () => {
-    if (!validateForm()) return
-
-    setIsLoading(true)
+    if (!validateForm()) return;
+  
+    setIsLoading(true);
+  
     try {
-      // await onEmailSignIn?.(email, password)
-    } catch (error) {
-      console.error("Sign in error:", error)
+      /* ---------------- AUTH SIGN IN ---------------- */
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+  
+      if (signInError) throw signInError;
+      if (!signInData.session || !signInData.user) {
+        throw new Error('Login failed');
+      }
+  
+      const authUserId = signInData.user.id;
+  
+      /* ---------------- FETCH USER ---------------- */
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .maybeSingle();
+  
+      if (userError) throw userError;
+      if (!userData) {
+        throw new Error('User profile not found');
+      }
+  
+      /* 🚨 ROLE GUARD (CRITICAL) */
+      if (userData.role !== 'customer') {
+        throw new Error('This account is not a customer');
+      }
+  
+      /* ---------------- FETCH CUSTOMER ---------------- */
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', authUserId)
+        .maybeSingle();
+  
+      if (customerError) throw customerError;
+      if (!customerData) {
+        throw new Error('Customer profile not found');
+      }
+  
+      /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
+      setSession(signInData.session);
+      setUser(userData);
+      setCustomerProfile(customerData);
+  
+      router.replace('/customer');
+    } catch (error: any) {
+      console.error('Sign in error:', error?.message);
+  
+      Alert.alert(
+        'Login Failed',
+        error?.message || 'Invalid email or password'
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
+  
 
-  const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true)
-    try {
-      // await onGoogleSignIn?.()
-    } catch (error) {
-      console.error("Google sign in error:", error)
-    } finally {
-      setIsGoogleLoading(false)
-    }
-  }
+  // const handleGoogleSignIn = async () => {
+  //   setIsGoogleLoading(true)
+  //   try {
+  //     // await onGoogleSignIn?.()
+  //   } catch (error) {
+  //     console.error("Google sign in error:", error)
+  //   } finally {
+  //     setIsGoogleLoading(false)
+  //   }
+  // }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -102,7 +156,7 @@ export default function LoginScreen() {
                 return (
                   <TouchableOpacity
                     key={key}
-                    onPress={() => router.push(route)}
+                    onPress={() => router.push(route as any)}
                     className={`flex-row items-center justify-center px-3 py-2 rounded-full ${isActive ? 'bg-green-500 shadow-lg' : 'bg-gray-100'}`}
                     activeOpacity={0.8}
                   >
@@ -131,7 +185,7 @@ export default function LoginScreen() {
             {/* Form Section */}
             <View className="flex-1 justify-center py-8">
               {/* Google Sign In Button */}
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 onPress={handleGoogleSignIn}
                 disabled={isGoogleLoading}
                 className="flex-row items-center justify-center bg-white py-4 rounded-2xl mb-6 active:opacity-80 shadow-sm border border-gray-300"
@@ -145,18 +199,18 @@ export default function LoginScreen() {
                     <Text className="text-gray-800 text-base font-semibold ml-3">Continue with Google</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               {/* Divider */}
-              <View className="flex-row items-center my-6">
+              {/* <View className="flex-row items-center my-6">
                 <View className="flex-1 h-px bg-gray-300" />
                 <Text className="text-gray-500 text-sm mx-4">or sign in with email</Text>
                 <View className="flex-1 h-px bg-gray-300" />
-              </View>
+              </View> */}
 
               {/* Email Input */}
               <View className="mb-4">
-                <Text className="text-gray-500 text-sm font-medium mb-2 ml-1">Email</Text>
+                <Text className="text-gray-500 text-sm font-medium mb-2 ml-1">Phone</Text>
                 <View
                   className={`flex-row items-center bg-white rounded-2xl px-4 border ${errors.email ? "border-red-400" : "border-gray-300"
                     }`}
@@ -229,7 +283,7 @@ export default function LoginScreen() {
             {/* Footer Section */}
             <View className="flex-row items-center justify-center pb-4">
               <Text className="text-gray-500 text-sm">Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/sign-up')}>
+              <TouchableOpacity onPress={() => router.push('/auth/sign-up')}>
                 <Text className="text-[#5ac268] text-sm font-bold">Sign up</Text>
               </TouchableOpacity>
             </View>

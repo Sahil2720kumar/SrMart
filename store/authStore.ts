@@ -11,9 +11,6 @@ export interface AuthState {
   initialized: boolean;
   setSession: (newSession: Session | null) => void;
   setLoading: (loading: boolean) => void;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string) => Promise<{ error: any }>;
-  signOut: () => Promise<void>;
   initialize: () => Promise<void>;
 }
 
@@ -28,7 +25,7 @@ const authStorage = {
     await SecureStore.deleteItemAsync(key);
   },
 };
-
+ 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -37,36 +34,36 @@ export const useAuthStore = create<AuthState>()(
       initialized: false,
 
       setSession: (newSession) => set({ session: newSession }),
-      
+
       setLoading: (loading) => set({ loading }),
 
       initialize: async () => {
         const state = get();
-        
+
         // Prevent multiple initializations
         if (state.initialized) {
           console.log('Auth already initialized');
           return;
         }
-        
+
         console.log('Initializing auth...');
         set({ loading: true });
-        
+
         try {
           // Get initial session
           const { data: { session }, error } = await supabase.auth.getSession();
-          
+
           if (error) {
             console.error('Error getting session:', error);
           }
-          
+
           set({ session, loading: false, initialized: true });
           console.log('Auth initialized, session:', session ? 'Found' : 'None');
 
           // Listen for auth changes
           supabase.auth.onAuthStateChange((event, session) => {
             console.log('Auth event:', event);
-            
+
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
               set({ session });
             } else if (event === 'SIGNED_OUT') {
@@ -77,43 +74,8 @@ export const useAuthStore = create<AuthState>()(
           console.error('Auth initialization error:', error);
           set({ loading: false, initialized: true });
         }
-      },
+      }
 
-      signIn: async (phone, password) => {
-        set({ loading: true });
-        const { data, error } = await supabase.auth.signInWithPassword({
-          phone,
-          password,
-        });
-        
-        if (!error && data.session) {
-          set({ session: data.session });
-        }
-        
-        set({ loading: false });
-        return { error };
-      },
-
-      signUp: async (email, password) => {
-        set({ loading: true });
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        
-        if (!error && data.session) {
-          set({ session: data.session });
-        }
-        
-        set({ loading: false });
-        return { error };
-      },
-
-      signOut: async () => {
-        set({ loading: true });
-        await supabase.auth.signOut();
-        set({ session: null, loading: false });
-      },
     }),
     {
       name: 'auth-storage',

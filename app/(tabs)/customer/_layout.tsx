@@ -2,9 +2,10 @@ import type React from "react"
 import { Tabs, TabList, TabTrigger, TabSlot } from "expo-router/ui"
 import { View, Text, Pressable } from "react-native"
 import { Svg, Path, Circle } from "react-native-svg"
-import { usePathname } from "expo-router"
+import { Redirect, usePathname } from "expo-router"
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Foundation from '@expo/vector-icons/Foundation';
+import { useProfileStore } from "@/store/profileStore"
 
 // Tab Icons
 function HomeIcon({ focused = false }: { focused?: boolean }) {
@@ -155,6 +156,9 @@ function TabButton({
 }
 
 export default function TabLayout() {
+  console.log("Customer layout enter");
+  
+  const {getUserRole}=useProfileStore()
   const pathname = usePathname();
   console.log(pathname);
 

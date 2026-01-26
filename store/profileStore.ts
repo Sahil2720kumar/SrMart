@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Customer, DeliveryBoy, User, Vendor } from '@/types/users.types';
 import { UserRole } from '@/types/enums.types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 export interface ProfileState {
@@ -22,18 +23,6 @@ export interface ProfileState {
   clearProfiles: () => void;
   getUserRole: () => UserRole | null;
 }
-
-const profileStorage = {
-  getItem: async (key: string) => {
-    return await SecureStore.getItemAsync(key);
-  },
-  setItem: async (key: string, value: string) => {
-    await SecureStore.setItemAsync(key, value);
-  },
-  removeItem: async (key: string) => {
-    await SecureStore.deleteItemAsync(key);
-  },
-};
 
 export const useProfileStore = create<ProfileState>()(
   persist(
@@ -68,7 +57,7 @@ export const useProfileStore = create<ProfileState>()(
     }),
     {
       name: 'profile-storage',
-      storage: createJSONStorage(() => profileStorage),
+      storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         user: state.user,
         customerProfile: state.customerProfile,

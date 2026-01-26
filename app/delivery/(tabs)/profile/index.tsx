@@ -11,6 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
 
 
 /* ---------------- MOCK DATA ---------------- */
@@ -34,6 +37,8 @@ const mockProfileData = {
 
 /* ---------------- MAIN COMPONENT ---------------- */
 const ProfileScreen = () => {
+  const { setSession } = useAuthStore()
+  const { setUser, setDeliveryBoyProfile } = useProfileStore()
   const router = useRouter();
   const store = useDeliveryStore();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -88,14 +93,24 @@ const ProfileScreen = () => {
 
   const verificationStatus = getVerificationStatusInfo();
 
-  const handleLogout = () => {
+  const handleLogout = async() => {
     setShowLogoutModal(false);
-    Alert.alert(
-      'Logged Out',
-      'You have been successfully logged out.',
-      [{ text: 'OK', onPress: () => router.push('/auth/login') }]
-    );
-  };
+    console.log("Logout pressed")
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch (err) {
+      console.error("Logout error:", err)
+    } finally {
+      // Clear local state no matter what
+      setSession(null)
+      setDeliveryBoyProfile(null)
+      setUser(null)
+      // router.dismissAll()
+      router.replace('/auth/login')
+    }
+  }
+
 
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">

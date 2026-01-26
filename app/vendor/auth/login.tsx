@@ -1,3 +1,6 @@
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -15,7 +18,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
-  const [phone, setPhone] = useState('');
+  const {setSession}=useAuthStore()
+  const {setUser,setVendorProfile}=useProfileStore()
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,12 +29,12 @@ export default function LoginScreen() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Phone validation (Indian format)
-    const phoneRegex = /^[6-9]\d{9}$/;
-    if (!phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
-      newErrors.phone = 'Enter a valid 10-digit phone number';
+    // email validation (Indian format)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!emailRegex.test(email)) {
+      newErrors.email = 'Enter a valid email address';
     }
 
     if (!password.trim()) {
@@ -43,23 +48,72 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
+  
     setIsLoading(true);
+  
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('[v0] Login attempt:', { phone, password: '***' });
-      Alert.alert('Success', 'Login successful!');
-      // Navigate to main app
-      // router.replace('/(tabs)');
-    } catch (error) {
-      Alert.alert('Error', 'Invalid credentials. Please try again.');
+      /* ---------------- AUTH LOGIN ---------------- */
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+  
+      if (signInError) throw signInError;
+      if (!signInData.session || !signInData.user) {
+        throw new Error('Login failed');
+      }
+  
+      const authUserId = signInData.user.id;
+  
+      /* ---------------- FETCH USER ---------------- */
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .maybeSingle();
+  
+      if (userError) throw userError;
+      if (!userData) {
+        throw new Error('User profile not found');
+      }
+  
+      /* 🚨 ROLE GUARD */
+      if (userData.role !== 'vendor') {
+        throw new Error('This account is not a vendor');
+      }
+  
+      /* ---------------- FETCH VENDOR PROFILE ---------------- */
+      const { data: vendorData, error: vendorError } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('user_id', authUserId)
+        .maybeSingle();
+  
+      if (vendorError) throw vendorError;
+      if (!vendorData) {
+        throw new Error('Vendor profile not found');
+      }
+  
+      /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
+      setSession(signInData.session);
+      setUser(userData);
+      setVendorProfile(vendorData);
+  
+      router.replace('/vendor/dashboard');
+    } catch (error: any) {
+      console.error('Vendor login error:', error?.message);
+  
+      Alert.alert(
+        'Login Failed',
+        error?.message || 'Invalid email or password'
+      );
     } finally {
       setIsLoading(false);
     }
   };
+  
 
   const handleForgotPassword = () => {
     Alert.alert('Forgot Password', 'Password reset link will be sent to your registered phone number');
@@ -102,25 +156,24 @@ export default function LoginScreen() {
               <View>
                 <Text className="text-gray-700 font-semibold text-sm mb-2">Phone Number</Text>
                 <View className="flex-row items-center bg-white border border-gray-300 rounded-xl px-4 py-1">
-                  <Feather name="phone" size={20} color="#6b7280" />
-                  <Text className="text-gray-600 font-medium mx-2">+91</Text>
+                  <Feather name="mail" size={20} color="#6b7280" />
+                  <Text className="text-gray-600 font-medium mx-1"></Text>
                   <TextInput
-                    value={phone}
+                    value={email}
                     onChangeText={(text) => {
-                      setPhone(text);
+                      setEmail(text);
                       if (errors.phone) setErrors({ ...errors, phone: '' });
                     }}
-                    placeholder="98765 43210"
-                    keyboardType="phone-pad"
-                    maxLength={10}
+                    placeholder="xyz@vendor.com"
+                    keyboardType="email-address"
                     className="flex-1 py-3 text-gray-900 font-medium"
                     placeholderTextColor="#9ca3af"
                   />
                 </View>
-                {errors.phone && (
+                {errors.email && (
                   <View className="flex-row items-center gap-2 mt-2">
                     <Feather name="alert-circle" size={16} color="#dc2626" />
-                    <Text className="text-red-600 text-xs font-medium">{errors.phone}</Text>
+                    <Text className="text-red-600 text-xs font-medium">{errors.email}</Text>
                   </View>
                 )}
               </View>
@@ -163,9 +216,8 @@ export default function LoginScreen() {
             <TouchableOpacity
               onPress={handleLogin}
               disabled={isLoading}
-              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center mt-8 shadow-md ${
-                isLoading ? 'opacity-50' : ''
-              }`}
+              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center mt-8 shadow-md ${isLoading ? 'opacity-50' : ''
+                }`}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color="#fff" />

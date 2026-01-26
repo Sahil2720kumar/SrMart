@@ -1,3 +1,6 @@
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -15,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SignupScreen() {
+  const {setSession}=useAuthStore()
+  const {setVendorProfile,setUser}=useProfileStore()
   const [vendorName, setVendorName] = useState('');
   const [shopName, setShopName] = useState('');
   const [phone, setPhone] = useState('');
@@ -26,6 +31,7 @@ export default function SignupScreen() {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [selectedRole,setSelectedRole]=useState("vendor")
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -79,38 +85,100 @@ export default function SignupScreen() {
       Alert.alert('Validation Error', 'Please check all fields and try again');
       return;
     }
-
+  
+    // 🔐 This screen ONLY allows vendor signup
+    if (selectedRole !== 'vendor') {
+      Alert.alert('Error', 'Invalid role selected');
+      return;
+    }
+  
     setIsLoading(true);
+  
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('[v0] Signup attempt:', { vendorName, shopName, phone, email });
-      
-      // Navigate to OTP verification
-      router.push({
-        pathname: '/vendor/auth/verify-otp',
-        params: { phone: phone, type: 'signup' }
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create account. Please try again.');
+      /* ---------------- AUTH SIGNUP ---------------- */
+      const { data: signupData, error: signupError } =
+        await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              role: selectedRole,
+              phone,
+              vendor_name: vendorName,
+              shop_name: shopName,
+            },
+          },
+        });
+  
+      if (signupError) throw signupError;
+      if (!signupData.user || !signupData.session) {
+        throw new Error('Signup failed');
+      }
+  
+      const authUserId = signupData.user.id;
+  
+      /* -------- WAIT FOR DB TRIGGERS (IMPORTANT) -------- */
+      await new Promise((r) => setTimeout(r, 1000));
+  
+      /* ---------------- FETCH USER ---------------- */
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .maybeSingle();
+  
+      if (userError) throw userError;
+      if (!userData) {
+        throw new Error('User profile not created yet');
+      }
+  
+      /* 🚨 ROLE VALIDATION (CRITICAL) */
+      if (userData.role !== 'vendor') {
+        throw new Error('Invalid role detected. Signup aborted.');
+      }
+  
+      /* ---------------- FETCH VENDOR ---------------- */
+      const { data: vendorData, error: vendorError } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('user_id', authUserId)
+        .maybeSingle();
+  
+      if (vendorError) throw vendorError;
+      if (!vendorData) {
+        throw new Error('Vendor profile not created');
+      }
+  
+      /* ---------------- COMMIT STATE (SAFE) ---------------- */
+      setSession(signupData.session);
+      setUser(userData);
+      setVendorProfile(vendorData);
+  
+      router.replace('/vendor/(tabs)/dashboard');
+    } catch (err: any) {
+      console.error('Signup error:', err?.message);
+  
+      Alert.alert(
+        'Signup Failed',
+        err?.message || 'Something went wrong. Please try again.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
+  
 
   const handleLogin = () => {
-    router.back();
+    router.push("/vendor/auth/login")
   };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
           <View className="flex-1 px-6 pt-8 pb-6">
             {/* Header */}
             <View className="flex-row items-center mb-8">
-              <TouchableOpacity onPress={handleLogin} className="p-2 -ml-2">
-                <Feather name="chevron-left" size={24} color="#1f2937" />
-              </TouchableOpacity>
               <View className="ml-2">
                 <Text className="text-2xl font-bold text-gray-900">Create Account</Text>
                 <Text className="text-gray-600 text-sm mt-1">Join our vendor community</Text>
@@ -296,9 +364,8 @@ export default function SignupScreen() {
                   className="flex-row items-start gap-3"
                 >
                   <View
-                    className={`w-5 h-5 rounded border-2 items-center justify-center mt-0.5 ${
-                      agreeToTerms ? 'bg-emerald-500 border-emerald-500' : 'border-gray-400'
-                    }`}
+                    className={`w-5 h-5 rounded border-2 items-center justify-center mt-0.5 ${agreeToTerms ? 'bg-emerald-500 border-emerald-500' : 'border-gray-400'
+                      }`}
                   >
                     {agreeToTerms && <Feather name="check" size={14} color="#fff" />}
                   </View>
@@ -321,9 +388,8 @@ export default function SignupScreen() {
             <TouchableOpacity
               onPress={handleSignup}
               disabled={isLoading}
-              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center mt-8 shadow-md ${
-                isLoading ? 'opacity-50' : ''
-              }`}
+              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center mt-8 shadow-md ${isLoading ? 'opacity-50' : ''
+                }`}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color="#fff" />

@@ -15,7 +15,7 @@ import SkeletonImage from "@/components/SkeletonImage"
 import useWishlistStore from "@/store/wishlistStore"
 import useCartStore from "@/store/cartStore"
 import OfferProductCard from "@/components/OfferProductCard"
-import { Address } from "@/types/address.types"
+
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
 
@@ -72,7 +72,7 @@ const bestDeals = [
   },
 ]
 
-const addresses: Address[] = [
+const addresses = [
   { id: "1", label: "Home", address: "6391 Elgin St. Celina, Delaware 10299", isDefault: true },
   { id: "2", label: "Office", address: "123 Business Ave. New York, NY 10001", isDefault: false },
   { id: "3", label: "Apartment", address: "456 Oak Lane. Los Angeles, CA 90001", isDefault: false },

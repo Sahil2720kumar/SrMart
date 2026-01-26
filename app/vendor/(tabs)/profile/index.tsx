@@ -1,7 +1,12 @@
+import { FullPageError } from '@/components/ErrorComp';
+import { useCustomerProfile, useFetchUser, useVendorProfile } from '@/hooks/queries';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -24,7 +29,8 @@ const mockVendorData = {
 
 export default function ProfileOverviewScreen() {
   const [logoutLoading, setLogoutLoading] = useState(false);
-
+  const { setVendorProfile, setUser } = useProfileStore()
+  const {setSession}=useAuthStore()
   // Verification status - you can fetch this from your backend
   const [verificationStatus, setVerificationStatus] = useState({
     isAdminVerified: true,  // Change to false to see unverified state
@@ -75,13 +81,18 @@ export default function ProfileOverviewScreen() {
           onPress: async () => {
             setLogoutLoading(true);
             try {
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              console.log('[v0] User logged out');
-              Alert.alert('Success', 'You have been logged out successfully.');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
+              const { error } = await supabase.auth.signOut()
+              if (error) throw error
+            } catch (err) {
+              console.error("Logout error:", err)
             } finally {
-              setLogoutLoading(false);
+              // Clear local state no matter what
+              setSession(null)
+              setVendorProfile(null)
+              setUser(null)
+              // router.dismissAll()
+              router.replace('/auth/login')
+              setLogoutLoading(false)
             }
           },
           style: 'destructive',
@@ -91,7 +102,7 @@ export default function ProfileOverviewScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 ">
       {/* Header */}
       <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100">
         <Text className="text-2xl font-bold text-gray-900">Profile</Text>
@@ -185,8 +196,8 @@ export default function ProfileOverviewScreen() {
             <View className="gap-3">
               {/* Admin Verification */}
               <View className={`flex-row items-center justify-between p-3 rounded-lg border ${verificationStatus.isAdminVerified
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-gray-50 border-gray-200'
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-gray-50 border-gray-200'
                 }`}>
                 <View className="flex-row items-center gap-3 flex-1">
                   <View className={`w-10 h-10 rounded-full items-center justify-center ${verificationStatus.isAdminVerified ? 'bg-blue-100' : 'bg-gray-200'
@@ -223,8 +234,8 @@ export default function ProfileOverviewScreen() {
 
               {/* KYC Verification */}
               <View className={`flex-row items-center justify-between p-3 rounded-lg border ${verificationStatus.isKycVerified
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-gray-50 border-gray-200'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-gray-50 border-gray-200'
                 }`}>
                 <View className="flex-row items-center gap-3 flex-1">
                   <View className={`w-10 h-10 rounded-full items-center justify-center ${verificationStatus.isKycVerified ? 'bg-green-100' : 'bg-gray-200'

@@ -1,160 +1,270 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-export default function SignupScreen() {
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
+
+export default function DeliverySignupScreen() {
   const router = useRouter();
+  const { setSession } = useAuthStore();
+  const { setUser, setDeliveryBoyProfile } = useProfileStore();
+
+  /* ---------------- FORM STATE ---------------- */
+  const [step, setStep] = useState<1 | 2>(1);
+
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode] = useState('+91');
   const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState({ name: '', phone: '' });
 
-  const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
+  /* ---------------- VALIDATION ---------------- */
   const isValidName = fullName.trim().length >= 3;
-  const canContinue = isValidName && isValidPhone && termsAccepted;
+  const isValidPhone = /^\d{10}$/.test(phoneNumber);
+  const canContinueStep1 = isValidName && isValidPhone && termsAccepted;
 
-  const handleContinue = async () => {
-    const newErrors = { name: '', phone: '' };
+  /* ---------------- STEP HANDLERS ---------------- */
+  const handleContinue = () => {
+    if (!canContinueStep1) return;
+    setStep(2);
+  };
 
-    if (!isValidName) {
-      newErrors.name = 'Please enter your full name (min 3 characters)';
+  const handleDeliveryBoySignUp = async () => {
+    if (!email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
     }
-    if (!isValidPhone) {
-      newErrors.phone = 'Please enter a valid 10-digit mobile number';
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
     }
 
-    setErrors(newErrors);
-
-    if (newErrors.name || newErrors.phone) return;
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
 
     setIsLoading(true);
 
-    setTimeout(() => {
+    try {
+      /* ---------------- AUTH SIGNUP ---------------- */
+      const { data: signupData, error: signupError } =
+        await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              role: 'delivery_boy',
+              phone: phoneNumber,
+              name: fullName,
+            },
+          },
+        });
+
+      if (signupError) throw signupError;
+      if (!signupData.user) throw new Error('Signup failed');
+
+      // Email confirmation
+      if (!signupData.session) {
+        Alert.alert(
+          'Check Your Email',
+          'Please verify your email to activate your delivery partner account.',
+          [{ text: 'OK', onPress: () => router.replace('/delivery/auth/login') }]
+        );
+        return;
+      }
+
+      const authUserId = signupData.user.id;
+
+      /* -------- WAIT FOR TRIGGERS -------- */
+      await new Promise((r) => setTimeout(r, 1000));
+
+      /* ---------------- FETCH USER ---------------- */
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .maybeSingle();
+
+      if (!userData || userData.role !== 'delivery_boy') {
+        throw new Error('Invalid role detected');
+      }
+
+      /* ---------------- FETCH DELIVERY PROFILE ---------------- */
+      const { data: deliveryData } = await supabase
+        .from('delivery_boys')
+        .select('*')
+        .eq('user_id', authUserId)
+        .maybeSingle();
+
+      if (!deliveryData) {
+        throw new Error('Delivery profile not created');
+      }
+
+      /* ---------------- COMMIT STATE ---------------- */
+      setSession(signupData.session);
+      setUser(userData);
+      setDeliveryBoyProfile(deliveryData);
+
+      Alert.alert(
+        'Success',
+        'Your delivery partner account has been created! Please complete KYC.',
+        [{ text: 'OK', onPress: () => router.replace('/delivery/profile') }]
+      );
+    } catch (error: any) {
+      console.error('Delivery signup error:', error?.message);
+      Alert.alert(
+        'Signup Failed',
+        error?.message || 'Unable to create delivery partner account'
+      );
+    } finally {
       setIsLoading(false);
-      router.push({
-        pathname: '/delivery/auth/verify-otp',
-        params: { 
-          phone: `${countryCode}${phoneNumber}`, 
-          isNewUser: 'true',
-          name: fullName 
-        }
-      });
-    }, 1500);
+    }
   };
 
+  /* ---------------- UI ---------------- */
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}
           keyboardShouldPersistTaps="handled"
         >
           <View className="items-center mt-12 mb-8">
-            <Text className="text-white text-3xl font-bold mb-2">Join as Delivery Partner</Text>
+            <Text className="text-white text-3xl font-bold mb-2">
+              Join as Delivery Partner
+            </Text>
             <Text className="text-indigo-200 text-base text-center">
               Earn money by delivering grocery orders
             </Text>
           </View>
 
           <View className="bg-white rounded-3xl p-6 shadow-lg mb-6">
-            <Text className="text-gray-700 font-semibold mb-2">Full Name</Text>
-            <View className={`border-2 rounded-xl mb-2 ${errors.name ? 'border-red-400' : 'border-gray-200'}`}>
-              <TextInput
-                className="px-4 py-4 text-gray-900 text-base"
-                placeholder="Enter your full name"
-                placeholderTextColor="#9ca3af"
-                value={fullName}
-                onChangeText={(text) => {
-                  setFullName(text);
-                  setErrors(prev => ({ ...prev, name: '' }));
-                }}
-              />
-            </View>
-            {errors.name ? (
-              <Text className="text-red-600 text-sm mb-4">{errors.name}</Text>
+            {step === 1 ? (
+              <>
+                {/* STEP 1 */}
+                <Text className="text-gray-700 font-semibold mb-2">Full Name</Text>
+                <TextInput
+                  className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChangeText={setFullName}
+                />
+
+                <Text className="text-gray-700 font-semibold mb-2">
+                  Mobile Number
+                </Text>
+                <TextInput
+                  className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+                  keyboardType="number-pad"
+                  maxLength={10}
+                  placeholder="Enter mobile number"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                />
+
+                <TouchableOpacity
+                  className="flex-row items-center mb-6"
+                  onPress={() => setTermsAccepted(!termsAccepted)}
+                >
+                  <View
+                    className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${
+                      termsAccepted
+                        ? 'bg-[#4f46e5] border-[#4f46e5]'
+                        : 'border-gray-400'
+                    }`}
+                  >
+                    {termsAccepted && (
+                      <Feather name="check" size={14} color="white" />
+                    )}
+                  </View>
+                  <Text className="text-gray-600 text-sm">
+                    I agree to Terms & Privacy Policy
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={!canContinueStep1}
+                  onPress={handleContinue}
+                  className={`rounded-xl py-4 items-center ${
+                    canContinueStep1 ? 'bg-[#4f46e5]' : 'bg-gray-300'
+                  }`}
+                >
+                  <Text className="text-white font-bold">Continue</Text>
+                </TouchableOpacity>
+              </>
             ) : (
-              <View className="mb-4" />
+              <>
+                {/* STEP 2 */}
+                <TextInput
+                  className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+                  placeholder="Email"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+
+                <TextInput
+                  className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+                  placeholder="Password"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+
+                <TextInput
+                  className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-6"
+                  placeholder="Confirm Password"
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+
+                <TouchableOpacity
+                  onPress={handleDeliveryBoySignUp}
+                  disabled={isLoading}
+                  className="bg-[#4f46e5] rounded-xl py-4 items-center"
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-white font-bold">
+                      Create Account
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </>
             )}
-
-            <Text className="text-gray-700 font-semibold mb-2">Mobile Number</Text>
-            <View className={`flex-row items-center border-2 rounded-xl mb-2 ${errors.phone ? 'border-red-400' : 'border-gray-200'}`}>
-              <View className="bg-gray-50 px-4 py-4 border-r border-gray-200">
-                <Text className="text-gray-700 font-semibold">{countryCode}</Text>
-              </View>
-              <TextInput
-                className="flex-1 px-4 py-4 text-gray-900 text-base"
-                placeholder="Enter mobile number"
-                placeholderTextColor="#9ca3af"
-                keyboardType="number-pad"
-                maxLength={10}
-                value={phoneNumber}
-                onChangeText={(text) => {
-                  setPhoneNumber(text);
-                  setErrors(prev => ({ ...prev, phone: '' }));
-                }}
-              />
-            </View>
-            {errors.phone ? (
-              <Text className="text-red-600 text-sm mb-4">{errors.phone}</Text>
-            ) : (
-              <View className="mb-4" />
-            )}
-
-            <TouchableOpacity 
-              className="flex-row items-start mb-6"
-              onPress={() => setTermsAccepted(!termsAccepted)}
-            >
-              <View className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${
-                termsAccepted ? 'bg-[#4f46e5] border-[#4f46e5]' : 'border-gray-400'
-              }`}>
-                {termsAccepted && <Feather name="check" size={14} color="white" />}
-              </View>
-              <Text className="flex-1 text-gray-600 text-sm">
-                I agree to the <Text className="text-[#4f46e5] font-semibold">Terms & Conditions</Text> and <Text className="text-[#4f46e5] font-semibold">Privacy Policy</Text>
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className={`rounded-xl py-4 items-center justify-center ${
-                canContinue && !isLoading ? 'bg-[#4f46e5]' : 'bg-gray-300'
-              }`}
-              disabled={!canContinue || isLoading}
-              onPress={handleContinue}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-bold text-base">Continue</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View className="bg-white/10 rounded-2xl p-5 mb-6">
-            <View className="flex-row items-center mb-3">
-              <Feather name="clock" size={20} color="white" />
-              <Text className="text-white ml-3 text-base">Flexible working hours</Text>
-            </View>
-            <View className="flex-row items-center mb-3">
-              <Feather name="dollar-sign" size={20} color="white" />
-              <Text className="text-white ml-3 text-base">Weekly payouts</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Feather name="map-pin" size={20} color="white" />
-              <Text className="text-white ml-3 text-base">Nearby deliveries</Text>
-            </View>
           </View>
 
           <View className="items-center mb-6">
             <Text className="text-indigo-200 mb-2">Already have an account?</Text>
-            <TouchableOpacity onPress={() => router.push('/delivery/auth/login')}>
-              <Text className="text-white font-bold text-base underline">Login</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/delivery/auth/login')}
+            >
+              <Text className="text-white font-bold underline">Login</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

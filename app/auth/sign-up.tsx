@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { Stack } from "expo-router"
+import { Redirect, Stack } from "expo-router"
 import { GroceryLogo } from "@/assets/svgs/GroceryLogo"
 import { GoogleLogo } from "@/assets/svgs/GoogleLogo"
 import { EmailIcon } from "@/assets/svgs/EmailIcon"
@@ -24,8 +25,17 @@ import Svg, { Path } from "react-native-svg"
 import { BlurView } from "expo-blur"
 import { AntDesign, Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router";
+import { supabase } from "@/lib/supabase"
+import { Customer, User } from "@/types/users.types"
+import { UserRole } from "@/types/enums.types"
+import { useAuthStore } from "@/store/authStore"
+import { useProfileStore } from "@/store/profileStore"
+import { useFetchUser } from "@/hooks/queries"
+
 
 export default function SignUpScreen() {
+  const { setSession,session } = useAuthStore()
+  const { setUser, setCustomerProfile } = useProfileStore()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -42,16 +52,16 @@ export default function SignUpScreen() {
     terms?: string
   }>({})
   const router = useRouter()
+
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState("")
   const [phoneError, setPhoneError] = useState("")
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<"vendor" | "customer" | "delivery">("customer");
+  const [selectedRole, setSelectedRole] = useState<"vendor" | "customer" | "delivery_boy">("customer");
 
   const roles = [
-    { key: "customer", label: "Customer", icon: "user",route:"/auth/signup" },
-    { key: "vendor", label: "Vendor", icon: "shop",route:"/vendor/auth/signup" },
-    { key: "delivery", label: "Delivery", icon: "truck",route:"/delivery/auth/signup" },
+    { key: "customer", label: "Customer", icon: "user", route: "/auth/signup" },
+    { key: "vendor", label: "Vendor", icon: "shop", route: "/vendor/auth/signup" },
+    { key: "delivery_boy", label: "Delivery Boy", icon: "truck", route: "/delivery/auth/signup" },
   ];
 
 
@@ -92,10 +102,88 @@ export default function SignUpScreen() {
     return Object.keys(newErrors).length === 0
   }
 
+
   const handleEmailSignUp = async () => {
-    // if (!validateForm()) return
-    setShowPhoneModal(true)
-  }
+    setIsLoading(true);
+    try {
+      /* ---------------- AUTH SIGNUP ---------------- */
+      const { data: signupData, error: signupError } =
+        await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              role: selectedRole,
+              phone: phoneNumber,
+              name,
+            },
+          },
+        });
+  
+      if (signupError) throw signupError;
+      if (!signupData.user) throw new Error('Signup failed');
+  
+      // If email confirmation is required
+      if (!signupData.session) {
+        Alert.alert('Check Email', 'Please confirm your email to continue');
+        return;
+      }
+  
+      const authUserId = signupData.user.id;
+  
+      /* -------- WAIT FOR DB TRIGGERS -------- */
+      await new Promise((r) => setTimeout(r, 1000));
+  
+      /* ---------------- FETCH USER ---------------- */
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .maybeSingle();
+  
+      if (userError) throw userError;
+      if (!userData) {
+        throw new Error('User profile not created');
+      }
+  
+      /* 🚨 ROLE VERIFICATION (DO NOT TRUST UI STATE) */
+      if (userData.role !== selectedRole) {
+        throw new Error('Invalid role detected. Signup aborted.');
+      }
+  
+      /* ---------------- ROLE-SPECIFIC DATA ---------------- */
+      if (userData.role === 'customer') {
+        const { data: customerData, error: customerError } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+  
+        if (customerError) throw customerError;
+        if (!customerData) {
+          throw new Error('Customer profile not created');
+        }
+  
+        setCustomerProfile(customerData);
+      }
+  
+      /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
+      setSession(signupData.session);
+      setUser(userData);
+  
+      router.replace(`/${userData.role}` as any);
+    } catch (error: any) {
+      console.error('Signup error:', error?.message);
+  
+      Alert.alert(
+        'Signup Failed',
+        error?.message || 'Something went wrong. Please try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
 
   const validatePhone = (phone: string) => {
     const phoneRegex = /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/
@@ -103,31 +191,20 @@ export default function SignUpScreen() {
   }
 
   const handleConfirmPhone = async () => {
-
-    setIsVerifying(true)
-
-    try {
-      // await onEmailSignUp?.(name, email, password, phoneNumber)
-      setShowPhoneModal(false)
-      router.push(`/otp-verify?phone=${phoneNumber}`)
-    } catch (error) {
-      console.error("Sign up error:", error)
-      setPhoneError("Failed to create account. Please try again.")
-    } finally {
-      setIsVerifying(false)
-    }
+    setShowPhoneModal(false)
+    handleEmailSignUp()
   }
 
-  const handleGoogleSignUp = async () => {
-    setIsGoogleLoading(true)
-    try {
-      // await onGoogleSignUp?.()
-    } catch (error) {
-      console.error("Google sign up error:", error)
-    } finally {
-      setIsGoogleLoading(false)
-    }
-  }
+  // const handleGoogleSignUp = async () => {
+  //   setIsGoogleLoading(true)
+  //   try {
+  //     // await onGoogleSignUp?.()
+  //   } catch (error) {
+  //     console.error("Google sign up error:", error)
+  //   } finally {
+  //     setIsGoogleLoading(false)
+  //   }
+  // }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -138,12 +215,12 @@ export default function SignUpScreen() {
 
             {/* sticky switch button */}
             <View className="absolute top-0 right-4 flex-row bg-gray-100 rounded-full p-1 shadow-md">
-              {roles.map(({ key, icon, label,route }) => {
+              {roles.map(({ key, icon, label, route }) => {
                 const isActive = selectedRole === key;
                 return (
                   <TouchableOpacity
                     key={key}
-                    onPress={()=>router.push(route)}
+                    onPress={() => router.push(route as any)}
                     className={`flex-row items-center justify-center px-3 py-2 rounded-full ${isActive ? 'bg-green-500 shadow-lg' : 'bg-gray-100'}`}
                     activeOpacity={0.8}
                   >
@@ -163,7 +240,7 @@ export default function SignUpScreen() {
             </View>
 
             {/* Google Sign Up Button */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               onPress={handleGoogleSignUp}
               disabled={isGoogleLoading}
               className="flex-row items-center justify-center bg-white py-4 rounded-2xl mb-5 active:opacity-80 shadow-sm border border-gray-300"
@@ -177,14 +254,14 @@ export default function SignUpScreen() {
                   <Text className="text-gray-800 text-base font-semibold ml-3">Continue with Google</Text>
                 </>
               )}
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Divider */}
-            <View className="flex-row items-center my-4">
+            {/* <View className="flex-row items-center my-4">
               <View className="flex-1 h-px bg-emerald-800" />
               <Text className="text-emerald-400 text-sm mx-4">or</Text>
               <View className="flex-1 h-px bg-emerald-800" />
-            </View>
+            </View> */}
 
             {/* Name Input */}
             <View className="mb-3">
@@ -222,6 +299,8 @@ export default function SignUpScreen() {
                   placeholder="Enter your number"
                   placeholderTextColor="#666"
                   value={phoneNumber}
+                  keyboardType="numeric"
+                  maxLength={10}
                   onChangeText={(text) => {
                     setPhoneNumber(text)
                     if (errors.name) setErrors({ ...errors, phone: undefined })
@@ -325,7 +404,11 @@ export default function SignUpScreen() {
 
             {/* Sign Up Button */}
             <TouchableOpacity
-              onPress={handleEmailSignUp}
+              onPress={() => {
+                if (validateForm()) {
+                  setShowPhoneModal(true)
+                }
+              }}
               disabled={isLoading}
               className="bg-green-500 py-4 rounded-2xl items-center active:opacity-80 shadow-lg"
               activeOpacity={0.8}
@@ -333,14 +416,14 @@ export default function SignUpScreen() {
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white text-base font-bold">Create Account</Text>
+                <Text className="text-white text-base font-bold">{isLoading ? "Creating Account..." : "Create Account"}</Text>
               )}
             </TouchableOpacity>
 
             {/* Footer Section */}
             <View className="flex-row items-center justify-center mt-6 pb-4">
               <Text className="text-emerald-400 text-sm">Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/login')}>
+              <TouchableOpacity onPress={() => router.push('/auth/login')}>
                 <Text className="text-green-400 text-sm font-bold">Sign in</Text>
               </TouchableOpacity>
             </View>
@@ -377,7 +460,7 @@ export default function SignUpScreen() {
             {/* Modal Description */}
             <View className="text-center mb-4">
               <Text className="text-gray-600 text-sm leading-5 text-center">
-                We will send the authentication code to
+                {/* We will send the authentication code to */}
               </Text>
               <Text className="text-gray-600 text-sm leading-5 text-center">
                 the phone number you entered.
@@ -390,7 +473,7 @@ export default function SignUpScreen() {
 
             {/* Phone Number */}
             <View className="mb-4">
-              <Text className="text-3xl font-bold text-center text-black">{"987654321"}</Text>
+              <Text className="text-3xl font-bold text-center text-black">{phoneNumber}</Text>
             </View>
 
             {/* Action Buttons */}
@@ -409,15 +492,13 @@ export default function SignUpScreen() {
 
               <TouchableOpacity
                 onPress={handleConfirmPhone}
-                disabled={isVerifying}
+
                 className="flex-1 bg-green-500 py-4 rounded-2xl items-center"
                 activeOpacity={0.8}
               >
-                {isVerifying ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-white text-base font-bold">Confirm</Text>
-                )}
+
+                <Text className="text-white text-base font-bold">Confirm</Text>
+
               </TouchableOpacity>
             </View>
 

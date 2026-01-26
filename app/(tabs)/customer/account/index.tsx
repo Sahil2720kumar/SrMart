@@ -1,3 +1,6 @@
+import { supabase } from "@/lib/supabase"
+import { useAuthStore } from "@/store/authStore"
+import { useProfileStore } from "@/store/profileStore"
 import Feather from "@expo/vector-icons/Feather"
 import { router } from "expo-router"
 import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native"
@@ -20,14 +23,30 @@ const menuItems: MenuItem[] = [
 ]
 
 export default function ProfileScreen({ navigation }: { navigation?: any }) {
-  const handleLogout = () => {
+  const { setSession } = useAuthStore()
+  const { setUser, setCustomerProfile } = useProfileStore()
+
+  const handleLogout = async () => {
     console.log("Logout pressed")
-    // In your app: navigation?.navigate("Login")
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch (err) {
+      console.error("Logout error:", err)
+    } finally {
+      // Clear local state no matter what
+      setSession(null)
+      setCustomerProfile(null)
+      setUser(null)
+      // router.dismissAll()
+      router.replace('/auth/login')
+    }
   }
+
 
   const handleMenuPress = (route?: string) => {
     console.log("Navigate to:", route)
-    if(route==="Orders"){
+    if (route === "Orders") {
       router.navigate("/(tabs)/customer/order/orders")
       return;
     }

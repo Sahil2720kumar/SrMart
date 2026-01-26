@@ -1,81 +1,138 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase'; // adjust path if needed
 
-export default function LoginScreen() {
+export default function DeliveryLoginScreen() {
   const router = useRouter();
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode] = useState('+91');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
+  const isValidEmail = /^\S+@\S+\.\S+$/.test(email);
+  const canLogin = isValidEmail && password.length >= 6;
 
-  const handleSendOTP = async () => {
-    if (!isValidPhone) {
-      setError('Please enter a valid 10-digit mobile number');
+  const handleLogin = async () => {
+    if (!canLogin) {
+      setError('Enter valid email and password');
       return;
     }
 
-    setError('');
     setIsLoading(true);
+    setError('');
 
-    setTimeout(() => {
+    try {
+      /* -------- AUTH LOGIN -------- */
+      const { data, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+
+      if (authError) throw authError;
+      if (!data.session) throw new Error('Login failed');
+
+      const authUserId = data.user.id;
+
+      /* -------- FETCH USER -------- */
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', authUserId)
+        .single();
+
+      if (userError) throw userError;
+
+      /* 🚨 ROLE GUARD */
+      if (userData.role !== 'delivery_boy') {
+        throw new Error('This account is not a delivery partner');
+      }
+
+      /* -------- FETCH DELIVERY PROFILE -------- */
+      const { data: deliveryProfile, error: deliveryError } =
+        await supabase
+          .from('delivery_boys')
+          .select('*')
+          .eq('user_id', authUserId)
+          .single();
+
+      if (deliveryError) throw deliveryError;
+
+      /* -------- SUCCESS -------- */
+      router.replace('/delivery/home');
+
+    } catch (err: any) {
+      Alert.alert(
+        'Login Failed',
+        err?.message || 'Invalid email or password'
+      );
+    } finally {
       setIsLoading(false);
-      router.push({
-        pathname: '/delivery/auth/verify-otp',
-        params: { phone: `${countryCode}${phoneNumber}`, isNewUser: 'false' }
-      });
-    }, 1500);
+    }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Header */}
           <View className="items-center mt-12 mb-8">
             <View className="w-20 h-20 bg-white rounded-full items-center justify-center mb-4">
               <Feather name="package" size={40} color="#4f46e5" />
             </View>
-            <Text className="text-white text-3xl font-bold mb-2">DeliveryPro</Text>
-            <Text className="text-indigo-200 text-base">Login to start delivering</Text>
+            <Text className="text-white text-3xl font-bold mb-2">
+              Delivery Login
+            </Text>
+            <Text className="text-indigo-200">
+              Sign in to start delivering
+            </Text>
           </View>
 
+          {/* Form */}
           <View className="bg-white rounded-3xl p-6 shadow-lg">
-            <Text className="text-gray-700 font-semibold mb-2">Mobile Number</Text>
-            
-            <View className="flex-row items-center border-2 border-gray-200 rounded-xl mb-2">
-              <View className="bg-gray-50 px-4 py-4 border-r border-gray-200">
-                <Text className="text-gray-700 font-semibold">{countryCode}</Text>
-              </View>
-              <TextInput
-                className="flex-1 px-4 py-4 text-gray-900 text-base"
-                placeholder="Enter mobile number"
-                placeholderTextColor="#9ca3af"
-                keyboardType="number-pad"
-                maxLength={10}
-                value={phoneNumber}
-                onChangeText={(text) => {
-                  setPhoneNumber(text);
-                  setError('');
-                }}
-              />
-            </View>
+            <Text className="text-gray-700 font-semibold mb-2">Email</Text>
+            <TextInput
+              className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+              placeholder="Enter email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setError('');
+              }}
+            />
 
-            <View className="flex-row items-center mb-4">
-              <Feather name="info" size={14} color="#6b7280" />
-              <Text className="text-gray-500 text-sm ml-2">
-                We'll send an OTP to this number
-              </Text>
-            </View>
+            <Text className="text-gray-700 font-semibold mb-2">Password</Text>
+            <TextInput
+              className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
+              placeholder="Enter password"
+              secureTextEntry
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                setError('');
+              }}
+            />
 
             {error ? (
               <View className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex-row items-center">
@@ -85,32 +142,35 @@ export default function LoginScreen() {
             ) : null}
 
             <TouchableOpacity
-              className={`rounded-xl py-4 items-center justify-center ${
-                isValidPhone && !isLoading ? 'bg-[#4f46e5]' : 'bg-gray-300'
+              className={`rounded-xl py-4 items-center ${
+                canLogin && !isLoading
+                  ? 'bg-[#4f46e5]'
+                  : 'bg-gray-300'
               }`}
-              disabled={!isValidPhone || isLoading}
-              onPress={handleSendOTP}
+              disabled={!canLogin || isLoading}
+              onPress={handleLogin}
             >
               {isLoading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text className="text-white font-bold text-base">Send OTP</Text>
+                <Text className="text-white font-bold text-base">
+                  Login
+                </Text>
               )}
             </TouchableOpacity>
           </View>
 
-          <View className="items-center mt-8 mb-6">
-            <View className="flex-row items-center mb-4 w-full">
-              <View className="flex-1 h-px bg-indigo-300" />
-              <Text className="text-indigo-200 mx-4">New to the app?</Text>
-              <View className="flex-1 h-px bg-indigo-300" />
-            </View>
-
+          {/* Footer */}
+          <View className="items-center mt-8">
+            <Text className="text-indigo-200 mb-2">
+              New delivery partner?
+            </Text>
             <TouchableOpacity
-              className="bg-white/20 rounded-xl py-3 px-8 border-2 border-white/30"
               onPress={() => router.push('/delivery/auth/signup')}
             >
-              <Text className="text-white font-semibold text-base">Create new account</Text>
+              <Text className="text-white font-bold underline">
+                Create account
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

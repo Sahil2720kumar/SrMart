@@ -3,10 +3,31 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
+import { Customer, DeliveryBoy, User, Vendor } from '@/types/users.types';
 
 // ==========================================
 // 1. USER & PROFILE HOOKS
 // ==========================================
+
+export function useFetchUser() {
+  const session = useAuthStore((state) => state.session);
+  const id = session?.user?.id;
+
+  return useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', id)
+        .single()
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+    staleTime: 1000 * 60 * 10, // 10 minutes
+  });
+}
 
 export function useCustomerProfile(userId?: string) {
   const session = useAuthStore((state) => state.session);
@@ -23,6 +44,7 @@ export function useCustomerProfile(userId?: string) {
       if (error) throw error;
       return data;
     },
+
     enabled: !!id,
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
@@ -67,6 +89,65 @@ export function useDeliveryBoyProfile(userId?: string) {
     staleTime: 1000 * 60 * 10,
   });
 }
+
+
+export function useCreateCustomerProfile() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+  return useMutation({
+    mutationFn: async (customerData: Customer) => {
+      const { data, error } = await supabase.from('customers').insert(customerData).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.customers.byUser(session?.user?.id!), data);
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all });
+    },
+    onError: (error) => {
+      console.error('Error creating customer profile:', error);
+    },
+  });
+}
+
+export function useCreateVendorProfile() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+  return useMutation({
+    mutationFn: async (vendorData: Vendor) => {
+      const { data, error } = await supabase.from('vendors').insert(vendorData).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.vendors.byUser(session?.user?.id!), data);
+      queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all });
+    },
+    onError: (error) => {
+      console.error('Error creating vendor profile:', error);
+    },
+  });
+}
+
+
+  export function useCreateDeliveryBoyProfile() {
+    const queryClient = useQueryClient();
+    const session = useAuthStore((state) => state.session);
+    return useMutation({
+      mutationFn: async (deliveryBoyData: DeliveryBoy) => {
+        const { data, error } = await supabase.from('delivery_boys').insert(deliveryBoyData).select().single();
+        if (error) throw error;
+        return data;
+      },
+      onSuccess: (data) => {
+        queryClient.setQueryData(queryKeys.deliveryBoys.byUser(session?.user?.id!), data);
+        queryClient.invalidateQueries({ queryKey: queryKeys.deliveryBoys.all });
+      },
+      onError: (error) => {
+        console.error('Error creating delivery boy profile:', error);
+      },
+    });
+  }
 
 export function useUpdateCustomerProfile() {
   const queryClient = useQueryClient();

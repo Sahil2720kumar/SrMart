@@ -1,66 +1,80 @@
-import { Stack, Link, router } from 'expo-router';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Stack, router, Redirect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
+import { StatusBar } from 'expo-status-bar';
 
-import { Text, TouchableOpacity, View } from 'react-native';
+const { width } = Dimensions.get('window');
 
-import { Container } from '@/components/Container';
+export default function Index() {
+  const { initialized } = useAuthStore();
+  const { user } = useProfileStore();
 
+  const [loading, setLoading] = useState(true);
+  const [onboardingDone, setOnboardingDone] = useState(false);
+  const [index, setIndex] = useState(0);
+  const ref = useRef<ScrollView>(null);
 
-export default function Home() {
+  // ✅ Always run hooks first
+  useEffect(() => {
+    AsyncStorage.getItem('onboarding_done').then(value => {
+      setOnboardingDone(value === 'true');
+      setLoading(false);
+    });
+  }, []);
 
+  // ⏳ Wait for auth + onboarding check
+  if (loading || !initialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16a34a' }}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
+        <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>FreshMart</Text>
+        <ActivityIndicator size="large" color="white" style={{ marginTop: 20 }} />
+      </View>
+    );
+  }
+
+  // ✅ Redirects AFTER hooks
+  if (onboardingDone) {
+    if (!user) return <Redirect href="/auth/login" />;
+    if (user.role === 'customer') return <Redirect href="/(tabs)/customer" />;
+    if (user.role === 'vendor') return <Redirect href="/vendor/dashboard" />;
+    if (user.role === 'delivery_boy') return <Redirect href="/delivery/home" />;
+  }
+
+  // 👋 Onboarding screens
+  if (index < 3) {
+    const next = async () => {
+      if (index < 2) {
+        ref.current?.scrollTo({ x: (index + 1) * width, animated: true });
+        setIndex(prev => prev + 1);
+      } else {
+        await AsyncStorage.setItem('onboarding_done', 'true');
+        setOnboardingDone(true);
+      }
+    };
+
+    return (
+      <LinearGradient colors={['#f0fdf4', '#ffffff']} style={{ flex: 1 }}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1 }}>
+          {/* onboarding UI unchanged */}
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  // 👇 Role selection screen
   return (
-    <View className='flex flex-1 bg-white'>
-      <Stack.Screen options={{ title: 'Home' }} />
-      <Container>
-        <Text className='text-2xl font-bold'>Mahaa Home</Text>
-        <Link href='/home' className='text-blue-500'>Homepage</Link>
-        <Text className='text-2xl font-bold'>Home</Text>
-        <Link href='/auth/login' className='text-blue-500'>Login</Link>
-        <Link href='/auth/sign-up' className='text-blue-500'>Sign Up</Link>
-        <Link href='/auth/otp-verify' className='text-blue-500'>otp verification</Link>
-        <Link href='/auth/forgot-password' className='text-blue-500'>forgot-password</Link>
-        <Link href='/auth/reset-password' className='text-blue-500'>reset-password</Link>
-
-        <Text>Customers</Text>
-        <Link href={'/(tabs)/customer'} className='text-blue-500'>Customer Home</Link>
-        <Link href={'/(tabs)/customer/account'} className='text-blue-500'>Customer Account</Link>
-        <Link href={'/(tabs)/customer/category/'} className='text-blue-500'>Customer Category</Link>
-        <Link href={'/(tabs)/customer/category/250'} className='text-blue-500'>Customer 1 Category</Link>
-        <Link href={'/(tabs)/customer/offers/'} className='text-blue-500'>Offers </Link>
-        <Link href={'/(tabs)/customer/offers/1'} className='text-blue-500'>Offers 1</Link>
-        <Link href={'/(tabs)/customer/search'} className='text-blue-500'>Search</Link>
-        <Link href={'/(tabs)/customer/search/search-results'} className='text-blue-500'>Search Results</Link>
-        <Link href={'/(tabs)/customer/products/'} className='text-blue-500'>Products</Link>
-        <Link href={'/(tabs)/customer/products/1'} className='text-blue-500'>Specific Product</Link>
-        <Link href={"/(tabs)/customer/order/cart"} className='text-blue-500'>Cart</Link>
-        <Link href={"/(tabs)/customer/order/checkout"} className='text-blue-500'>checkout</Link>
-        <Link href={"/(tabs)/customer/order/payment"} className='text-blue-500'>Payment</Link>
-        <Link href={"/(tabs)/customer/order/orders"} className='text-blue-500'>My Orders</Link>
-        <Link href={"/(tabs)/customer/order/orders/1"} className='text-blue-500'>Order Specific</Link>
-
-        <Text>Vendor </Text>
-        <Link href={"/vendor/auth/login"} className='text-blue-500'>Vendor login</Link>
-        <Link href={"/vendor/auth/signup"} className='text-blue-500'>Vendor signup</Link>
-        <Link href={"/vendor/auth/reset-password"} className='text-blue-500'>Vendor reset password</Link>
-       
-        <Link href={"/vendor/(tabs)/dashboard"} className='text-blue-500'>Vendor Dashboard</Link>
-        <Link href={"/vendor/(tabs)/orders"} className='text-blue-500'>Vendor Orders</Link>
-        <Link href={"/vendor/order/1"} className='text-blue-500'>Vendor Orders Details</Link>
-        <Link href={"/vendor/(tabs)/products"} className='text-blue-500'>Vendor Products</Link>
-        <Link href={"/vendor/product/1"} className='text-blue-500'>Vendor Products Details</Link>
-        <Link href={"/vendor/product/add"} className='text-blue-500'>Vendor Product Add</Link>
-        <Link href={"/vendor/product/edit/1"} className='text-blue-500'>Vendor Product Edit</Link>
-        <Link href={"/vendor/earnings"} className='text-blue-500'>Vendor Earnings</Link>
-        <Link href={"/vendor/inventory"} className='text-blue-500'>Vendor inventory</Link>
-
-        <Text>Delivery</Text>
-        <Link href={"/delivery/auth/login"} className='text-blue-500'>Delivery login</Link>
-        <Link href={"/delivery/auth/signup"} className='text-blue-500'>Delivery Signup</Link>
-        <Link href={"/delivery/home"} className='text-blue-500'>Delivery Home</Link>
-        <Link href={"/delivery/orders"} className='text-blue-500'>Delivery orders</Link>
-        <Link href={"/delivery/order/0"} className='text-blue-500'>Delivery orders id</Link>
-      <Link href={"/delivery/earning"} className='text-blue-500'>Delivery Earning</Link>
-        
-      </Container>
-    </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#16a34a', padding: 24 }}>
+      <Stack.Screen options={{ headerShown: false }} />
+      {/* CTA buttons unchanged */}
+    </SafeAreaView>
   );
 }
