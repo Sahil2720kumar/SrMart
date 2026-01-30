@@ -19,3 +19,62 @@ export interface WalletTransaction {
   balance_after: number;
   created_at: string;
 }
+
+export type BankAccountType = 'savings' | 'current';
+
+export type BankVerificationStatus =
+  | 'not_added'
+  | 'pending'
+  | 'approved'
+  | 'rejected';
+
+
+export interface DeliveryBoyBankDetails {
+  id: string; // uuid
+  delivery_boy_id: string; // uuid
+
+  account_holder_name: string;
+  account_number: string;
+  bank_name: string;
+  ifsc_code: string;
+
+  branch?: string | null;
+  account_type?: BankAccountType | null;
+  upi_id?: string | null;
+  proof_image?: string | null;
+
+  status: BankVerificationStatus;
+  rejection_reason?: string | null;
+
+  is_verified: boolean;
+  verified_at?: string | null; // timestamptz (ISO string)
+  verified_by?: string | null; // uuid
+
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}
+
+export interface VendorBankDetails {
+  id: string; // uuid
+  vendor_id: string; // uuid
+
+  account_holder_name: string;
+  account_number: string;
+  bank_name: string;
+  ifsc_code: string;
+
+  branch?: string | null;
+  account_type?: BankAccountType | null;
+  upi_id?: string | null;
+  proof_image?: string | null;
+
+  status: BankVerificationStatus;
+  rejection_reason?: string | null;
+
+  is_verified: boolean;
+  verified_at?: string | null; // timestamptz
+  verified_by?: string | null; // uuid
+
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}

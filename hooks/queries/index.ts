@@ -9,6 +9,8 @@ import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { randomUUID } from 'expo-crypto';
 import { Product, ProductImage } from '@/types/categories-products.types';
+import { BankAccountType, VendorBankDetails } from '@/types/payments-wallets.types';
+import { KycDocument, KycDocumentInsert, KycDocumentType, KycDocumentUpdate, KycUserType } from '@/types/documents-kyc.types';
 
 
 // ==========================================
@@ -224,14 +226,15 @@ export function useVendorDetail(vendorId: string) {
       const { data, error } = await supabase
         .from('vendors')
         .select('*, users(email, phone)')
-        .eq('id', vendorId)
+        .eq('user_id', vendorId)
         .single();
       if (error) throw error;
-      return data;
+     
+      return data as Vendor;
     },
     enabled: !!vendorId,
   });
-}
+} 
 
 export function useUpdateVendorProfile() {
   const queryClient = useQueryClient();
@@ -243,7 +246,7 @@ export function useUpdateVendorProfile() {
         .from('vendors')
         .update(updates)
         .eq('user_id', session?.user?.id)
-        .select()
+        .select('*,users(email,phone)')
         .single();
       if (error) throw error;
       return data;
@@ -1153,4 +1156,821 @@ export function useUpdateProductStockToOutOfStock() {
       });
     },
   });
+}
+
+
+
+// Query Keys
+export const bankQueryKeys = {
+  all: ['bank-details'] as const,
+  vendor: (vendorId: string) => [...bankQueryKeys.all, 'vendor', vendorId] as const,
+  deliveryBoy: (deliveryBoyId: string) => [...bankQueryKeys.all, 'delivery-boy', deliveryBoyId] as const,
+};
+
+// ==================== VENDOR BANK QUERIES ====================
+
+/**
+ * Hook to fetch vendor bank details
+ * param vendorId - The vendor's ID
+ */
+export function useVendorBankDetails(vendorId: string) {
+  return useQuery({
+    queryKey: bankQueryKeys.vendor(vendorId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vendor_bank_details')
+        .select('*')
+        .eq('vendor_id', vendorId)
+        .maybeSingle(); // Use maybeSingle to handle no results gracefully
+
+      if (error) throw error;
+      return data as VendorBankDetails | null;
+    },
+    enabled: !!vendorId,
+  });
+}
+
+/**
+ * Hook to add vendor bank details
+ */
+export function useAddVendorBankDetails() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (input: {
+      vendor_id: string;
+      account_holder_name: string;
+      account_number: string;
+      bank_name: string;
+      ifsc_code: string;
+      branch?: string;
+      account_type?: BankAccountType;
+      upi_id?: string;
+      proof_image?: string;
+    }) => {
+      // Check if bank details already exist
+      const { data: existing } = await supabase
+        .from('vendor_bank_details')
+        .select('id')
+        .eq('vendor_id', input.vendor_id)
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error('Bank details already exist. Please update instead.');
+      }
+
+      const { data, error } = await supabase
+        .from('vendor_bank_details')
+        .insert({
+          ...input,
+          status: 'pending',
+          is_verified: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as VendorBankDetails;
+    },
+    onSuccess: (data) => {
+      // Invalidate and refetch vendor bank details
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.vendor(data.vendor_id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to update vendor bank details
+ */
+export function useUpdateVendorBankDetails() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      vendor_id: string;
+      account_holder_name?: string;
+      account_number?: string;
+      bank_name?: string;
+      ifsc_code?: string;
+      branch?: string;
+      account_type?: BankAccountType;
+      upi_id?: string;
+      proof_image?: string;
+    }) => {
+      const { id, vendor_id, ...updates } = input;
+
+      const { data, error } = await supabase
+        .from('vendor_bank_details')
+        .update({
+          ...updates,
+          // Reset status to pending when updating
+          status: 'pending',
+          is_verified: false,
+          verified_at: null,
+          verified_by: null,
+          rejection_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('vendor_id', vendor_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as VendorBankDetails;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.vendor(data.vendor_id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete vendor bank details
+ */
+export function useDeleteVendorBankDetails() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { id: string; vendor_id: string }) => {
+      const { error } = await supabase
+        .from('vendor_bank_details')
+        .delete()
+        .eq('id', input.id)
+        .eq('vendor_id', input.vendor_id);
+
+      if (error) throw error;
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.vendor(variables.vendor_id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.all 
+      });
+    },
+  });
+}
+
+// ==================== DELIVERY BOY BANK QUERIES ====================
+
+/**
+ * Hook to fetch delivery boy bank details
+  * @param deliveryBoyId - The delivery boy's ID
+ */
+export function useDeliveryBoyBankDetails(deliveryBoyId: string) {
+  return useQuery({
+    queryKey: bankQueryKeys.deliveryBoy(deliveryBoyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('delivery_boy_bank_details')
+        .select('*')
+        .eq('delivery_boy_id', deliveryBoyId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!deliveryBoyId,
+  });
+}
+
+/**
+ * Hook to add delivery boy bank details
+ */
+export function useAddDeliveryBoyBankDetails() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      delivery_boy_id: string;
+      account_holder_name: string;
+      account_number: string;
+      bank_name: string;
+      ifsc_code: string;
+      branch?: string;
+      account_type?: BankAccountType;
+      upi_id?: string;
+      proof_image?: string;
+    }) => {
+      // Check if bank details already exist
+      const { data: existing } = await supabase
+        .from('delivery_boy_bank_details')
+        .select('id')
+        .eq('delivery_boy_id', input.delivery_boy_id)
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error('Bank details already exist. Please update instead.');
+      }
+
+      const { data, error } = await supabase
+        .from('delivery_boy_bank_details')
+        .insert({
+          ...input,
+          status: 'pending',
+          is_verified: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to update delivery boy bank details
+ */
+export function useUpdateDeliveryBoyBankDetails() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      delivery_boy_id: string;
+      account_holder_name?: string;
+      account_number?: string;
+      bank_name?: string;
+      ifsc_code?: string;
+      branch?: string;
+      account_type?: BankAccountType;
+      upi_id?: string;
+      proof_image?: string;
+    }) => {
+      const { id, delivery_boy_id, ...updates } = input;
+
+      const { data, error } = await supabase
+        .from('delivery_boy_bank_details')
+        .update({
+          ...updates,
+          status: 'pending',
+          is_verified: false,
+          verified_at: null,
+          verified_by: null,
+          rejection_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('delivery_boy_id', delivery_boy_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: bankQueryKeys.all 
+      });
+    },
+  });
+}
+
+
+
+// Query Keys
+export const kycQueryKeys = {
+  all: ['kyc-documents'] as const,
+  byUser: (userId: string, userType: KycUserType) => 
+    [...kycQueryKeys.all, 'user', userId, userType] as const,
+  byDocument: (userId: string, documentType: KycDocumentType) => 
+    [...kycQueryKeys.all, 'document', userId, documentType] as const,
+  single: (id: string) => [...kycQueryKeys.all, 'single', id] as const,
+};
+
+// ==================== FETCH QUERIES ====================
+
+/**
+ * Hook to fetch all KYC documents for a user
+ * @param userId - The user's ID
+ * @param userType - 'vendor' or 'delivery_boy'
+ */
+export function useKycDocuments(userId: string, userType: KycUserType) {
+  return useQuery({
+    queryKey: kycQueryKeys.byUser(userId, userType),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('user_type', userType)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as KycDocument[];
+    },
+    enabled: !!userId && !!userType,
+  });
+}
+
+/**
+ * Hook to fetch a single KYC document by type
+ * @param userId - The user's ID
+ * @param documentType - Type of document
+ */
+export function useKycDocumentByType(userId: string, documentType: KycDocumentType) {
+  return useQuery({
+    queryKey: kycQueryKeys.byDocument(userId, documentType),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('document_type', documentType)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data as KycDocument | null;
+    },
+    enabled: !!userId && !!documentType,
+  });
+}
+
+/**
+ * Hook to fetch a single KYC document by ID
+ * @param documentId - The document's ID
+ */
+export function useKycDocument(documentId: string) {
+  return useQuery({
+    queryKey: kycQueryKeys.single(documentId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+
+      if (error) throw error;
+      return data as KycDocument;
+    },
+    enabled: !!documentId,
+  });
+}
+
+/**
+ * Hook to get KYC verification summary
+ * @param userId - The user's ID
+ * @param userType - 'vendor' or 'delivery_boy'
+ */
+export function useKycSummary(userId: string, userType: KycUserType) {
+  const { data: documents } = useKycDocuments(userId, userType);
+
+  const summary = {
+    total: documents?.length || 0,
+    verified: documents?.filter(d => d.status === 'verified' || d.status === 'approved').length || 0,
+    pending: documents?.filter(d => d.status === 'pending').length || 0,
+    rejected: documents?.filter(d => d.status === 'rejected').length || 0,
+    notUploaded: documents?.filter(d => d.status === 'not_uploaded').length || 0,
+    required: documents?.filter(d => d.is_required).length || 0,
+    requiredVerified: documents?.filter(d => d.is_required && (d.status === 'verified' || d.status === 'approved')).length || 0,
+    progress: 0,
+    isComplete: false,
+  };
+
+  if (summary.required > 0) {
+    summary.progress = Math.round((summary.requiredVerified / summary.required) * 100);
+    summary.isComplete = summary.requiredVerified === summary.required;
+  }
+
+  return summary;
+}
+
+// ==================== MUTATIONS ====================
+
+/**
+ * Hook to upload/add a new KYC document with base64 image
+ */
+export function useUploadKycDocument() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (input: {
+      document: KycDocumentInsert;
+      imageUri: string;
+      base64: string;
+    }) => {
+      try {
+        let documentUrl = input.document.document_url;
+
+        // Upload image to storage
+        console.log('Starting upload process...');
+        
+        // Extract file extension from URI
+        const fileExt = input.imageUri.split('.').pop() || 'jpg';
+        const fileName = `${randomUUID()}.${fileExt}`;
+        const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
+
+        console.log('Uploading to path:', filePath);
+        console.log('File extension:', fileExt);
+
+        // Upload to Supabase Storage using base64
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('vendors')
+          .upload(filePath, decode(input.base64), {
+            contentType: `image/${fileExt}`,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        console.log('Upload successful:', uploadData);
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('vendors')
+          .getPublicUrl(filePath);
+
+        documentUrl = publicUrl;
+        console.log('Public URL:', publicUrl);
+
+        // Check if document already exists for this user and type
+        const { data: existing } = await supabase
+          .from('kyc_documents')
+          .select('id')
+          .eq('user_id', input.document.user_id)
+          .eq('document_type', input.document.document_type)
+          .maybeSingle();
+
+        if (existing) {
+          // Update existing document
+          const { data, error } = await supabase
+            .from('kyc_documents')
+            .update({
+              ...input.document,
+              document_url: documentUrl,
+              status: 'pending',
+              uploaded_date: new Date().toISOString(),
+              verified_date: null,
+              verified_by: null,
+              rejection_reason: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          return data as KycDocument;
+        } else {
+          // Insert new document
+          const { data, error } = await supabase
+            .from('kyc_documents')
+            .insert({
+              ...input.document,
+              document_url: documentUrl,
+              status: 'pending',
+              uploaded_date: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          return data as KycDocument;
+        }
+      } catch (error: any) {
+        console.error('Upload mutation error:', error);
+        throw new Error(error.message || 'Upload failed');
+      }
+    },
+    onSuccess: (data) => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byDocument(data.user_id, data.document_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to update KYC document metadata (without file)
+ */
+export function useUpdateKycDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      updates: KycDocumentUpdate;
+    }) => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .update({
+          ...input.updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as KycDocument;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.single(data.id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete a KYC document
+ */
+export function useDeleteKycDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { 
+      id: string; 
+      userId: string;
+      userType: KycUserType;
+      documentUrl?: string;
+    }) => {
+      // Delete file from storage if exists
+      if (input.documentUrl) {
+        // Extract file path from URL
+        // URL format: https://.../storage/v1/object/public/vendors/{vendorId}/kycDocuments/{filename}
+        const urlParts = input.documentUrl.split('/vendors/');
+        if (urlParts.length > 1) {
+          const filePath = urlParts[1]; // {vendorId}/kycDocuments/{filename}
+          
+          const { error: storageError } = await supabase.storage
+            .from('vendors')
+            .remove([filePath]);
+
+          // Don't throw on storage error, continue with DB deletion
+          if (storageError) {
+            console.warn('Failed to delete file from storage:', storageError);
+          }
+        }
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('kyc_documents')
+        .delete()
+        .eq('id', input.id)
+        .eq('user_id', input.userId);
+
+      if (error) throw error;
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(variables.userId, variables.userType) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to replace a KYC document (delete old + upload new) with base64 image
+ */
+export function useReplaceKycDocument() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (input: {
+      documentId: string;
+      userId: string;
+      userType: KycUserType;
+      oldDocumentUrl?: string;
+      newDocument: KycDocumentInsert;
+      imageUri: string;
+      base64: string;
+    }) => {
+      try {
+        // Delete old file from storage if exists
+        if (input.oldDocumentUrl) {
+          const urlParts = input.oldDocumentUrl.split('/vendors/');
+          if (urlParts.length > 1) {
+            const filePath = urlParts[1];
+            
+            await supabase.storage
+              .from('vendors')
+              .remove([filePath]);
+          }
+        }
+
+      
+        // Extract file extension
+        const fileExt = input.imageUri.split('.').pop() || 'jpg';
+        const fileName = `${randomUUID()}.${fileExt}`;
+        const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
+
+        console.log('Replacing document at path:', filePath);
+
+        // Upload to Supabase Storage using base64
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('vendors')
+          .upload(filePath, decode(input.base64), {
+            contentType: `image/${fileExt}`,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        console.log('Replace upload successful:', uploadData);
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('vendors')
+          .getPublicUrl(filePath);
+
+        // Update document record
+        const { data, error } = await supabase
+          .from('kyc_documents')
+          .update({
+            ...input.newDocument,
+            document_url: publicUrl,
+            status: 'pending',
+            uploaded_date: new Date().toISOString(),
+            verified_date: null,
+            verified_by: null,
+            rejection_reason: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', input.documentId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data as KycDocument;
+      } catch (error: any) {
+        console.error('Replace document error:', error);
+        throw new Error(`Replace failed: ${error.message || 'Unknown error'}`);
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.single(data.id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+// ==================== ADMIN MUTATIONS ====================
+
+/**
+ * Hook for admin to verify/approve a KYC document
+ */
+export function useVerifyKycDocument() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (input: {
+      documentId: string;
+      status: 'verified' | 'approved';
+    }) => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .update({
+          status: input.status,
+          verified_date: new Date().toISOString(),
+          verified_by: session?.user?.id,
+          rejection_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.documentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as KycDocument;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.single(data.id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+/**
+ * Hook for admin to reject a KYC document
+ */
+export function useRejectKycDocument() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (input: {
+      documentId: string;
+      rejectionReason: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('kyc_documents')
+        .update({
+          status: 'rejected',
+          rejection_reason: input.rejectionReason,
+          verified_date: new Date().toISOString(),
+          verified_by: session?.user?.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.documentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as KycDocument;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.single(data.id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: kycQueryKeys.all 
+      });
+    },
+  });
+}
+
+// ==================== UTILITY HOOKS ====================
+
+/**
+ * Hook to check if all required documents are verified
+ */
+export function useIsKycComplete(userId: string, userType: KycUserType) {
+  const summary = useKycSummary(userId, userType);
+  return summary.isComplete;
+}
+
+/**
+ * Hook to get KYC status for a specific document type
+ */
+export function useDocumentStatus(userId: string, documentType: KycDocumentType) {
+  const { data: document } = useKycDocumentByType(userId, documentType);
+  
+  return {
+    status: document?.status || 'not_uploaded',
+    isVerified: document?.status === 'verified' || document?.status === 'approved',
+    isPending: document?.status === 'pending',
+    isRejected: document?.status === 'rejected',
+    rejectionReason: document?.rejection_reason,
+    document,
+  };
 }

@@ -10,7 +10,7 @@ export interface User {
   updated_at: string;
   auth_id?:string
 }
- 
+  
 export interface Customer {
   id?: string;
   user_id: string;
