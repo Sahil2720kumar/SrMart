@@ -940,6 +940,13 @@ export function useSetPrimaryImage() {
         .update({ is_primary: true })
         .eq('id', imageId)
         .eq('product_id', productId)
+        .select("*")
+        .single();
+
+      const { data:Product, error:ProductError } = await supabase
+        .from('products')
+        .update({ image:data?.image_url})
+        .eq('id', productId)
         .select()
         .single();
 
@@ -949,7 +956,200 @@ export function useSetPrimaryImage() {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['product-images', vendorId, variables.productId]
+        queryKey: ['product-images', vendorId, variables.productId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-products', vendorId],
+      });
+    },
+  });
+}
+
+
+// Inventory Quries and Mutations
+
+/**
+ * Hook to fetch all products for vendor's inventory
+ */
+export function useVendorInventory() {
+  const vendorId = useAuthStore((state) => state.session?.user.id);
+  
+  return useQuery({
+    queryKey: ['vendor-inventory', vendorId],
+    queryFn: async (): Promise<Product[]> => {
+      if (!vendorId) throw new Error('No vendor ID');
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('*,categories(name),sub_categories(name)')
+        .eq('vendor_id', vendorId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return data as Product[];
+    },
+    enabled: !!vendorId,
+  });
+}
+
+/**
+ * Hook to update product stock quantity
+ */
+export function useUpdateProductStock() {
+  const vendorId = useAuthStore((state) => state.session?.user.id);
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      productId, 
+      stockQuantity 
+    }: { 
+      productId: string; 
+      stockQuantity: number;
+    }) => {
+      if (!vendorId) throw new Error('No vendor ID');
+      if (stockQuantity < 0) throw new Error('Stock cannot be negative');
+      
+      const { data, error } = await supabase
+        .from('products')
+        .update({
+          stock_quantity: stockQuantity,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', productId)
+        .eq('vendor_id', vendorId) // Ensure vendor can only update their own products
+        .select()
+        .single();
+      
+      if (error) throw error;
+      if (!data) throw new Error('Product not found');
+      
+      return data as Product;
+    },
+    onSuccess: (data, variables) => {
+      // Invalidate inventory cache
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-inventory', vendorId] 
+      });
+      
+      // Also invalidate specific product cache
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-product', vendorId, variables.productId] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-product', vendorId] 
+      });
+    },
+  });
+}
+
+/**
+ * Hook to bulk update stock for multiple products
+ */
+export function useBulkUpdateStock() {
+  const vendorId = useAuthStore((state) => state.session?.user.id);
+  const queryClient = useQueryClient();
+  //useage
+  // await bulkUpdateMutation.mutateAsync([
+  //   { productId: '1', stockQuantity: 100 },
+  //   { productId: '2', stockQuantity: 50 },
+  // ]);
+  return useMutation({
+    mutationFn: async (
+      updates: Array<{ productId: string; stockQuantity: number }>
+    ) => {
+      if (!vendorId) throw new Error('No vendor ID');
+      
+      const results = await Promise.all(
+        updates.map(async ({ productId, stockQuantity }) => {
+          if (stockQuantity < 0) throw new Error('Stock cannot be negative');
+          
+          // Get product to check threshold
+          const { data: product } = await supabase
+            .from('products')
+            .select('low_stock_threshold')
+            .eq('id', productId)
+            .single();
+          
+          let stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
+          if (stockQuantity === 0) {
+            stockStatus = 'out_of_stock';
+          } else if (product && stockQuantity <= product.low_stock_threshold) {
+            stockStatus = 'low_stock';
+          }
+          
+          const { data, error } = await supabase
+            .from('products')
+            .update({
+              stock_quantity: stockQuantity,
+              stock_status: stockStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', productId)
+            .eq('vendor_id', vendorId)
+            .select()
+            .single();
+          
+          if (error) throw error;
+          return data;
+        })
+      );
+      
+      return results as Product[];
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-inventory', vendorId] 
+      });
+    },
+  });
+}
+
+
+/**
+ * Hook to update product stock status to out of stock
+ */
+export function useUpdateProductStockToOutOfStock() {
+  const vendorId = useAuthStore((state) => state.session?.user.id);
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      productId, 
+    }: { 
+      productId: string; 
+    }) => {
+      if (!vendorId) throw new Error('No vendor ID');
+
+      const { data, error } = await supabase
+        .from('products')
+        .update({
+          stock_quantity: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', productId)
+        .eq('vendor_id', vendorId) // Ensure vendor can only update their own products
+        .select()
+        .single();
+      
+      if (error) throw error;
+      if (!data) throw new Error('Product not found');
+      
+      return data as Product;
+    },
+    onSuccess: (data, variables) => {
+      // Invalidate inventory cache
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-inventory', vendorId] 
+      });
+      
+      // Also invalidate specific product cache
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-product', vendorId] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['vendor-product', vendorId,variables.productId] 
       });
     },
   });
