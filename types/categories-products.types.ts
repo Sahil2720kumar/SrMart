@@ -48,11 +48,11 @@ export interface Product {
   stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
   image?: string;
   is_available: boolean;
-  is_trending: boolean;
-  is_best_seller: boolean;
-  is_featured: boolean;
-  is_organic: boolean;
-  is_veg: boolean;
+  is_trending?: boolean;
+  is_best_seller?: boolean;
+  is_featured?: boolean;
+  is_organic?: boolean;
+  is_veg?: boolean;
   commission_type: CommissionType;
   commission_rate?: number;
   attributes: Record<string, any>;
@@ -60,6 +60,8 @@ export interface Product {
   review_count: number;
   created_at: string;
   updated_at: string;
+  expiry_date:string;
+  barcode:string;
 }
 
 export interface ProductImage {
@@ -71,3 +73,7 @@ export interface ProductImage {
   is_primary: boolean;
   created_at: string;
 }
+
+export const blurhash =
+'|rF?hV%2WCj[ayj[a|j[az_NaeWBj@ayfRayfQfQM{M|azj[azf6fQfQfQIpWXofj[ayj[j[fQayWCoeoeaya}j[ayfQa{oLj?j[WVj[ayayj[fQoff7azayj[ayj[j[ayofayayayj[fQj[ayayj[ayfjj[j[ayjuayj[';
+

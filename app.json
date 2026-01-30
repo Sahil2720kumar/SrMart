@@ -15,7 +15,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Please grant permissions to upload images."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -50,6 +50,7 @@ export const queryKeys = {
   categories: {
     all: ['categories'] as const,
     active: ['categories', 'active'] as const,
+    allWithSubCategories: ['categories', 'sub_categories'] as const,
     detail: (categoryId: string) => ['categories', categoryId] as const,
     bySlug: (slug: string) => ['categories', 'slug', slug] as const,
     withCommission: ['categories', 'commission'] as const,

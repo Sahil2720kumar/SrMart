@@ -11,105 +11,56 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuthStore } from '@/store/authStore';
+import { useProductsByVendorId } from '@/hooks/queries';
 
-// Mock product data
-export const mockProducts = [
-  {
-    id: '1',
-    name: 'Fresh Tomatoes',
-    category: 'Vegetables',
-    price: 45,
-    stock: 120,
-    image: '🍅',
-    status: 'in-stock',
-    isActive: true
-  },
-  {
-    id: '2',
-    name: 'Organic Lettuce',
-    category: 'Vegetables',
-    price: 35,
-    stock: 8,
-    image: '🥬',
-    status: 'low-stock',
-    isActive: false
-  },
-  {
-    id: '3',
-    name: 'Red Apples',
-    category: 'Fruits',
-    price: 60,
-    stock: 0,
-    image: '🍎',
-    status: 'out-of-stock',
-    isActive: true
-  },
-  {
-    id: '4',
-    name: 'Carrots',
-    category: 'Vegetables',
-    price: 25,
-    stock: 95,
-    image: '🥕',
-    status: 'in-stock',
-    isActive: true
-  },
-  {
-    id: '5',
-    name: 'Bananas',
-    category: 'Fruits',
-    price: 40,
-    stock: 5,
-    image: '🍌',
-    status: 'low-stock',
-    isActive: true
-  },
-  {
-    id: '6',
-    name: 'Broccoli',
-    category: 'Vegetables',
-    price: 50,
-    stock: 30,
-    image: '🥦',
-    status: 'in-stock',
-    isActive: true
-  },
-];
+type FilterType = 'all' | 'in_stock' | 'out_of_stock' | 'low_stock' | 'disabled';
 
-type FilterType = 'all' | 'in-stock' | 'out-of-stock' | 'low-stock' | 'disabled';
 
 export default function ProductsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const [refreshing, setRefreshing] = useState(false);
-  const [isLoading] = useState(false);
+  const session = useAuthStore((state) => state.session);
+  const vendorId = session?.user?.id;
+
+  // Fetch products from Supabase
+  const {
+    data: products = [],
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useProductsByVendorId()
 
   // Filter products based on search and filter type
-  const filteredProducts = mockProducts.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      activeFilter === 'all' || product.status === activeFilter;
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name
+      ?.toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    
+    const matchesFilter = 
+      activeFilter === 'all' || 
+      product.stock_status === activeFilter ||
+      (activeFilter === 'disabled' && !product.stock_status);
+    
     return matchesSearch && matchesFilter;
   });
 
   // Count products by status
   const statusCounts = {
-    all: mockProducts.length,
-    'in-stock': mockProducts.filter((p) => p.status === 'in-stock').length,
-    'out-of-stock': mockProducts.filter((p) => p.status === 'out-of-stock').length,
-    'low-stock': mockProducts.filter((p) => p.status === 'low-stock').length,
-    disabled: mockProducts.filter((p) => p.status === 'disabled').length,
+    all: products.length,
+    'in_stock': products.filter((p) => p.stock_status === 'in_stock').length,
+    'out_of_stock': products.filter((p) => p.stock_status === 'out_of_stock').length,
+    'low_stock': products.filter((p) => p.stock_status === 'low_stock').length,
+    disabled: products.filter((p) => !p.stock_status).length,
   };
 
+  
+
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
-
-
+    refetch();
+  }, [refetch]);
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -127,14 +78,14 @@ export default function ProductsScreen() {
             activeOpacity={0.7}
             className="bg-emerald-500 rounded-xl px-4 py-2.5 flex-row items-center gap-2"
           >
-            <Feather name='plus' size={18} color="#fff" />
+            <Feather name="plus" size={18} color="#fff" />
             <Text className="text-white font-semibold text-sm">Add</Text>
           </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
         <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-2.5 mb-3">
-          <Feather name='search' size={18} color="#9ca3af" />
+          <Feather name="search" size={18} color="#9ca3af" />
           <TextInput
             placeholder="Search products..."
             value={searchQuery}
@@ -151,42 +102,42 @@ export default function ProductsScreen() {
           className="mb-3"
         >
           <View className="flex-row gap-2">
-            {(['all', 'in-stock', 'out-of-stock', 'low-stock'] as FilterType[]).map(
+            {(['all', 'in_stock', 'out_of_stock', 'low_stock', 'disabled'] as FilterType[]).map(
               (filter) => (
                 <TouchableOpacity
                   key={filter}
                   onPress={() => setActiveFilter(filter)}
                   activeOpacity={0.7}
-                  className={`px-4 py-2 rounded-full flex-row items-center gap-2 ${activeFilter === filter
-                    ? 'bg-emerald-500'
-                    : 'bg-gray-200 border border-gray-300'
-                    }`}
+                  className={`px-4 py-2 rounded-full flex-row items-center gap-2 ${
+                    activeFilter === filter
+                      ? 'bg-emerald-500'
+                      : 'bg-gray-200 border border-gray-300'
+                  }`}
                 >
                   <Text
-                    className={`text-sm font-semibold capitalize ${activeFilter === filter
-                      ? 'text-white'
-                      : 'text-gray-700'
-                      }`}
+                    className={`text-sm font-semibold capitalize ${
+                      activeFilter === filter ? 'text-white' : 'text-gray-700'
+                    }`}
                   >
-                    {filter === 'in-stock'
+                    {filter === 'in_stock'
                       ? 'In Stock'
-                      : filter === 'out-of-stock'
-                        ? 'Out of Stock'
-                        : filter === 'low-stock'
-                          ? 'Low Stock'
-                          : 'All'}
+                      : filter === 'out_of_stock'
+                      ? 'Out of Stock'
+                      : filter === 'low_stock'
+                      ? 'Low Stock'
+                      : filter === 'disabled'
+                      ? 'Disabled'
+                      : 'All'}
                   </Text>
                   <View
-                    className={`rounded-full px-2 py-0.5 ${activeFilter === filter
-                      ? 'bg-white/30'
-                      : 'bg-gray-300'
-                      }`}
+                    className={`rounded-full px-2 py-0.5 ${
+                      activeFilter === filter ? 'bg-white/30' : 'bg-gray-300'
+                    }`}
                   >
                     <Text
-                      className={`text-xs font-bold ${activeFilter === filter
-                        ? 'text-white'
-                        : 'text-gray-700'
-                        }`}
+                      className={`text-xs font-bold ${
+                        activeFilter === filter ? 'text-white' : 'text-gray-700'
+                      }`}
                     >
                       {statusCounts[filter]}
                     </Text>
@@ -211,7 +162,7 @@ export default function ProductsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           scrollEnabled={true}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
           }
         />
       ) : (
@@ -221,8 +172,18 @@ export default function ProductsScreen() {
             No products found
           </Text>
           <Text className="text-gray-600 text-sm text-center mt-2 px-4">
-            Try adjusting your search or filters to find products
+            {searchQuery || activeFilter !== 'all'
+              ? 'Try adjusting your search or filters to find products'
+              : 'Start by adding your first product'}
           </Text>
+          {!searchQuery && activeFilter === 'all' && (
+            <TouchableOpacity
+              onPress={() => router.push("/vendor/product/add")}
+              className="bg-emerald-500 rounded-xl px-6 py-3 mt-4"
+            >
+              <Text className="text-white font-semibold">Add Product</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </SafeAreaView>

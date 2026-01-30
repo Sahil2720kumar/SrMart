@@ -1,7 +1,14 @@
-import useDraftProductStore from '@/store/useDraftProductStore';
+import { 
+  useProductDetailsByVendorIdAndProductId, 
+  useProductImagesByProductId,
+  useUpdateProduct,
+  useUploadProductImage,
+  useDeleteProductImage,
+  useSetPrimaryImage,
+} from '@/hooks/queries';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,78 +18,200 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function EditProductScreen() {
+  const { productId } = useLocalSearchParams<{ productId: string }>();
+  
+  // Fetch product data
+  const {
+    data: product,
+    isLoading: isLoadingProduct,
+    error: productError,
+  } = useProductDetailsByVendorIdAndProductId(productId);
+
+  // Fetch product images
+  const {
+    data: productImages,
+    isLoading: isLoadingImages,
+  } = useProductImagesByProductId(productId);
+
+  // Update mutation
+  const updateProductMutation = useUpdateProduct();
+  const uploadImageMutation = useUploadProductImage();
+  const deleteImageMutation = useDeleteProductImage();
+  const setPrimaryImageMutation = useSetPrimaryImage();
+
   // Form State
-  const {productId}=useLocalSearchParams()
   const [productName, setProductName] = useState('');
-  const [category, setCategory] = useState('Vegetables');
-  const [brand, setBrand] = useState('');
-  const [unitSize, setUnitSize] = useState('');
-  const [mrp, setMrp] = useState('');
-  const [sellingPrice, setSellingPrice] = useState('');
-  const [initialStock, setInitialStock] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [subCategoryId, setSubCategoryId] = useState('');
+  const [unit, setUnit] = useState('');
+  const [price, setPrice] = useState('');
+  const [discountPrice, setDiscountPrice] = useState('');
+  const [stockQuantity, setStockQuantity] = useState('');
   const [lowStockThreshold, setLowStockThreshold] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(true);
   const [description, setDescription] = useState('');
+  const [shortDescription, setShortDescription] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [barcode, setBarcode] = useState('');
-  const [taxApplicable, setTaxApplicable] = useState(true);
-  const [returnable, setReturnable] = useState(true);
-  const [isFeatured, setIsFeatured] = useState(false);
 
-  // UI State
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState(false);
+  const [isOrganic, setIsOrganic] = useState(false);
+  const [isVeg, setIsVeg] = useState(true);
 
-  const categories = ['Vegetables', 'Fruits', 'Dairy', 'Bakery', 'Meat', 'Snacks', 'Beverages', 'Other'];
+  // Load product data into form when it's available
+  useEffect(() => {
+    if (product) {
+      setProductName(product.name || '');
+      setCategoryId(product.category_id || '');
+      setSubCategoryId(product.sub_category_id || '');
+      setUnit(product.unit || '');
+      setPrice(product.price?.toString() || '');
+      setDiscountPrice(product.discount_price?.toString() || '');
+      setStockQuantity(product.stock_quantity?.toString() || '');
+      setLowStockThreshold(product.low_stock_threshold?.toString() || '');
+      setIsAvailable(product.is_available ?? true);
+      setDescription(product.description || '');
+      setShortDescription(product.short_description || '');
+      setExpiryDate(product.expiry_date || '');
+      setBarcode(product.barcode || '');
+      setIsOrganic(product.is_organic ?? false);
+      setIsVeg(product.is_veg ?? true);
+    }
+  }, [product]);
 
   const handleGoBack = () => {
-    console.log('[v0] Navigating back to products list');
-    router.back()
-  };
-
-  const handleUploadImage = async () => {
-    setIsLoading(true);
-    try {
-      // Simulate file picker
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newImage = `🖼️ Image ${uploadedImages.length + 1}`;
-      setUploadedImages([...uploadedImages, newImage]);
-      Alert.alert('Success', 'Image added successfully!');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
-    } finally {
-      setIsLoading(false);
+    if (hasUnsavedChanges()) {
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Are you sure you want to go back?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+        ]
+      );
+    } else {
+      router.back();
     }
   };
 
-  const handleRemoveImage = (index: number) => {
-    setUploadedImages(uploadedImages.filter((_, i) => i !== index));
+  const handleUploadImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant camera roll permissions to upload images.'
+        );
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        aspect: [1, 1],
+        allowsEditing: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        // Upload image
+        await uploadImageMutation.mutateAsync({
+          productId,
+          imageUri,
+          isPrimary: !productImages || productImages.length === 0, // First image is primary
+        });
+
+        Alert.alert('Success', 'Image uploaded successfully!');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    }
+  };
+
+  const handleDeleteImage = (imageId: string, imageUrl: string) => {
+    Alert.alert(
+      'Delete Image',
+      'Are you sure you want to delete this image?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteImageMutation.mutateAsync({
+                productId,
+                imageId,
+                imageUrl,
+              });
+              Alert.alert('Success', 'Image deleted successfully!');
+            } catch (error) {
+              console.error('Delete error:', error);
+              Alert.alert('Error', 'Failed to delete image.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSetPrimaryImage = async (imageId: string) => {
+    try {
+      await setPrimaryImageMutation.mutateAsync({
+        productId,
+        imageId,
+      });
+      Alert.alert('Success', 'Primary image updated!');
+    } catch (error) {
+      console.error('Set primary error:', error);
+      Alert.alert('Error', 'Failed to set primary image.');
+    }
+  };
+
+  const hasUnsavedChanges = () => {
+    if (!product) return false;
+    return (
+      productName !== (product.name || '') ||
+      unit !== (product.unit || '') ||
+      price !== (product.price?.toString() || '') ||
+      discountPrice !== (product.discount_price?.toString() || '') ||
+      stockQuantity !== (product.stock_quantity?.toString() || '') ||
+      description !== (product.description || '')
+    );
   };
 
   const validateForm = () => {
     const errors: string[] = [];
 
     if (!productName.trim()) errors.push('Product name is required');
-    if (!category.trim()) errors.push('Category is required');
-    if (!unitSize.trim()) errors.push('Unit/Size is required');
-    if (!mrp.trim()) errors.push('MRP is required');
-    if (!sellingPrice.trim()) errors.push('Selling price is required');
-    if (!initialStock.trim()) errors.push('Initial stock is required');
+    if (!unit.trim()) errors.push('Unit is required');
+    if (!price.trim()) errors.push('Price is required');
+    if (!stockQuantity.trim()) errors.push('Stock quantity is required');
 
-    if (Number(mrp) <= 0) errors.push('MRP must be greater than 0');
-    if (Number(sellingPrice) <= 0) errors.push('Selling price must be greater than 0');
-    if (Number(sellingPrice) > Number(mrp)) errors.push('Selling price cannot exceed MRP');
-    if (Number(initialStock) < 0) errors.push('Stock cannot be negative');
+    if (Number(price) <= 0) errors.push('Price must be greater than 0');
+    if (discountPrice && Number(discountPrice) <= 0) errors.push('Discount price must be greater than 0');
+    if (discountPrice && Number(discountPrice) > Number(price)) {
+      errors.push('Discount price cannot exceed regular price');
+    }
+    if (Number(stockQuantity) < 0) errors.push('Stock cannot be negative');
+    if (lowStockThreshold && Number(lowStockThreshold) < 0) {
+      errors.push('Low stock threshold cannot be negative');
+    }
 
     return errors;
   };
 
-  const handleUpdateAndPublish = async () => {
+  const handleUpdateProduct = async () => {
     const errors = validateForm();
 
     if (errors.length > 0) {
@@ -90,371 +219,476 @@ export default function EditProductScreen() {
       return;
     }
 
-    setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const discountPercentage = ((Number(mrp) - Number(sellingPrice)) / Number(mrp) * 100).toFixed(2);
+      const updates = {
+        name: productName.trim(),
+        unit: unit.trim(),
+        price: Number(price),
+        discount_price: Number(discountPrice),
+        stock_quantity: Number(stockQuantity),
+        low_stock_threshold: lowStockThreshold ? Number(lowStockThreshold) : 10,
+        is_available: isAvailable,
+        description: description.trim(),
+        short_description: shortDescription.trim() || "",
+        expiry_date: expiryDate.trim() || "",
+        barcode: barcode.trim() || "",
+        is_organic: isOrganic,
+        is_veg: isVeg,
+      };
 
-      console.log('[v0] Product saved and published:', {
-        productName,
-        category,
-        brand,
-        unitSize,
-        mrp: Number(mrp),
-        sellingPrice: Number(sellingPrice),
-        discountPercentage,
-        initialStock: Number(initialStock),
-        lowStockThreshold: Number(lowStockThreshold) || 10,
-        isActive,
-        description,
-        expiryDate,
-        barcode,
-        taxApplicable,
-        returnable,
-        isFeatured,
-        images: uploadedImages.length,
+      await updateProductMutation.mutateAsync({
+        productId,
+        updates,
       });
 
-      Alert.alert('Success', `"${productName}" Updated successfully!`, [
-        {
-          text: 'View Product',
-          onPress: () => console.log('[v0] Navigate to product detail'),
-        }
-      ]);
+      Alert.alert(
+        'Success',
+        `"${productName}" updated successfully!`,
+        [
+          {
+            text: 'View Product',
+            onPress: () => router.push(`vendor/product/${productId}`),
+          },
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
     } catch (error) {
-      Alert.alert('Error', 'Failed to update product');
-    } finally {
-      setIsLoading(false);
+      console.error('Update error:', error);
+      Alert.alert('Error', 'Failed to update product. Please try again.');
     }
   };
 
+  const calculateDiscount = () => {
+    if (!price || !discountPrice) return '0';
+    const priceNum = Number(price);
+    const discountNum = Number(discountPrice);
+    if (priceNum <= 0 || discountNum <= 0) return '0';
+    return ((priceNum - discountNum) / priceNum * 100).toFixed(1);
+  };
 
-  const discountPercentage = mrp && sellingPrice
-    ? ((Number(mrp) - Number(sellingPrice)) / Number(mrp) * 100).toFixed(2)
-    : '0';
+  const discountPercentage = calculateDiscount();
+
+  const isLoading = isLoadingProduct || isLoadingImages;
+  const isUploadingOrDeleting = uploadImageMutation.isPending || deleteImageMutation.isPending || setPrimaryImageMutation.isPending;
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#10b981" />
+          <Text className="text-gray-600 mt-4">Loading product...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (productError || !product) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center px-4">
+          <Feather name="alert-circle" size={48} color="#ef4444" />
+          <Text className="text-gray-900 font-bold text-lg mt-4">Product Not Found</Text>
+          <Text className="text-gray-600 text-center mt-2">
+            The product you're trying to edit could not be found.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="bg-emerald-500 rounded-xl px-6 py-3 mt-6"
+          >
+            <Text className="text-white font-semibold">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       {/* Header */}
-      <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center">
-        <TouchableOpacity className="p-2 -ml-2" onPress={handleGoBack}>
-          <Feather name="chevron-left" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text className="text-xl font-bold text-gray-900 ml-2">Edit Product #{productId}</Text>
+      <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center justify-between">
+        <View className="flex-row items-center flex-1">
+          <TouchableOpacity className="p-2 -ml-2" onPress={handleGoBack}>
+            <Feather name="chevron-left" size={24} color="#1f2937" />
+          </TouchableOpacity>
+          <View className="flex-1 ml-2">
+            <Text className="text-xl font-bold text-gray-900">Edit Product</Text>
+            <Text className="text-xs text-gray-500 mt-0.5">#{product.sku}</Text>
+          </View>
+        </View>
+        {hasUnsavedChanges() && (
+          <View className="bg-orange-100 rounded-full px-3 py-1">
+            <Text className="text-orange-700 text-xs font-semibold">Unsaved</Text>
+          </View>
+        )}
       </View>
 
-      {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#10b981" />
-        </View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-          {/* Product Image Section */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-3">PRODUCT IMAGE</Text>
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        {/* Product Images Section */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-sm font-semibold text-gray-600">PRODUCT IMAGES</Text>
+            <Text className="text-xs text-gray-500">
+              {productImages?.length || 0} image{productImages?.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
 
-            {uploadedImages.length === 0 ? (
-              <View className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 items-center justify-center mb-3">
-                <Text className="text-3xl mb-2">📸</Text>
-                <Text className="text-gray-900 font-semibold text-sm text-center">No images added</Text>
-                <Text className="text-gray-600 text-xs text-center mt-1">Add images to showcase your product</Text>
-              </View>
-            ) : (
-              <View className="flex-row flex-wrap gap-2 mb-3">
-                {uploadedImages.map((image, index) => (
-                  <View key={index} className="relative">
-                    <View className="w-20 h-20 bg-emerald-100 rounded-lg items-center justify-center border border-emerald-300">
-                      <Text className="text-2xl">{image}</Text>
+          {/* Images Grid */}
+          {productImages && productImages.length > 0 ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              className="mb-3"
+            >
+              <View className="flex-row gap-3">
+                {productImages.map((image) => (
+                  <View key={image.id} className="relative">
+                    <View className="w-24 h-24 rounded-lg overflow-hidden border-2 border-gray-200">
+                      <Image
+                        source={{ uri: image.image_url }}
+                        className="w-full h-full"
+                        resizeMode="cover"
+                      />
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveImage(index)}
-                      className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                    >
-                      <Feather name='trash-2' size={12} color="#fff" />
-                    </TouchableOpacity>
+                    
+                    {/* Primary Badge */}
+                    {image.is_primary && (
+                      <View className="absolute top-1 left-1 bg-emerald-500 rounded px-2 py-0.5">
+                        <Text className="text-white text-xs font-bold">Primary</Text>
+                      </View>
+                    )}
+                    
+                    {/* Action Buttons */}
+                    <View className="absolute top-1 right-1 flex-col gap-1">
+                      {/* Delete Button */}
+                      <TouchableOpacity
+                        onPress={() => handleDeleteImage(image.id, image.image_url)}
+                        disabled={isUploadingOrDeleting}
+                        className="bg-red-500 rounded-full p-1.5"
+                      >
+                        <Feather name="trash-2" size={10} color="#fff" />
+                      </TouchableOpacity>
+                      
+                      {/* Set Primary Button */}
+                      {!image.is_primary && (
+                        <TouchableOpacity
+                          onPress={() => handleSetPrimaryImage(image.id)}
+                          disabled={isUploadingOrDeleting}
+                          className="bg-blue-500 rounded-full p-1.5"
+                        >
+                          <Feather name="star" size={10} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    
+                    {/* Display Order */}
+                    <View className="absolute bottom-1 left-1 bg-black/60 rounded px-2 py-0.5">
+                      <Text className="text-white text-xs font-semibold">
+                        #{image.display_order + 1}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </View>
-            )}
-
-            <TouchableOpacity
-              onPress={handleUploadImage}
-              disabled={isLoading}
-              className={`bg-emerald-50 border border-emerald-200 rounded-xl py-3 items-center justify-center flex-row gap-2 ${isLoading ? 'opacity-50' : ''}`}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#059669" />
-              ) : (
-                <>
-                  <Feather name='upload' size={18} color="#059669" />
-                  <Text className="text-emerald-700 font-semibold text-sm">Upload Product Image</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Basic Information */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-4">BASIC INFORMATION</Text>
-
-            {/* Product Name */}
-            <View className="mb-4">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Product Name *</Text>
-              <TextInput
-                placeholder="Enter product name"
-                value={productName}
-                onChangeText={setProductName}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                placeholderTextColor="#9ca3af"
-              />
+            </ScrollView>
+          ) : (
+            <View className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 items-center justify-center mb-3">
+              <Feather name="image" size={32} color="#9ca3af" />
+              <Text className="text-gray-900 font-semibold text-sm text-center mt-2">
+                No images added
+              </Text>
+              <Text className="text-gray-600 text-xs text-center mt-1">
+                Add images to showcase your product
+              </Text>
             </View>
+          )}
 
-            {/* Category */}
-            <View className="mb-4">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Category *</Text>
-              <TouchableOpacity
-                onPress={() => setSelectedCategory(!selectedCategory)}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 flex-row items-center justify-between"
-              >
-                <Text className={`text-sm ${category ? 'text-gray-900' : 'text-gray-500'}`}>
-                  {category}
+          {/* Upload Button */}
+          <TouchableOpacity
+            onPress={handleUploadImage}
+            disabled={isUploadingOrDeleting}
+            className={`bg-emerald-50 border border-emerald-200 rounded-xl py-3 items-center justify-center flex-row gap-2 ${
+              isUploadingOrDeleting ? 'opacity-50' : ''
+            }`}
+          >
+            {uploadImageMutation.isPending ? (
+              <ActivityIndicator size="small" color="#059669" />
+            ) : (
+              <>
+                <Feather name="upload" size={18} color="#059669" />
+                <Text className="text-emerald-700 font-semibold text-sm">
+                  Upload New Image
                 </Text>
-                <Text className="text-lg">▼</Text>
-              </TouchableOpacity>
-
-              {selectedCategory && (
-                <View className="mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  {categories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => {
-                        setCategory(cat);
-                        setSelectedCategory(false);
-                      }}
-                      className={`px-4 py-3 border-b border-gray-100 ${category === cat ? 'bg-emerald-50' : ''}`}
-                    >
-                      <Text className={`text-sm font-medium ${category === cat ? 'text-emerald-700' : 'text-gray-700'}`}>
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Brand */}
-            <View className="mb-4">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Brand (Optional)</Text>
-              <TextInput
-                placeholder="Enter brand name"
-                value={brand}
-                onChangeText={setBrand}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-
-            {/* Unit / Size */}
-            <View>
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Unit / Size *</Text>
-              <TextInput
-                placeholder="e.g., 500ml, 1kg, 1pcs"
-                value={unitSize}
-                onChangeText={setUnitSize}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
+              </>
+            )}
+          </TouchableOpacity>
+          
+          {/* Help Text */}
+          <Text className="text-xs text-gray-500 mt-2 text-center">
+            First image will be set as primary. Tap star icon to change primary image.
+          </Text>
+        </View>
+        {/* Category Info (Read-only) */}
+        <View className="bg-blue-50 mx-4 mt-4 rounded-2xl p-4 border border-blue-200">
+          <View className="flex-row items-center gap-2 mb-2">
+            <Feather name="info" size={16} color="#2563eb" />
+            <Text className="text-sm font-semibold text-blue-900">CATEGORY</Text>
           </View>
-
-          {/* Pricing Section */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-4">PRICING</Text>
-
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">MRP (₹) *</Text>
-                <TextInput
-                  placeholder="0"
-                  value={mrp}
-                  onChangeText={setMrp}
-                  keyboardType="decimal-pad"
-                  className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
-
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">Selling Price (₹) *</Text>
-                <TextInput
-                  placeholder="0"
-                  value={sellingPrice}
-                  onChangeText={setSellingPrice}
-                  keyboardType="decimal-pad"
-                  className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
-            </View>
-
-            {/* Discount Display */}
-            {mrp && sellingPrice && (
-              <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-emerald-700 font-semibold text-sm">Discount</Text>
-                  <View className="bg-emerald-500 rounded-full px-3 py-1">
-                    <Text className="text-white font-bold text-sm">{discountPercentage}%</Text>
-                  </View>
-                </View>
-              </View>
+          <View className="flex-row items-center gap-1">
+            <Text className="text-sm text-blue-800">
+              {product.categories?.name || 'Uncategorized'}
+            </Text>
+            {product.sub_categories?.name && (
+              <>
+                <Text className="text-sm text-blue-600">›</Text>
+                <Text className="text-sm text-blue-800">
+                  {product.sub_categories.name}
+                </Text>
+              </>
             )}
           </View>
+          <Text className="text-xs text-blue-700 mt-2">
+            Category cannot be changed after creation
+          </Text>
+        </View>
 
-          {/* Stock & Availability */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-4">STOCK & AVAILABILITY</Text>
+        {/* Basic Information */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-4">BASIC INFORMATION</Text>
 
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">Initial Stock *</Text>
-                <TextInput
-                  placeholder="0"
-                  value={initialStock}
-                  onChangeText={setInitialStock}
-                  keyboardType="number-pad"
-                  className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
+          {/* Product Name */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Product Name *</Text>
+            <TextInput
+              placeholder="Enter product name"
+              value={productName}
+              onChangeText={setProductName}
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
 
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">Low Stock Alert</Text>
-                <TextInput
-                  placeholder="10"
-                  value={lowStockThreshold}
-                  onChangeText={setLowStockThreshold}
-                  keyboardType="number-pad"
-                  className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
+          {/* Unit / Size */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Unit *</Text>
+            <TextInput
+              placeholder="e.g., kg, g, ml, pcs"
+              value={unit}
+              onChangeText={setUnit}
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+
+          {/* Short Description */}
+          <View>
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Short Description</Text>
+            <TextInput
+              placeholder="Brief description (optional)"
+              value={shortDescription}
+              onChangeText={setShortDescription}
+              multiline
+              numberOfLines={2}
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+        </View>
+
+        {/* Pricing Section */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-4">PRICING</Text>
+
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-700 mb-2">Regular Price (₹) *</Text>
+              <TextInput
+                placeholder="0"
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="decimal-pad"
+                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+                placeholderTextColor="#9ca3af"
+              />
             </View>
 
-            {/* Active Toggle */}
-            <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
-              <View>
-                <Text className="text-gray-900 font-semibold text-sm">Available for Sale</Text>
-                <Text className="text-gray-600 text-xs mt-1">
-                  {isActive ? 'Customers can order this product' : 'Product is hidden from customers'}
-                </Text>
-              </View>
-              <Switch
-                value={isActive}
-                onValueChange={setIsActive}
-                trackColor={{ false: '#d1d5db', true: '#10b981' }}
-                thumbColor={isActive ? '#059669' : '#6b7280'}
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-700 mb-2">Discount Price (₹)</Text>
+              <TextInput
+                placeholder="0"
+                value={discountPrice}
+                onChangeText={setDiscountPrice}
+                keyboardType="decimal-pad"
+                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+                placeholderTextColor="#9ca3af"
               />
             </View>
           </View>
 
-          {/* Description & Attributes */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT DETAILS</Text>
+          {/* Discount Display */}
+          {price && discountPrice && Number(discountPrice) < Number(price) && (
+            <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              <View className="flex-row justify-between items-center">
+                <Text className="text-emerald-700 font-semibold text-sm">Discount</Text>
+                <View className="bg-emerald-500 rounded-full px-3 py-1">
+                  <Text className="text-white font-bold text-sm">{discountPercentage}%</Text>
+                </View>
+              </View>
+              <Text className="text-emerald-700 text-xs mt-1">
+                Customers save ₹{(Number(price) - Number(discountPrice)).toFixed(2)}
+              </Text>
+            </View>
+          )}
+        </View>
 
-            {/* Description */}
-            <View className="mb-4">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Description</Text>
+        {/* Stock & Availability */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-4">STOCK & AVAILABILITY</Text>
+
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-700 mb-2">Stock Quantity *</Text>
               <TextInput
-                placeholder="Describe your product..."
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={40}
+                placeholder="0"
+                value={stockQuantity}
+                onChangeText={setStockQuantity}
+                keyboardType="number-pad"
                 className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
                 placeholderTextColor="#9ca3af"
               />
             </View>
 
-            {/* Expiry Date */}
-            <View className="mb-4">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Expiry Date / Shelf Life</Text>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-700 mb-2">Low Stock Alert</Text>
               <TextInput
-                placeholder="e.g., 5 days, 3 months"
-                value={expiryDate}
-                onChangeText={setExpiryDate}
+                placeholder="10"
+                value={lowStockThreshold}
+                onChangeText={setLowStockThreshold}
+                keyboardType="number-pad"
                 className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
                 placeholderTextColor="#9ca3af"
               />
             </View>
+          </View>
 
-            {/* Barcode */}
+          {/* Available Toggle */}
+          <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
             <View>
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Barcode</Text>
-              <TextInput
-                placeholder="Enter barcode"
-                value={barcode}
-                onChangeText={setBarcode}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
-                placeholderTextColor="#9ca3af"
-              />
+              <Text className="text-gray-900 font-semibold text-sm">Available for Sale</Text>
+              <Text className="text-gray-600 text-xs mt-1">
+                {isAvailable ? 'Customers can order this product' : 'Product is hidden from customers'}
+              </Text>
             </View>
+            <Switch
+              value={isAvailable}
+              onValueChange={setIsAvailable}
+              trackColor={{ false: '#d1d5db', true: '#10b981' }}
+              thumbColor={isAvailable ? '#059669' : '#6b7280'}
+            />
+          </View>
+        </View>
+
+        {/* Product Details */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT DETAILS</Text>
+
+          {/* Description */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Description</Text>
+            <TextInput
+              placeholder="Describe your product..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
           </View>
 
-          {/* Additional Settings */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
-            <Text className="text-sm font-semibold text-gray-600 mb-4">ADDITIONAL SETTINGS</Text>
+          {/* Expiry Date */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Expiry Date / Shelf Life</Text>
+            <TextInput
+              placeholder="e.g., 2025-12-31 or 5 days"
+              value={expiryDate}
+              onChangeText={setExpiryDate}
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
 
-            {/* Tax Toggle */}
-            <View className="flex-row items-center justify-between pb-3 border-b border-gray-100 mb-3">
-              <Text className="text-gray-900 font-semibold text-sm">Tax Applicable</Text>
-              <Switch
-                value={taxApplicable}
-                onValueChange={setTaxApplicable}
-                trackColor={{ false: '#d1d5db', true: '#10b981' }}
-                thumbColor={taxApplicable ? '#059669' : '#6b7280'}
-              />
-            </View>
+          {/* Barcode */}
+          <View>
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Barcode</Text>
+            <TextInput
+              placeholder="Enter barcode"
+              value={barcode}
+              onChangeText={setBarcode}
+              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 text-sm"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+        </View>
 
-            {/* Returnable Toggle */}
-            <View className="flex-row items-center justify-between pb-3 border-b border-gray-100 mb-3">
-              <Text className="text-gray-900 font-semibold text-sm">Returnable</Text>
-              <Switch
-                value={returnable}
-                onValueChange={setReturnable}
-                trackColor={{ false: '#d1d5db', true: '#10b981' }}
-                thumbColor={returnable ? '#059669' : '#6b7280'}
-              />
-            </View>
+        {/* Product Flags */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT BADGES</Text>
 
-            {/* Featured Toggle */}
-            <View className="flex-row items-center justify-between">
-              <View>
-                <Text className="text-gray-900 font-semibold text-sm">Featured Product</Text>
-                <Text className="text-gray-600 text-xs mt-1">Show on homepage</Text>
+          {/* Vegetarian Toggle */}
+          <View className="flex-row items-center justify-between pb-3 mb-3 border-b border-gray-100">
+            <View className="flex-row items-center gap-2">
+              <View className={`w-5 h-5 rounded border-2 items-center justify-center ${isVeg ? 'border-green-600 bg-green-50' : 'border-red-600 bg-red-50'}`}>
+                <View className={`w-2 h-2 rounded-full ${isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
               </View>
-              <Switch
-                value={isFeatured}
-                onValueChange={setIsFeatured}
-                trackColor={{ false: '#d1d5db', true: '#10b981' }}
-                thumbColor={isFeatured ? '#059669' : '#6b7280'}
-              />
+              <Text className="text-gray-900 font-semibold text-sm">Vegetarian</Text>
             </View>
+            <Switch
+              value={isVeg}
+              onValueChange={setIsVeg}
+              trackColor={{ false: '#d1d5db', true: '#10b981' }}
+              thumbColor={isVeg ? '#059669' : '#6b7280'}
+            />
           </View>
-        </ScrollView>
-      )}
+
+          {/* Organic Toggle */}
+          <View className="flex-row items-center justify-between pb-3 mb-3 border-b border-gray-100">
+            <View className="flex-row items-center gap-2">
+              <Feather name="award" size={18} color={isOrganic ? '#059669' : '#9ca3af'} />
+              <Text className="text-gray-900 font-semibold text-sm">Organic</Text>
+            </View>
+            <Switch
+              value={isOrganic}
+              onValueChange={setIsOrganic}
+              trackColor={{ false: '#d1d5db', true: '#10b981' }}
+              thumbColor={isOrganic ? '#059669' : '#6b7280'}
+            />
+          </View>
+        </View>
+
+        {/* Bottom spacing */}
+        <View className="h-6" />
+      </ScrollView>
 
       {/* Sticky Action Buttons */}
-      <View className="bg-white px-4 py-4 border-t border-gray-200 safe-area-bottom">
+      <View className="bg-white px-4 py-4 border-t border-gray-200">
         <TouchableOpacity
-          onPress={handleUpdateAndPublish}
-          disabled={isLoading}
+          onPress={handleUpdateProduct}
+          disabled={updateProductMutation.isPending || !hasUnsavedChanges()}
           activeOpacity={0.7}
-          className={`w-full bg-emerald-500 rounded-xl py-4 items-center justify-center mb-3 ${isLoading ? 'opacity-50' : ''}`}
+          className={`w-full bg-emerald-500 rounded-xl py-4 items-center justify-center ${
+            (updateProductMutation.isPending || !hasUnsavedChanges()) ? 'opacity-50' : ''
+          }`}
         >
-          {isLoading ? (
+          {updateProductMutation.isPending ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text className="text-white font-bold text-base">Update & Publish</Text>
+            <Text className="text-white font-bold text-base">
+              {hasUnsavedChanges() ? 'Save Changes' : 'No Changes'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>

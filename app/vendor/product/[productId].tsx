@@ -1,4 +1,7 @@
+import { useProductDetailsByVendorIdAndProductId, useProductImagesByProductId } from '@/hooks/queries';
+import { blurhash } from '@/types/categories-products.types';
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -8,50 +11,39 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Mock product detail data
-const mockProductDetail = {
-  id: 'PROD001',
-  name: 'Fresh Organic Tomatoes',
-  category: 'Vegetables',
-  sku: 'SKU-VEND01-VEG-TOM-1KG',
-  image: '🍅',
-  isActive: true,
-  pricing: {
-    sellingPrice: 45,
-    mrp: 60,
-    discountPercentage: 25,
-  },
-  stock: {
-    current: 120,
-    status: 'in-stock',
-  },
-  description:
-    'Fresh, ripe organic tomatoes sourced directly from local farms. Perfect for daily cooking and salads. Available year-round.',
-  attributes: {
-    weight: '1 kg',
-    unit: 'Per Kg',
-    brand: 'Farm Fresh',
-    expiry: '5 days',
-  },
-  insights: {
-    ordersToday: 12,
-    ordersThisWeek: 87,
-    revenueGenerated: 3915,
-  },
-};
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const IMAGE_WIDTH = SCREEN_WIDTH - 62; // Account for margins
+console.log(IMAGE_WIDTH);
+
 
 export default function ProductDetailScreen() {
-  const {productId}=useLocalSearchParams()
-  const [isActive, setIsActive] = useState(mockProductDetail.isActive);
-  const [isLoading, setIsLoading] = useState(false);
+  const { productId } = useLocalSearchParams<{ productId: string }>();
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Fetch product details from Supabase
+  const {
+    data: product,
+    isLoading: isLoadingProduct,
+    refetch: refetchProduct,
+    isRefetching: isRefetchingProduct,
+  } = useProductDetailsByVendorIdAndProductId(productId);
+
+  // Fetch product images from Supabase
+  const {
+    data: productImages,
+    isLoading: isLoadingImages,
+  } = useProductImagesByProductId(productId);
+
+  const isLoading = isLoadingProduct || isLoadingImages;
 
   const handleGoBack = () => {
     console.log('[v0] Navigating back to products list');
-    router.back()
+    router.back();
   };
 
   const handleEditProduct = async () => {
@@ -59,7 +51,7 @@ export default function ProductDetailScreen() {
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
       console.log('[v0] Opening edit product screen');
-      Alert.alert('Edit Product', `Opening editor for ${mockProductDetail.name}`);
+      Alert.alert('Edit Product', `Opening editor for ${product?.name}`);
     } catch (error) {
       Alert.alert('Error', 'Failed to open editor');
     } finally {
@@ -97,17 +89,18 @@ export default function ProductDetailScreen() {
     setActionInProgress('toggle');
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const action = isActive ? 'disabled' : 'enabled';
+      const action = product?.is_available ? 'disabled' : 'enabled';
       Alert.alert(
         'Confirm',
-        `${isActive ? 'Disable' : 'Enable'} this product?`,
+        `${product?.is_available ? 'Disable' : 'Enable'} this product?`,
         [
           { text: 'Cancel', onPress: () => { } },
           {
             text: 'Confirm',
-            onPress: () => {
-              setIsActive(!isActive);
+            onPress: async () => {
+              // TODO: Implement toggle functionality with Supabase
               Alert.alert('Success', `Product ${action} successfully!`);
+              refetchProduct();
             },
           },
         ]
@@ -122,7 +115,7 @@ export default function ProductDetailScreen() {
   const handleDeleteProduct = async () => {
     Alert.alert(
       'Delete Product',
-      `Are you sure you want to delete ${mockProductDetail.name}? This action cannot be undone.`,
+      `Are you sure you want to delete ${product?.name}? This action cannot be undone.`,
       [
         { text: 'Cancel', onPress: () => { } },
         {
@@ -131,7 +124,8 @@ export default function ProductDetailScreen() {
             setActionInProgress('delete');
             try {
               await new Promise(resolve => setTimeout(resolve, 1500));
-              Alert.alert('Deleted', `${mockProductDetail.name} has been deleted.`);
+              // TODO: Implement delete functionality with Supabase
+              Alert.alert('Deleted', `${product?.name} has been deleted.`);
               handleGoBack();
             } catch (error) {
               Alert.alert('Error', 'Failed to delete product');
@@ -145,7 +139,80 @@ export default function ProductDetailScreen() {
     );
   };
 
-  const profitMargin = mockProductDetail.pricing.sellingPrice;
+  const handleScroll = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / IMAGE_WIDTH);
+    setCurrentImageIndex(index);
+  };
+
+  const renderImageCarousel = () => {
+    // Use product images if available, otherwise fall back to main product image
+    const images = productImages && productImages.length > 0
+      ? productImages.sort((a, b) => a.display_order - b.display_order)
+      : product?.image
+        ? [{ id: 'main', image_url: product.image, is_primary: true }]
+        : [];
+
+    if (images.length === 0) {
+      return (
+        <View className="h-64 rounded-2xl items-center justify-center bg-gray-100">
+          <Feather name="image" size={48} color="#9ca3af" />
+          <Text className="text-gray-500 mt-2">No image available</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {images.map((image, index) => (
+            <View
+              key={image.id}
+              style={{ width: IMAGE_WIDTH }}
+              className="h-64 rounded-2xl overflow-hidden bg-gray-100 p-2"
+            >
+              <Image
+                source={{ uri: image.image_url }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+                placeholder={{ blurhash: blurhash }}
+                transition={1000}
+              />
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Pagination Dots */}
+        {images.length > 1 && (
+          <View className="flex-row justify-center mt-3 gap-2">
+            {images.map((_, index) => (
+              <View
+                key={index}
+                className={`h-2 rounded-full ${index === currentImageIndex
+                  ? 'w-6 bg-emerald-500'
+                  : 'w-2 bg-gray-300'
+                  }`}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const calculateDiscount = () => {
+    if (!product?.price || !product?.discount_price) return 0;
+    return Math.round(((product.price - product.discount_price) / product.price) * 100);
+  };
+
+  // console.log('Product:', product?.sub_categories);
+  // console.log('Product Images:', productImages);
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -156,13 +223,13 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
         <View className="flex-1 ml-2">
           <Text className="text-xl font-bold text-gray-900">Product Details</Text>
-          <Text className="text-sm text-gray-600 mt-1">#{mockProductDetail.sku} or id:#{productId}</Text>
+          <Text className="text-sm text-gray-600 mt-1">#{product?.sku || productId}</Text>
         </View>
         <View
-          className={`${isActive ? 'bg-emerald-100' : 'bg-gray-100'} rounded-full px-3 py-1`}
+          className={`${product?.is_available ? 'bg-emerald-100' : 'bg-gray-100'} rounded-full px-3 py-1`}
         >
-          <Text className={`text-xs font-semibold ${isActive ? 'text-emerald-700' : 'text-gray-700'}`}>
-            {isActive ? 'Active' : 'Inactive'}
+          <Text className={`text-xs font-semibold ${product?.is_available ? 'text-emerald-700' : 'text-gray-700'}`}>
+            {product?.is_available ? 'Active' : 'Inactive'}
           </Text>
         </View>
       </View>
@@ -171,23 +238,26 @@ export default function ProductDetailScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#10b981" />
         </View>
+      ) : !product ? (
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-gray-500">Product not found</Text>
+        </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
           {/* Product Overview */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl  shadow-sm border border-gray-100">
-            <View className='flex-1 items-center'>
-              <View className="h-64 flex-1 rounded-2xl items-center justify-center mb-4">
-                <Text className="text-6xl">{mockProductDetail.image}</Text>
-              </View>
+          <View className="bg-white mx-4 mt-4 rounded-2xl shadow-sm border border-gray-100">
+            <View className="p-4">
+              {renderImageCarousel()}
             </View>
-            <View className='p-5 flex-1'>
-
+            <View className="p-5">
               <Text className="text-2xl font-bold text-gray-900 text-left">
-                {mockProductDetail.name}
+                {product.name}
               </Text>
-              <Text className="text-sm text-gray-600 mt-2">{mockProductDetail.category}</Text>
-              {mockProductDetail.sku && (
-                <Text className="text-xs text-gray-500 mt-1">SKU: {mockProductDetail.sku}</Text>
+              <Text className="text-sm text-gray-600 mt-2">
+                {product.categories?.name || 'Uncategorized'}
+              </Text>
+              {product.sku && (
+                <Text className="text-xs text-gray-500 mt-1">SKU: {product.sku}</Text>
               )}
             </View>
           </View>
@@ -199,23 +269,27 @@ export default function ProductDetailScreen() {
               <View className="flex-row justify-between items-center pb-3 border-b border-gray-100">
                 <Text className="text-gray-600 text-sm">Selling Price</Text>
                 <Text className="text-2xl font-bold text-emerald-600">
-                  ₹{mockProductDetail.pricing.sellingPrice}
+                  ₹{product.discount_price || product.price}
                 </Text>
               </View>
-              <View className="flex-row justify-between items-center pb-3 border-b border-gray-100">
-                <Text className="text-gray-600 text-sm">MRP</Text>
-                <Text className="text-gray-900 font-semibold line-through">
-                  ₹{mockProductDetail.pricing.mrp}
-                </Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-gray-600 text-sm">Discount</Text>
-                <View className="bg-red-100 rounded-full px-3 py-1">
-                  <Text className="text-red-700 font-bold text-sm">
-                    {mockProductDetail.pricing.discountPercentage}%
-                  </Text>
-                </View>
-              </View>
+              {product.discount_price && product.discount_price < product.price && (
+                <>
+                  <View className="flex-row justify-between items-center pb-3 border-b border-gray-100">
+                    <Text className="text-gray-600 text-sm">MRP</Text>
+                    <Text className="text-gray-900 font-semibold line-through">
+                      ₹{product.price}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-gray-600 text-sm">Discount</Text>
+                    <View className="bg-red-100 rounded-full px-3 py-1">
+                      <Text className="text-red-700 font-bold text-sm">
+                        {calculateDiscount()}%
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
           </View>
 
@@ -226,18 +300,28 @@ export default function ProductDetailScreen() {
               <View>
                 <Text className="text-gray-600 text-xs mb-1">Current Stock</Text>
                 <Text className="text-2xl font-bold text-gray-900">
-                  {mockProductDetail.stock.current}
+                  {product.stock_quantity}({product.unit})
                 </Text>
               </View>
               <View
-                className={`${mockProductDetail.stock.status === 'in-stock' ? 'bg-emerald-100' : mockProductDetail.stock.status === 'low-stock' ? 'bg-orange-100' : 'bg-red-100'} rounded-full px-4 py-2`}
+                className={`${product.stock_status === 'in_stock'
+                  ? 'bg-emerald-100'
+                  : product.stock_status === 'low_stock'
+                    ? 'bg-orange-100'
+                    : 'bg-red-100'
+                  } rounded-full px-4 py-2`}
               >
                 <Text
-                  className={`text-xs font-semibold ${mockProductDetail.stock.status === 'in-stock' ? 'text-emerald-700' : mockProductDetail.stock.status === 'low-stock' ? 'text-orange-700' : 'text-red-700'}`}
+                  className={`text-xs font-semibold ${product.stock_status === 'in_stock'
+                    ? 'text-emerald-700'
+                    : product.stock_status === 'low_stock'
+                      ? 'text-orange-700'
+                      : 'text-red-700'
+                    }`}
                 >
-                  {mockProductDetail.stock.status === 'in-stock'
+                  {product.stock_status === 'in_stock'
                     ? 'In Stock'
-                    : mockProductDetail.stock.status === 'low-stock'
+                    : product.stock_status === 'low_stock'
                       ? 'Low Stock'
                       : 'Out of Stock'}
                 </Text>
@@ -246,7 +330,8 @@ export default function ProductDetailScreen() {
             <TouchableOpacity
               onPress={handleUpdateStock}
               disabled={actionInProgress === 'stock'}
-              className={`bg-blue-50 border border-blue-200 rounded-xl p-3 flex-row items-center justify-center gap-2 ${actionInProgress === 'stock' ? 'opacity-50' : ''}`}
+              className={`bg-blue-50 border border-blue-200 rounded-xl p-3 flex-row items-center justify-center gap-2 ${actionInProgress === 'stock' ? 'opacity-50' : ''
+                }`}
             >
               {actionInProgress === 'stock' ? (
                 <ActivityIndicator size="small" color="#2563eb" />
@@ -265,10 +350,10 @@ export default function ProductDetailScreen() {
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <Text className="text-gray-900 font-semibold text-sm">
-                  {isActive ? 'Product is Active' : 'Product is Inactive'}
+                  {product.is_available ? 'Product is Active' : 'Product is Inactive'}
                 </Text>
                 <Text className="text-gray-600 text-xs mt-1">
-                  {isActive
+                  {product.is_available
                     ? 'Customers can see and order this product'
                     : 'Customers cannot see this product'}
                 </Text>
@@ -282,9 +367,9 @@ export default function ProductDetailScreen() {
                   <ActivityIndicator size="small" color="#059669" />
                 ) : (
                   <Feather
-                    name="toggle-left"
+                    name={product.is_available ? 'toggle-right' : 'toggle-left'}
                     size={28}
-                    color={isActive ? '#059669' : '#d1d5db'}
+                    color={product.is_available ? '#059669' : '#d1d5db'}
                   />
                 )}
               </TouchableOpacity>
@@ -292,46 +377,89 @@ export default function ProductDetailScreen() {
           </View>
 
           {/* Product Description */}
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-3">DESCRIPTION</Text>
-            <Text className="text-gray-900 text-sm leading-6 mb-4">
-              {mockProductDetail.description}
-            </Text>
+          {(product.description || Object.keys(product.attributes || {}).length > 0) && (
+            <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
+              {product.description && (
+                <>
+                  <Text className="text-sm font-semibold text-gray-600 mb-3">DESCRIPTION</Text>
+                  <Text className="text-gray-900 text-sm leading-6 mb-4">
+                    {product.description}
+                  </Text>
+                </>
+              )}
 
-            <Text className="text-sm font-semibold text-gray-600 mb-3">ATTRIBUTES</Text>
-            <View className="space-y-2">
-              {Object.entries(mockProductDetail.attributes).map(([key, value]) => (
-                <View
-                  key={key}
-                  className="flex-row justify-between items-center pb-2 border-b border-gray-100"
-                >
-                  <Text className="text-gray-600 text-sm capitalize">{key}</Text>
-                  <Text className="text-gray-900 font-semibold text-sm">{value}</Text>
-                </View>
-              ))}
+              {product.attributes && Object.keys(product.attributes).length > 0 && (
+                <>
+                  <Text className="text-sm font-semibold text-gray-600 mb-3">ATTRIBUTES</Text>
+                  <View className="space-y-2">
+                    {Object.entries(product.attributes).map(([key, value]) => (
+                      <View
+                        key={key}
+                        className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                      >
+                        <Text className="text-gray-600 text-sm capitalize">{key}</Text>
+                        <Text className="text-gray-900 font-semibold text-sm">{String(value)}</Text>
+                      </View>
+                    ))}
+                    <View
+                      className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                    >
+                      <Text className="text-gray-600 text-sm capitalize">{"Unit"}</Text>
+                      <Text className="text-gray-900 font-semibold text-sm">{product.unit}</Text>
+                    </View>
+                    <View
+                      className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                    >
+                      <Text className="text-gray-600 text-sm capitalize">{"Expiry Date"}</Text>
+                      <Text className="text-gray-900 font-semibold text-sm">{product.expiry_date}</Text>
+                    </View>
+                    <View
+                      className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                    >
+                      <Text className="text-gray-600 text-sm capitalize">{"Is Vegetarian"}</Text>
+                      <Text className="text-gray-900 font-semibold text-sm">{product.is_veg ? "Vegitarian" : ""}</Text>
+                    </View>
+                    <View
+                      className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                    >
+                      <Text className="text-gray-600 text-sm capitalize">{"Is Organic"}</Text>
+                      <Text className="text-gray-900 font-semibold text-sm">{product.is_organic ? "Organic" : ""}</Text>
+                    </View>
+                    <View
+                      className="flex-row justify-between items-center pb-2 border-b border-gray-100"
+                    >
+                      <Text className="text-gray-600 text-sm capitalize">{"Sub Category"}</Text>
+                      <Text className="text-gray-900 font-semibold text-sm">{product.sub_categories?.name}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
-          </View>
+          )}
 
           {/* Product Insights */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
             <Text className="text-sm font-semibold text-gray-600 mb-3">PRODUCT INSIGHTS</Text>
             <View className="flex-row justify-between">
               <View className="flex-1">
-                <Text className="text-gray-600 text-xs mb-1">Orders Today</Text>
+                <Text className="text-gray-600 text-xs mb-1">Rating</Text>
+                <View className="flex-row items-center gap-1">
+                  <Text className="text-2xl font-bold text-gray-900">
+                    {product.rating.toFixed(1)}
+                  </Text>
+                  <Feather name="star" size={16} color="#fbbf24" />
+                </View>
+              </View>
+              <View className="flex-1">
+                <Text className="text-gray-600 text-xs mb-1">Reviews</Text>
                 <Text className="text-2xl font-bold text-gray-900">
-                  {mockProductDetail.insights.ordersToday}
+                  {product.review_count}
                 </Text>
               </View>
               <View className="flex-1">
-                <Text className="text-gray-600 text-xs mb-1">This Week</Text>
-                <Text className="text-2xl font-bold text-gray-900">
-                  {mockProductDetail.insights.ordersThisWeek}
-                </Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-gray-600 text-xs mb-1">Revenue Generated</Text>
+                <Text className="text-gray-600 text-xs mb-1">Stock Value</Text>
                 <Text className="text-xl font-bold text-emerald-600">
-                  ₹{mockProductDetail.insights.revenueGenerated}
+                  ₹{(product.stock_quantity * (product.discount_price || product.price)).toFixed(0)}
                 </Text>
               </View>
             </View>
@@ -340,53 +468,56 @@ export default function ProductDetailScreen() {
       )}
 
       {/* Sticky Action Buttons */}
-      <View className="bg-white px-4 py-4 border-t border-gray-200 safe-area-bottom">
-        <View className="flex-row gap-3 mb-3">
-          <TouchableOpacity
-            onPress={handleEditProduct}
-            disabled={actionInProgress === 'edit'}
-            activeOpacity={0.7}
-            className={`flex-1 bg-emerald-500 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'edit' ? 'opacity-50' : ''}`}
-          >
-            {actionInProgress === 'edit' ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
+      {!isLoading && product && (
+        <View className="bg-white px-4 py-4 border-t border-gray-200">
+          <View className="flex-row gap-3 mb-3">
+            <TouchableOpacity
+              onPress={handleEditProduct}
+              disabled={actionInProgress === 'edit'}
+              activeOpacity={0.7}
+              className={`flex-1 bg-emerald-500 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'edit' ? 'opacity-50' : ''
+                }`}
+            >
+              {actionInProgress === 'edit' ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
                 <Text className="text-white font-bold text-sm">Edit Product</Text>
-              </>
-            )}
-          </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleUpdatePrice}
+              disabled={actionInProgress === 'price'}
+              activeOpacity={0.7}
+              className={`flex-1 bg-blue-500 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'price' ? 'opacity-50' : ''
+                }`}
+            >
+              {actionInProgress === 'price' ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text className="text-white font-bold text-sm">Update Price</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
-            onPress={handleUpdatePrice}
-            disabled={actionInProgress === 'price'}
+            onPress={handleDeleteProduct}
+            disabled={actionInProgress === 'delete'}
             activeOpacity={0.7}
-            className={`flex-1 bg-blue-500 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'price' ? 'opacity-50' : ''}`}
+            className={`w-full bg-red-100 border border-red-200 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'delete' ? 'opacity-50' : ''
+              }`}
           >
-            {actionInProgress === 'price' ? (
-              <ActivityIndicator size="small" color="#fff" />
+            {actionInProgress === 'delete' ? (
+              <ActivityIndicator size="small" color="#dc2626" />
             ) : (
-              <Text className="text-white font-bold text-sm">Update Price</Text>
+              <View className="flex-row items-center gap-2 justify-center">
+                <Feather name="trash-2" size={16} color="#dc2626" />
+                <Text className="text-red-700 font-bold text-sm">Disable Product</Text>
+              </View>
             )}
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          onPress={handleDeleteProduct}
-          disabled={actionInProgress === 'delete'}
-          activeOpacity={0.7}
-          className={`w-full bg-red-100 border border-red-200 rounded-xl py-3.5 items-center justify-center ${actionInProgress === 'delete' ? 'opacity-50' : ''}`}
-        >
-          {actionInProgress === 'delete' ? (
-            <ActivityIndicator size="small" color="#dc2626" />
-          ) : (
-            <View className="flex-row items-center gap-2 justify-center">
-              <Feather name="trash-2" size={16} color="#dc2626" />
-              <Text className="text-red-700 font-bold text-sm">Disable Product</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
+      )}
     </SafeAreaView>
   );
 }

@@ -1,14 +1,14 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createJSONStorage, persist } from 'zustand/middleware';
 
-/**
- * Draft Product Type
- * (matches your AddProductScreen fields)
- */
-export interface DraftProduct {
+interface ProductDraft {
   productName: string;
   category: string;
+  categoryId: string;
+  subCategory: string;
+  subCategoryId: string;
+  commissionRate: number;
   brand: string;
   unitSize: string;
   mrp: string;
@@ -16,78 +16,38 @@ export interface DraftProduct {
   initialStock: string;
   lowStockThreshold: string;
   isActive: boolean;
+  isOrganic: boolean;
+  isVeg: boolean;
   description: string;
+  shortDescription: string;
   expiryDate: string;
   barcode: string;
-  taxApplicable: boolean;
-  returnable: boolean;
-  isFeatured: boolean;
-  uploadedImages: string[];
+  sku: string;
+  uploadedImages: Array<{
+    uri: string;
+    altText: string;
+    isPrimary: boolean;
+  }>;
 }
 
-/**
- * Zustand State
- */
-export interface DraftProductState {
-  draft: DraftProduct | null;
+interface DraftProductStore {
+  draft: ProductDraft | null;
   hasDraft: boolean;
-
-  saveDraft: (draft: DraftProduct) => void;
+  saveDraft: (draft: ProductDraft) => void;
   clearDraft: () => void;
 }
 
-/**
- * Zustand Store
- */
-const useDraftProductStore = create<DraftProductState>()(
+const useDraftProductStore = create<DraftProductStore>()(
   persist(
     (set) => ({
       draft: null,
       hasDraft: false,
-
-      saveDraft: (draft) => {
-        set({
-          draft,
-          hasDraft: true,
-        });
-      },
-
-      clearDraft: () => {
-        set({
-          draft: null,
-          hasDraft: false,
-        });
-      },
+      saveDraft: (draft) => set({ draft, hasDraft: true }),
+      clearDraft: () => set({ draft: null, hasDraft: false }),
     }),
     {
-      name: 'draft-product-store',
+      name: 'product-draft-storage',
       storage: createJSONStorage(() => AsyncStorage),
-
-      /**
-       * Persist only what is needed
-       */
-      partialize: (state) => ({
-        draft: state.draft,
-      }),
-
-      /**
-       * Rehydrate safely and derive flags
-       */
-      merge: (persistedState: any, currentState) => {
-        if (persistedState?.draft) {
-          return {
-            ...currentState,
-            draft: persistedState.draft,
-            hasDraft: true,
-          };
-        }
-
-        return {
-          ...currentState,
-          draft: null,
-          hasDraft: false,
-        };
-      },
     }
   )
 );
