@@ -1,4 +1,5 @@
-import { Gender, KycStatus, UserRole, VehicleType } from "./enums.types";
+import { KycDocumentStatus } from "./documents-kyc.types";
+import { Gender, UserRole, VehicleType } from "./enums.types";
 
 export interface User {
   id?: string;
@@ -41,7 +42,7 @@ export interface Vendor {
   rating: number;
   review_count: number;
   total_orders: number;
-  kyc_status: KycStatus;
+  kyc_status: KycDocumentStatus;
   kyc_verified_at?: string;
   kyc_rejected_reason?: string;
   business_hours: Record<string, { open: string; close: string }>;
@@ -68,7 +69,7 @@ export interface DeliveryBoy {
   rating: number;
   review_count: number;
   total_deliveries: number;
-  kyc_status: KycStatus;
+  kyc_status: KycDocumentStatus;
   created_at: string;
   updated_at: string;
 }

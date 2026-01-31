@@ -1,121 +1,20 @@
 import { SearchIcon } from "@/assets/svgs/SearchIcon"
 import CategoryCard from "@/components/CategoryCard"
+import { useCategories } from "@/hooks/queries"
+import { Feather } from "@expo/vector-icons"
 import { router } from "expo-router"
 import { useState } from "react"
-import { View, Text, TextInput, ScrollView, StatusBar } from "react-native"
+import { View, Text, TextInput, ScrollView, StatusBar, ActivityIndicator, TouchableOpacity } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 import Svg, { Path } from "react-native-svg"
 
 
 
 
-
-// All categories data
-export const allCategories = [
-  {
-    id: "1",
-    name: "Vegetables & Fruits",
-    description: "Fresh produce daily",
-    itemCount: 120,
-    color: "#dcfce7",
-  },
-  {
-    id: "2",
-    name: "Dairy & Breakfast",
-    description: "Milk, eggs & more",
-    itemCount: 85,
-    color: "#fef3c7",
-  },
-  {
-    id: "3",
-    name: "Cold Drinks & Juices",
-    description: "Beverages & soft drinks",
-    itemCount: 64,
-    color: "#fee2e2",
-  },
-  {
-    id: "4",
-    name: "Instant & Frozen Food",
-    description: "Quick meals & snacks",
-    itemCount: 92,
-    color: "#e0e7ff",
-  },
-  {
-    id: "5",
-    name: "Tea & Coffee",
-    description: "Hot beverages",
-    itemCount: 48,
-    color: "#fce7f3",
-  },
-  {
-    id: "6",
-    name: "Atta, Rice & Dal",
-    description: "Staples & grains",
-    itemCount: 76,
-    color: "#ffedd5",
-  },
-  {
-    id: "7",
-    name: "Masala, Oil & Dry Fruits",
-    description: "Spices & cooking essentials",
-    itemCount: 110,
-    color: "#fef9c3",
-  },
-  {
-    id: "8",
-    name: "Chicken, Meat & Fish",
-    description: "Fresh & frozen",
-    itemCount: 45,
-    color: "#ffe4e6",
-  },
-  {
-    id: "9",
-    name: "Bakery & Biscuits",
-    description: "Bread, cookies & cakes",
-    itemCount: 58,
-    color: "#f5d0fe",
-  },
-  {
-    id: "10",
-    name: "Sweet Tooth",
-    description: "Chocolates & desserts",
-    itemCount: 72,
-    color: "#ccfbf1",
-  },
-  {
-    id: "11",
-    name: "Baby Care",
-    description: "Diapers, food & more",
-    itemCount: 34,
-    color: "#cffafe",
-  },
-  {
-    id: "12",
-    name: "Personal Care",
-    description: "Hygiene & grooming",
-    itemCount: 156,
-    color: "#e9d5ff",
-  },
-  {
-    id: "13",
-    name: "Cleaning & Household",
-    description: "Detergents & supplies",
-    itemCount: 88,
-    color: "#d1fae5",
-  },
-  {
-    id: "14",
-    name: "Pet Care",
-    description: "Food & accessories",
-    itemCount: 42,
-    color: "#fed7aa",
-  },
-]
-
-// Category Card component
-
-
 export default function AllCategoriesScreen() {
   const [searchQuery, setSearchQuery] = useState("")
+
+  const { data: allCategories = [], isLoading,error, isError, refetch,isRefetching, } = useCategories()
 
   // Filter categories based on search
   const filteredCategories = allCategories.filter((category) =>
@@ -126,6 +25,37 @@ export default function AllCategoriesScreen() {
     // Navigate to category detail screen
     router.push(`/(tabs)/customer/category/${categoryId}`)
     console.log("Navigate to category:", categoryId)
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#10b981" />
+          <Text className="text-gray-600 mt-4">Loading categories...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center px-4">
+          <Feather name="alert-circle" size={48} color="#ef4444" />
+          <Text className="text-gray-900 font-bold text-lg mt-4">Failed to Load Inventory</Text>
+          <Text className="text-gray-600 text-center mt-2">
+            There was an error loading categories.
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="bg-emerald-500 rounded-xl px-6 py-3 mt-6"
+          >
+            <Text className="text-white font-semibold">Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (

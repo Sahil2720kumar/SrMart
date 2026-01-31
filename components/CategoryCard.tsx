@@ -1,18 +1,18 @@
-import { allCategories } from "@/app/(tabs)/customer/category"
 import { Text, TouchableOpacity, View } from "react-native"
 import SkeletonImage from "./SkeletonImage"
 import Svg, { Path } from "react-native-svg"
+import { Category } from "@/types/categories-products.types"
 
 
 interface CategoryCardProps {
-  category: (typeof allCategories)[0]
+  category: (Category & { product_count: number })
   onPress: () => void
 }
 
 export default function CategoryCard({
   category,
   onPress,
-}:CategoryCardProps) {
+}:CategoryCardProps) {  
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -33,7 +33,7 @@ export default function CategoryCard({
         <Text className="text-sm text-gray-500 mb-2">{category.description}</Text>
         <View className="flex-row items-center">
           <View className="bg-green-100 px-2 py-1 rounded-md">
-            <Text className="text-xs font-medium text-green-700">{category.itemCount} items</Text>
+            <Text className="text-xs font-medium text-green-700">{category.product_count} items</Text>
           </View>
         </View>
       </View>

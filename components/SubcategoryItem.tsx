@@ -1,9 +1,9 @@
-import { Subcategory } from "@/app/(tabs)/customer/category/[categoryId]"
+import { SubCategory } from "@/types/categories-products.types"
 import { Text, View } from "react-native"
 import { TouchableOpacity } from "react-native"
 
 interface SubcategoryItemProps{
-  subcategory: Subcategory
+  subcategory: SubCategory
   isActive: boolean
   onPress: () => void
 }
@@ -14,7 +14,6 @@ export default function SubcategoryItem({
   isActive,
   onPress,
 }: SubcategoryItemProps) {
-  console.log("Ok");
   
   return (
     <TouchableOpacity

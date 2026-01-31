@@ -6,6 +6,9 @@ import { Redirect, usePathname } from "expo-router"
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Foundation from '@expo/vector-icons/Foundation';
 import { useProfileStore } from "@/store/profileStore"
+import useCartStore from "@/store/cartStore"
+import { useAuthStore } from "@/store/authStore"
+import { useEffect } from "react"
 
 // Tab Icons
 function HomeIcon({ focused = false }: { focused?: boolean }) {
@@ -156,11 +159,28 @@ function TabButton({
 }
 
 export default function TabLayout() {
-  console.log("Customer layout enter");
-  
-  const {getUserRole}=useProfileStore()
+  const { userId, setUserId, clearCart } = useCartStore()
+  const { session } = useAuthStore()
+  const { getUserRole } = useProfileStore()
   const pathname = usePathname();
   console.log(pathname);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+  
+    // First login → just set userId
+    if (!userId) {
+      setUserId(session.user.id);
+      return;
+    }
+  
+    // User changed → clear cart
+    if (session.user.id !== userId) {
+      clearCart();
+      setUserId(session.user.id);
+      console.log('Cart cleared due to user change');
+    }
+  }, [session?.user?.id,userId]);
 
   return (
     <Tabs>

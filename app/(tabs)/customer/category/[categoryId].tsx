@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { View, Text, ScrollView, TouchableOpacity, FlatList } from "react-native"
+import { useState, useMemo } from "react"
+import { View, Text, ScrollView, TouchableOpacity, FlatList, ActivityIndicator } from "react-native"
 import { Stack, useLocalSearchParams } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 
@@ -9,167 +9,127 @@ import SubcategoryItem from "@/components/SubcategoryItem"
 import useCartStore from "@/store/cartStore"
 import useWishlistStore from "@/store/wishlistStore"
 
-
-// Subcategory type
-export interface Subcategory {
-  id: string
-  name: string
-}
-
-// Product type
-interface Product {
-  id: string
-  name: string
-  localName: string
-  weight: string
-  price: number
-  originalPrice: number
-  subcategoryId: string
-}
-
-// Subcategories data
-const subcategories: Subcategory[] = [
-  { id: "1", name: "Fresh Vegetables" },
-  { id: "2", name: "Fresh Fruits" },
-  { id: "3", name: "Seasonal" },
-  { id: "4", name: "Exotics" },
-  { id: "5", name: "Sprouts" },
-  { id: "6", name: "Leafies & Herbs" },
-  { id: "7", name: "Flowers & Leaves" },
-  
-]
-
-// Products data
-const products: Product[] = [
-  {
-    id: "1",
-    name: "Hybrid Tomato",
-    localName: "Tamatar",
-    weight: "500 g",
-    price: 8,
-    originalPrice: 10,
-    subcategoryId: "1",
-  },
-  {
-    id: "2",
-    name: "Lady Finger",
-    localName: "Bhindi",
-    weight: "250 g",
-    price: 7,
-    originalPrice: 10,
-    subcategoryId: "1",
-  },
-  {
-    id: "3",
-    name: "Green Chilli",
-    localName: "Hari Mirch",
-    weight: "500 g",
-    price: 5,
-    originalPrice: 8,
-    subcategoryId: "1",
-  },
-  {
-    id: "4",
-    name: "Cluster Beans",
-    localName: "Gawar Phali",
-    weight: "250 g",
-    price: 12,
-    originalPrice: 14,
-    subcategoryId: "1",
-  },
-  {
-    id: "5",
-    name: "Cabbage",
-    localName: "Patta Gobhi",
-    weight: "500 g",
-    price: 8,
-    originalPrice: 10,
-    subcategoryId: "1",
-  },
-  {
-    id: "6",
-    name: "Capsicum",
-    localName: "Shimla Mirch",
-    weight: "250 g",
-    price: 7,
-    originalPrice: 10,
-    subcategoryId: "1",
-  },
-  {
-    id: "7",
-    name: "Baby Potato",
-    localName: "Chota Aloo",
-    weight: "500 g",
-    price: 10,
-    originalPrice: 14,
-    subcategoryId: "1",
-  },
-  { id: "8", name: "Green Peas", localName: "Matar", weight: "250 g", price: 5, originalPrice: 10, subcategoryId: "1" },
-  { id: "9", name: "Apple", localName: "Seb", weight: "500 g", price: 15, originalPrice: 20, subcategoryId: "2" },
-  { id: "10", name: "Banana", localName: "Kela", weight: "6 pcs", price: 6, originalPrice: 8, subcategoryId: "2" },
-  { id: "11", name: "Orange", localName: "Santra", weight: "500 g", price: 12, originalPrice: 15, subcategoryId: "2" },
-  { id: "12", name: "Mango", localName: "Aam", weight: "500 g", price: 18, originalPrice: 22, subcategoryId: "3" },
-]
+// Queries
+import { useCategoryDetail, useSubCategories, useProductsBySubCategory } from "@/hooks/queries/"
 
 
 
 export default function CategoryScreen() {
-  const { categoryId } = useLocalSearchParams()
-  console.log("categoryId from params", categoryId)
+  const { categoryId } = useLocalSearchParams<{ categoryId: string }>()
   
-  const {cart,addToCart,updateQuantity,totalItems,totalPrice,cartItems}=useCartStore()
-  const {wishlist,toggleWishlist}=useWishlistStore()
+  const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
+  const { wishlist, toggleWishlist } = useWishlistStore()
   
-  const [activeSubcategory, setActiveSubcategory] = useState<string | null>("1")
-  const categoryTitle = "Vegetables & Fruits"
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null)
 
-  // Filter products by active subcategory
-  const filteredProducts = products.filter((product) => product.subcategoryId === activeSubcategory)
+  // Fetch category details
+  const { data: category, isLoading: isCategoryLoading, error: categoryError } = useCategoryDetail(categoryId as string)
+  
+  // Fetch subcategories for this category
+  const { data: subcategories, isLoading: isSubCategoriesLoading, error: subCategoriesError } = useSubCategories(categoryId as string)
+  
+  // Fetch products for active subcategory
+  const { data: products, isLoading: isProductsLoading, error: productsError } = useProductsBySubCategory(
+    activeSubcategory || ""
+  )
+
+  // Set first subcategory as active when data loads
+  useMemo(() => {
+    if (subcategories && subcategories.length > 0 && !activeSubcategory) {
+      setActiveSubcategory(subcategories[0].id)
+    }
+  }, [subcategories, activeSubcategory])
+
+  // Loading state
+  if (isCategoryLoading || isSubCategoriesLoading) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center">
+        <StatusBar style="auto" />
+        <ActivityIndicator size="large" color="#22c55e" />
+        <Text className="mt-4 text-gray-600">Loading...</Text>
+      </View>
+    )
+  }
+
+  // Error state
+  if (categoryError || subCategoriesError) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center px-6">
+        <StatusBar style="auto" />
+        <Text className="text-red-500 text-center mb-4">Failed to load category</Text>
+        <Text className="text-gray-600 text-center">
+          {categoryError?.message || subCategoriesError?.message}
+        </Text>
+      </View>
+    )
+  }
+
+  const categoryTitle = category?.name || "Category"
 
   return (
     <View className="flex-1 bg-white">
-      <StatusBar style='auto' />
-      <Stack.Screen options={{headerTitle:categoryTitle+`#${categoryId}`}}/>
-      {/* Header */}
-      {/* <View className="flex-row items-center justify-between px-4 pt-14 pb-4 bg-white border-b border-gray-100">
-        <TouchableOpacity className="p-2 -ml-2">
-          <BackIcon />
-        </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">{categoryTitle}</Text>
-        <TouchableOpacity className="p-2 -mr-2">
-          <SearchIcon />
-        </TouchableOpacity>
-      </View> */}
+      <StatusBar style="auto" />
+      <Stack.Screen options={{ headerTitle: categoryTitle }} />
 
       {/* Main content */}
       <View className="flex-1 flex-row">
         {/* Left sidebar - Subcategories */}
-        <ScrollView className="w-[25%] bg-gray-50 border-r border-gray-100" showsVerticalScrollIndicator={false}>
-          {subcategories.map((subcategory) => (
-            <SubcategoryItem
-              key={subcategory.id}
-              subcategory={subcategory}
-              isActive={activeSubcategory === subcategory.id}
-              onPress={() => setActiveSubcategory(subcategory.id)}
-            />
-          ))}
+        <ScrollView 
+          className="w-[25%] bg-gray-50 border-r border-gray-100" 
+          showsVerticalScrollIndicator={false}
+        >
+          {subcategories && subcategories.length > 0 ? (
+            subcategories.map((subcategory) => (
+              <SubcategoryItem
+                key={subcategory.id}
+                subcategory={subcategory}
+                isActive={activeSubcategory === subcategory.id}
+                onPress={() => setActiveSubcategory(subcategory.id)}
+              />
+            ))
+          ) : (
+            <View className="p-4">
+              <Text className="text-gray-400 text-xs text-center">No subcategories</Text>
+            </View>
+          )}
         </ScrollView>
 
         {/* Right side - Products grid */}
         <View className="w-[75%] px-2 pt-3">
-          <FlatList
-            data={filteredProducts}
-            keyExtractor={(item) => item.id}
-            numColumns={2}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            renderItem={({ item }) => <CategoryProductCard layoutMode="vertical" item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
-            ListEmptyComponent={
-              <View className="flex-1 items-center justify-center py-20">
-                <Text className="text-gray-400">No products found</Text>
-              </View>
-            }
-          />
+          {isProductsLoading ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="large" color="#22c55e" />
+            </View>
+          ) : productsError ? (
+            <View className="flex-1 items-center justify-center px-4">
+              <Text className="text-red-500 text-center mb-2">Failed to load products</Text>
+              <Text className="text-gray-600 text-sm text-center">{productsError.message}</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={products || []}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 100 }}
+              renderItem={({ item }) => (
+                <CategoryProductCard
+                  layoutMode="vertical"
+                  item={item}
+                  wishlist={wishlist}
+                  cart={cart}
+                  toggleWishlist={toggleWishlist}
+                  updateQuantity={updateQuantity}
+                  addToCart={addToCart}
+                />
+              )}
+              ListEmptyComponent={
+                <View className="flex-1 items-center justify-center py-20">
+                  <Text className="text-gray-400">No products found</Text>
+                </View>
+              }
+            />
+          )}
         </View>
       </View>
     </View>

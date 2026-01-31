@@ -68,4 +68,4 @@ export interface CartItem {
   created_at: string;
   updated_at: string;
   price:number;
-}
+} 

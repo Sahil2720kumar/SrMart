@@ -8,9 +8,10 @@ import { Customer, DeliveryBoy, User, Vendor } from '@/types/users.types';
 import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { randomUUID } from 'expo-crypto';
-import { Product, ProductImage } from '@/types/categories-products.types';
+import { Category, Product, ProductImage, SubCategory } from '@/types/categories-products.types';
 import { BankAccountType, VendorBankDetails } from '@/types/payments-wallets.types';
 import { KycDocument, KycDocumentInsert, KycDocumentType, KycDocumentUpdate, KycUserType } from '@/types/documents-kyc.types';
+import { Offer, ProductOffer } from '@/types/offers.types';
 
 
 // ==========================================
@@ -229,12 +230,12 @@ export function useVendorDetail(vendorId: string) {
         .eq('user_id', vendorId)
         .single();
       if (error) throw error;
-     
+
       return data as Vendor;
     },
     enabled: !!vendorId,
   });
-} 
+}
 
 export function useUpdateVendorProfile() {
   const queryClient = useQueryClient();
@@ -264,20 +265,28 @@ export function useUpdateVendorProfile() {
 // ==========================================
 // 3. CATEGORY HOOKS
 // ==========================================
-
 export function useCategories() {
   return useQuery({
     queryKey: queryKeys.categories.active,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('categories')
-        .select('*')
+        .select(`
+          *,
+          products:products(count)
+        `)
         .eq('is_active', true)
         .order('display_order', { ascending: true });
+
       if (error) throw error;
-      return data;
+
+      // optional: flatten count
+      return data.map((category) => ({
+        ...category,
+        product_count: category.products?.[0]?.count ?? 0,
+      }));
     },
-    staleTime: 1000 * 60 * 30, // 30 minutes
+    staleTime: 1000 * 60 * 30,
   });
 }
 
@@ -331,10 +340,51 @@ export function useSubCategories(categoryId: string) {
   });
 }
 
+
+/**
+ * Get single subcategory details by ID
+ */
+export function useSubCategoryDetail(subCategoryId: string) {
+  return useQuery({
+    queryKey: queryKeys.subCategories.detail(subCategoryId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .select('*')
+        .eq('id', subCategoryId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!subCategoryId,
+    staleTime: 1000 * 60 * 15, // 15 minutes
+  });
+}
+
+// Get all products for a specific subcategory
+
+export function useProductsBySubCategory(subCategoryId: string) {
+  return useQuery({
+    queryKey: queryKeys.products.bySubCategory(subCategoryId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('sub_category_id', subCategoryId)
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!subCategoryId,
+    staleTime: 1000 * 60 * 5, // 5 minutes (products change more frequently)
+  });
+}
+
 // ==========================================
 // 4. PRODUCT HOOKS
 // ==========================================
-
+ 
 export function useProducts(filters?: {
   vendorId?: string;
   categoryId?: string;
@@ -381,7 +431,7 @@ export function useProducts(filters?: {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data as Product[];
     },
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
@@ -402,14 +452,28 @@ export function useProductDetail(productId: string) {
         `)
         .eq('id', productId)
         .single();
+
       if (error) throw error;
-      return data;
+      return data as Product & {
+        vendors: any;
+        categories: Category;
+        sub_categories: SubCategory;
+        product_images: any[];
+      };
     },
     enabled: !!productId,
   });
 }
 
-export function useInfiniteProducts(filters?: any) {
+export function useInfiniteProducts(filters?: {
+  categoryId?: string;
+  subCategoryId?: string;
+  search?: string;
+  isAvailable?: boolean;
+  isTrending?: boolean;
+  isBestSeller?: boolean;
+  isFeatured?: boolean;
+}) {
   return useInfiniteQuery({
     queryKey: queryKeys.products.list(filters),
     queryFn: async ({ pageParam = 0 }) => {
@@ -419,21 +483,78 @@ export function useInfiniteProducts(filters?: any) {
 
       let query = supabase
         .from('products')
-        .select('*, vendors(store_name, store_image)')
+        .select('*, vendors(store_name, store_image), categories(name, slug)')
         .eq('is_available', true);
 
-      if (filters?.categoryId) {
+      if (filters?.categoryId && filters?.categoryId!=="all") {
         query = query.eq('category_id', filters.categoryId);
       }
+      if (filters?.subCategoryId) {
+        query = query.eq('sub_category_id', filters.subCategoryId);
+      }
+      if (filters?.search) {
+        query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      }
+      if (filters?.isTrending) {
+        query = query.eq('is_trending', true);
+      }
+      if (filters?.isBestSeller) {
+        query = query.eq('is_best_seller', true);
+      }
+      if (filters?.isFeatured) {
+        query = query.eq('is_featured', true);
+      }
 
-      const { data, error } = await query.range(from, to);
+      const { data, error } = await query
+        .range(from, to)
+        .order('created_at', { ascending: false });
+
       if (error) throw error;
-      return data;
+      return data as Product[];
     },
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === 20 ? allPages.length : undefined;
     },
     initialPageParam: 0,
+  });
+}
+
+
+
+export function useProductReviews(productId: string) {
+  return useQuery({
+    queryKey: ['product-reviews', productId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('review_type', 'product')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!productId,
+  });
+}
+
+export function useSimilarProducts(productId: string, categoryId: string, limit: number = 10) {
+  return useQuery({
+    queryKey: ['similar-products', productId, categoryId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*, vendors(store_name, store_image)')
+        .eq('category_id', categoryId)
+        .eq('is_available', true)
+        .neq('id', productId)
+        .limit(limit);
+
+      if (error) throw error;
+      return data as Product[];
+    },
+    enabled: !!productId && !!categoryId,
   });
 }
 
@@ -946,9 +1067,9 @@ export function useSetPrimaryImage() {
         .select("*")
         .single();
 
-      const { data:Product, error:ProductError } = await supabase
+      const { data: Product, error: ProductError } = await supabase
         .from('products')
-        .update({ image:data?.image_url})
+        .update({ image: data?.image_url })
         .eq('id', productId)
         .select()
         .single();
@@ -976,20 +1097,20 @@ export function useSetPrimaryImage() {
  */
 export function useVendorInventory() {
   const vendorId = useAuthStore((state) => state.session?.user.id);
-  
+
   return useQuery({
     queryKey: ['vendor-inventory', vendorId],
     queryFn: async (): Promise<Product[]> => {
       if (!vendorId) throw new Error('No vendor ID');
-      
+
       const { data, error } = await supabase
         .from('products')
         .select('*,categories(name),sub_categories(name)')
         .eq('vendor_id', vendorId)
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
-      
+
       return data as Product[];
     },
     enabled: !!vendorId,
@@ -1002,18 +1123,18 @@ export function useVendorInventory() {
 export function useUpdateProductStock() {
   const vendorId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ 
-      productId, 
-      stockQuantity 
-    }: { 
-      productId: string; 
+    mutationFn: async ({
+      productId,
+      stockQuantity
+    }: {
+      productId: string;
       stockQuantity: number;
     }) => {
       if (!vendorId) throw new Error('No vendor ID');
       if (stockQuantity < 0) throw new Error('Stock cannot be negative');
-      
+
       const { data, error } = await supabase
         .from('products')
         .update({
@@ -1024,24 +1145,24 @@ export function useUpdateProductStock() {
         .eq('vendor_id', vendorId) // Ensure vendor can only update their own products
         .select()
         .single();
-      
+
       if (error) throw error;
       if (!data) throw new Error('Product not found');
-      
+
       return data as Product;
     },
     onSuccess: (data, variables) => {
       // Invalidate inventory cache
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-inventory', vendorId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-inventory', vendorId]
       });
-      
+
       // Also invalidate specific product cache
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-product', vendorId, variables.productId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-product', vendorId, variables.productId]
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-product', vendorId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-product', vendorId]
       });
     },
   });
@@ -1063,25 +1184,25 @@ export function useBulkUpdateStock() {
       updates: Array<{ productId: string; stockQuantity: number }>
     ) => {
       if (!vendorId) throw new Error('No vendor ID');
-      
+
       const results = await Promise.all(
         updates.map(async ({ productId, stockQuantity }) => {
           if (stockQuantity < 0) throw new Error('Stock cannot be negative');
-          
+
           // Get product to check threshold
           const { data: product } = await supabase
             .from('products')
             .select('low_stock_threshold')
             .eq('id', productId)
             .single();
-          
+
           let stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
           if (stockQuantity === 0) {
             stockStatus = 'out_of_stock';
           } else if (product && stockQuantity <= product.low_stock_threshold) {
             stockStatus = 'low_stock';
           }
-          
+
           const { data, error } = await supabase
             .from('products')
             .update({
@@ -1093,17 +1214,17 @@ export function useBulkUpdateStock() {
             .eq('vendor_id', vendorId)
             .select()
             .single();
-          
+
           if (error) throw error;
           return data;
         })
       );
-      
+
       return results as Product[];
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-inventory', vendorId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-inventory', vendorId]
       });
     },
   });
@@ -1116,12 +1237,12 @@ export function useBulkUpdateStock() {
 export function useUpdateProductStockToOutOfStock() {
   const vendorId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ 
-      productId, 
-    }: { 
-      productId: string; 
+    mutationFn: async ({
+      productId,
+    }: {
+      productId: string;
     }) => {
       if (!vendorId) throw new Error('No vendor ID');
 
@@ -1135,24 +1256,24 @@ export function useUpdateProductStockToOutOfStock() {
         .eq('vendor_id', vendorId) // Ensure vendor can only update their own products
         .select()
         .single();
-      
+
       if (error) throw error;
       if (!data) throw new Error('Product not found');
-      
+
       return data as Product;
     },
     onSuccess: (data, variables) => {
       // Invalidate inventory cache
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-inventory', vendorId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-inventory', vendorId]
       });
-      
+
       // Also invalidate specific product cache
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-product', vendorId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-product', vendorId]
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ['vendor-product', vendorId,variables.productId] 
+      queryClient.invalidateQueries({
+        queryKey: ['vendor-product', vendorId, variables.productId]
       });
     },
   });
@@ -1235,11 +1356,11 @@ export function useAddVendorBankDetails() {
     },
     onSuccess: (data) => {
       // Invalidate and refetch vendor bank details
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.vendor(data.vendor_id) 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.vendor(data.vendor_id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.all
       });
     },
   });
@@ -1287,11 +1408,11 @@ export function useUpdateVendorBankDetails() {
       return data as VendorBankDetails;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.vendor(data.vendor_id) 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.vendor(data.vendor_id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.all
       });
     },
   });
@@ -1315,11 +1436,11 @@ export function useDeleteVendorBankDetails() {
       return { success: true };
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.vendor(variables.vendor_id) 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.vendor(variables.vendor_id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.all
       });
     },
   });
@@ -1391,11 +1512,11 @@ export function useAddDeliveryBoyBankDetails() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id) 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.all
       });
     },
   });
@@ -1442,11 +1563,11 @@ export function useUpdateDeliveryBoyBankDetails() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id) 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: bankQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: bankQueryKeys.all
       });
     },
   });
@@ -1457,9 +1578,9 @@ export function useUpdateDeliveryBoyBankDetails() {
 // Query Keys
 export const kycQueryKeys = {
   all: ['kyc-documents'] as const,
-  byUser: (userId: string, userType: KycUserType) => 
+  byUser: (userId: string, userType: KycUserType) =>
     [...kycQueryKeys.all, 'user', userId, userType] as const,
-  byDocument: (userId: string, documentType: KycDocumentType) => 
+  byDocument: (userId: string, documentType: KycDocumentType) =>
     [...kycQueryKeys.all, 'document', userId, documentType] as const,
   single: (id: string) => [...kycQueryKeys.all, 'single', id] as const,
 };
@@ -1581,7 +1702,7 @@ export function useUploadKycDocument() {
 
         // Upload image to storage
         console.log('Starting upload process...');
-        
+
         // Extract file extension from URI
         const fileExt = input.imageUri.split('.').pop() || 'jpg';
         const fileName = `${randomUUID()}.${fileExt}`;
@@ -1664,14 +1785,14 @@ export function useUploadKycDocument() {
     },
     onSuccess: (data) => {
       // Invalidate relevant queries
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byDocument(data.user_id, data.document_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byDocument(data.user_id, data.document_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1702,14 +1823,14 @@ export function useUpdateKycDocument() {
       return data as KycDocument;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.single(data.id) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.single(data.id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1722,8 +1843,8 @@ export function useDeleteKycDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: { 
-      id: string; 
+    mutationFn: async (input: {
+      id: string;
       userId: string;
       userType: KycUserType;
       documentUrl?: string;
@@ -1735,7 +1856,7 @@ export function useDeleteKycDocument() {
         const urlParts = input.documentUrl.split('/vendors/');
         if (urlParts.length > 1) {
           const filePath = urlParts[1]; // {vendorId}/kycDocuments/{filename}
-          
+
           const { error: storageError } = await supabase.storage
             .from('vendors')
             .remove([filePath]);
@@ -1758,11 +1879,11 @@ export function useDeleteKycDocument() {
       return { success: true };
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(variables.userId, variables.userType) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(variables.userId, variables.userType)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1791,14 +1912,14 @@ export function useReplaceKycDocument() {
           const urlParts = input.oldDocumentUrl.split('/vendors/');
           if (urlParts.length > 1) {
             const filePath = urlParts[1];
-            
+
             await supabase.storage
               .from('vendors')
               .remove([filePath]);
           }
         }
 
-      
+
         // Extract file extension
         const fileExt = input.imageUri.split('.').pop() || 'jpg';
         const fileName = `${randomUUID()}.${fileExt}`;
@@ -1850,14 +1971,14 @@ export function useReplaceKycDocument() {
       }
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.single(data.id) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.single(data.id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1894,14 +2015,14 @@ export function useVerifyKycDocument() {
       return data as KycDocument;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.single(data.id) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.single(data.id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1936,14 +2057,14 @@ export function useRejectKycDocument() {
       return data as KycDocument;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.single(data.id) 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.single(data.id)
       });
-      queryClient.invalidateQueries({ 
-        queryKey: kycQueryKeys.all 
+      queryClient.invalidateQueries({
+        queryKey: kycQueryKeys.all
       });
     },
   });
@@ -1964,7 +2085,7 @@ export function useIsKycComplete(userId: string, userType: KycUserType) {
  */
 export function useDocumentStatus(userId: string, documentType: KycDocumentType) {
   const { data: document } = useKycDocumentByType(userId, documentType);
-  
+
   return {
     status: document?.status || 'not_uploaded',
     isVerified: document?.status === 'verified' || document?.status === 'approved',
@@ -1973,4 +2094,463 @@ export function useDocumentStatus(userId: string, documentType: KycDocumentType)
     rejectionReason: document?.rejection_reason,
     document,
   };
+}
+
+
+// ─── Query Keys ──────────────────────────────────────────────────────────────
+
+export const offerQueryKeys = {
+  offers: {
+    all: ["offers"] as const,
+    active: ["offers", "active"] as const,
+    detail: (offerId: string) => ["offers", "detail", offerId] as const,
+  },
+  offerProducts: {
+    // products linked via offer_products junction (applicable_to = 'product')
+    byOffer: (offerId: string) => ["offer-products", offerId] as const,
+  },
+  products: {
+    byCategory: (categoryId: string) => ["products", "by-category", categoryId] as const,
+    byVendor: (vendorId: string) => ["products", "by-vendor", vendorId] as const,
+  },
+  productOffers: {
+    // all offers that apply to a given product (junction + category + vendor)
+    byProduct: (productId: string) => ["product-offers", productId] as const,
+  },
+} as const
+
+// ─── 1. useOffers — All active offers (AllOffersScreen) ─────────────────────
+
+// ── helpers: count products for a single offer based on its applicable_to ──
+
+async function countByCategory(categoryId: string): Promise<number> {
+  // 1. resolve all active sub_category ids under this category
+  const { data: subCats, error: e1 } = await supabase
+    .from("sub_categories")
+    .select("id")
+    .eq("category_id", categoryId)
+    .eq("is_active", true)
+
+  if (e1) throw e1
+  if (subCats.length === 0) return 0
+
+  // 2. count products that belong to any of those sub_categories
+  const { count, error: e2 } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("is_available", true)
+    // .neq("stock_status", "out_of_stock")
+    .in("sub_category_id", subCats.map((s: any) => s.id))
+
+  if (e2) throw e2
+  return count ?? 0
+}
+
+async function countByVendor(vendorId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("vendor_id", vendorId)
+    .eq("is_available", true)
+    // .neq("stock_status", "out_of_stock")
+
+  if (error) throw error
+  return count ?? 0
+}
+
+async function countByOfferProducts(offerId: string): Promise<number> {
+  // count rows in the junction table for this offer
+  const { count, error } = await supabase
+    .from("offer_products")
+    .select("id", { count: "exact", head: true })
+    .eq("offer_id", offerId)
+
+  if (error) throw error
+  return count ?? 0
+}
+
+async function getProductCount(offer: { id: string; applicable_to: string; applicable_id?: string | null }): Promise<number> {
+  switch (offer.applicable_to) {
+    case "category": return offer.applicable_id ? countByCategory(offer.applicable_id) : 0
+    case "vendor":   return offer.applicable_id ? countByVendor(offer.applicable_id)   : 0
+    case "product":  return countByOfferProducts(offer.id)
+    default:         return 0
+  }
+}
+
+// ─── 1. useOffers — All active offers with live product counts ──────────────
+
+export function useOffers() {
+  return useQuery({
+    queryKey: offerQueryKeys.offers.active,
+    queryFn: async () => {
+      // Phase 1: fetch all active offers
+      const { data, error } = await supabase
+        .from("offers")
+        .select(
+          `
+          id,
+          title,
+          description,
+          discount,
+          offer_type,
+          discount_type,
+          discount_value,
+          applicable_to,
+          applicable_id,
+          start_date,
+          end_date,
+          is_active,
+          display_order,
+          bg_color,
+          tag,
+          banner_image
+        `
+        )
+        .eq("is_active", true)
+        .lte("start_date", new Date().toISOString())
+        .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
+        .order("display_order", { ascending: true })
+
+      if (error) throw error
+
+      // Phase 2: batch-resolve product counts in parallel
+      //   • category / vendor  → dedupe by applicable_id (same target = same count)
+      //   • product            → keyed by offer.id (each offer has its own junction rows)
+
+      const sharedIds = new Map<string, { id: string; applicable_to: string; applicable_id: string }>()
+      const productOfferIds: string[] = []
+
+      for (const offer of data) {
+        if (offer.applicable_to === "product") {
+          productOfferIds.push(offer.id)
+        } else if (offer.applicable_id && !sharedIds.has(offer.applicable_id)) {
+          sharedIds.set(offer.applicable_id, {
+            id: offer.id,
+            applicable_to: offer.applicable_to,
+            applicable_id: offer.applicable_id,
+          })
+        }
+      }
+
+      const countMap = new Map<string, number>()
+
+      // shared counts (category / vendor) — deduplicated
+      await Promise.all(
+        Array.from(sharedIds.values()).map(async (entry) => {
+          const count = await getProductCount(entry)
+          countMap.set(entry.applicable_id, count)
+        })
+      )
+
+      // junction counts (product) — one per offer
+      await Promise.all(
+        productOfferIds.map(async (offerId) => {
+          const count = await countByOfferProducts(offerId)
+          countMap.set(offerId, count)
+        })
+      )
+
+      // Phase 3: attach the resolved count to each offer
+      return data.map((offer: any) => ({
+        ...offer,
+        item_count:
+          offer.applicable_to === "product"
+            ? (countMap.get(offer.id) ?? 0)
+            : (countMap.get(offer.applicable_id) ?? 0),
+      })) as Offer[]
+    },
+    staleTime: 1000 * 60 * 10, // 10 min
+  })
+}
+
+// ─── 2. useOfferDetail — Single offer row (OfferScreen header) ──────────────
+
+export function useOfferDetail(offerId: string) {
+  return useQuery({
+    queryKey: offerQueryKeys.offers.detail(offerId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("offers")
+        .select("*")
+        .eq("id", offerId)
+        .eq("is_active", true)
+        .single()
+
+      if (error) throw error
+      return data as Offer
+    },
+    enabled: !!offerId,
+    staleTime: 1000 * 60 * 10,
+  })
+}
+
+// ─── 3. useOfferProductsByCategory — Products via category (applicable_to = 'category') ─
+
+export function useOfferProductsByCategory(categoryId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: offerQueryKeys.products.byCategory(categoryId),
+    queryFn: async () => {
+      // resolve all active sub_category ids under this category
+      const { data: subCats, error: subErr } = await supabase
+        .from("sub_categories")
+        .select("id")
+        .eq("category_id", categoryId)
+        .eq("is_active", true)
+
+      if (subErr) throw subErr
+      if (subCats.length === 0) return []
+
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          `
+          id,
+          name,
+          description,
+          short_description,
+          price,
+          discount_price,
+          discount_percentage,
+          unit,
+          stock_quantity,
+          stock_status,
+          image,
+          is_available,
+          is_trending,
+          is_best_seller,
+          is_featured,
+          is_organic,
+          is_veg,
+          rating,
+          review_count,
+          category_id,
+          sub_category_id,
+          vendor_id
+        `
+        )
+        .eq("is_available", true)
+        // .neq("stock_status", "out_of_stock")
+        .in("sub_category_id", subCats.map((s: any) => s.id))
+        .order("is_featured", { ascending: false })
+
+      if (error) throw error
+      return data
+    },
+    enabled: enabled && !!categoryId,
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+// ─── 4. useOfferProductsByVendor — Products via vendor (applicable_to = 'vendor') ─
+
+export function useOfferProductsByVendor(vendorId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: offerQueryKeys.products.byVendor(vendorId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          `
+          id,
+          name,
+          description,
+          short_description,
+          price,
+          discount_price,
+          discount_percentage,
+          unit,
+          stock_quantity,
+          stock_status,
+          image,
+          is_available,
+          is_trending,
+          is_best_seller,
+          is_featured,
+          is_organic,
+          is_veg,
+          rating,
+          review_count,
+          category_id,
+          sub_category_id,
+          vendor_id
+        `
+        )
+        .eq("vendor_id", vendorId)
+        .eq("is_available", true)
+        // .neq("stock_status", "out_of_stock")
+        .order("is_featured", { ascending: false })
+
+      if (error) throw error
+      return data
+    },
+    enabled: enabled && !!vendorId,
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+// ─── 5. useOfferProductsByJunction — Products via offer_products (applicable_to = 'product') ─
+
+export function useOfferProductsByJunction(offerId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: offerQueryKeys.offerProducts.byOffer(offerId),
+    queryFn: async () => {
+      // 1. get all product_ids linked to this offer
+      const { data: rows, error: e1 } = await supabase
+        .from("offer_products")
+        .select("product_id")
+        .eq("offer_id", offerId)
+
+      if (e1) throw e1
+      if (rows.length === 0) return []
+
+      const productIds = rows.map((r: any) => r.product_id)
+
+      // 2. fetch the actual products (only available + in stock)
+      const { data, error: e2 } = await supabase
+        .from("products")
+        .select(
+          `
+          id,
+          name,
+          description,
+          short_description,
+          price,
+          discount_price,
+          discount_percentage,
+          unit,
+          stock_quantity,
+          stock_status,
+          image,
+          is_available,
+          is_trending,
+          is_best_seller,
+          is_featured,
+          is_organic,
+          is_veg,
+          rating,
+          review_count,
+          category_id,
+          sub_category_id,
+          vendor_id
+        `
+        )
+        .in("id", productIds)
+        .eq("is_available", true)
+        // .neq("stock_status", "out_of_stock")
+
+      if (e2) throw e2
+      return data
+    },
+    enabled: enabled && !!offerId,
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+// ─── 6. useOfferProductsFetcher — Orchestrator hook (used inside OfferScreen) ─
+//
+// Reads offer.applicable_to and conditionally enables exactly ONE of the
+// three product queries.  Consumers get a single { products, isLoading, error }.
+
+export function useOfferProductsFetcher(offer: Offer | undefined) {
+  const applicableTo = offer?.applicable_to
+  const applicableId = offer?.applicable_id
+
+  // 'category' → products via sub_categories.category_id
+  const categoryEnabled = !!offer && applicableTo === "category" && !!applicableId
+  const categoryQuery = useOfferProductsByCategory(applicableId ?? "", categoryEnabled)
+
+  // 'vendor' → products via vendor_id
+  const vendorEnabled = !!offer && applicableTo === "vendor" && !!applicableId
+  const vendorQuery = useOfferProductsByVendor(applicableId ?? "", vendorEnabled)
+
+  // 'product' → products via offer_products junction table
+  const junctionEnabled = !!offer && applicableTo === "product"
+  const junctionQuery = useOfferProductsByJunction(offer?.id ?? "", junctionEnabled)
+
+  // Pick the active query result
+  if (categoryEnabled) return { products: categoryQuery.data ?? [], isLoading: categoryQuery.isLoading, error: categoryQuery.error }
+  if (vendorEnabled)   return { products: vendorQuery.data ?? [],   isLoading: vendorQuery.isLoading,   error: vendorQuery.error }
+  if (junctionEnabled) return { products: junctionQuery.data ?? [], isLoading: junctionQuery.isLoading, error: junctionQuery.error }
+
+  // offer not yet loaded
+  return { products: [], isLoading: true, error: null }
+}
+
+// ─── 7. useProductOffers — All offers that apply to a given product ─────────
+//        (utility; useful on a product-detail page)
+//        Sources: offer_products junction + category-scoped + vendor-scoped
+
+export function useProductOffers(productId: string) {
+  return useQuery({
+    queryKey: offerQueryKeys.productOffers.byProduct(productId),
+    queryFn: async () => {
+      // ── 1. offers where this product is in the junction table ──
+      const { data: junctionRows, error: e1 } = await supabase
+        .from("offer_products")
+        .select("offer_id")
+        .eq("product_id", productId)
+
+      if (e1) throw e1
+
+      let junctionOffers: any[] = []
+      if (junctionRows.length > 0) {
+        const offerIds = junctionRows.map((r: any) => r.offer_id)
+        const { data, error: e2 } = await supabase
+          .from("offers")
+          .select("id, title, discount_type, discount_value, offer_type")
+          .in("id", offerIds)
+          .eq("is_active", true)
+
+        if (e2) throw e2
+        junctionOffers = data
+      }
+
+      // ── 2. offers scoped to the product's category ──
+      const { data: product, error: e3 } = await supabase
+        .from("products")
+        .select("category_id, sub_category_id, vendor_id")
+        .eq("id", productId)
+        .single()
+
+      if (e3) throw e3
+
+      const { data: categoryOffers, error: e4 } = await supabase
+        .from("offers")
+        .select("id, title, discount_type, discount_value, offer_type")
+        .eq("applicable_to", "category")
+        .eq("applicable_id", product.category_id)
+        .eq("is_active", true)
+
+      if (e4) throw e4
+
+      // ── 3. offers scoped to the product's vendor ──
+      let vendorOffers: any[] = []
+      if (product.vendor_id) {
+        const { data: vOffers, error: e5 } = await supabase
+          .from("offers")
+          .select("id, title, discount_type, discount_value, offer_type")
+          .eq("applicable_to", "vendor")
+          .eq("applicable_id", product.vendor_id)
+          .eq("is_active", true)
+
+        if (e5) throw e5
+        vendorOffers = vOffers
+      }
+
+      // ── merge & dedupe by offer id ──
+      const seen = new Set<string>()
+      const unique: ProductOffer[] = []
+      for (const o of [...junctionOffers, ...categoryOffers, ...vendorOffers]) {
+        if (!seen.has(o.id)) {
+          seen.add(o.id)
+          unique.push(o as ProductOffer)
+        }
+      }
+
+      return unique
+    },
+    enabled: !!productId,
+    staleTime: 1000 * 60 * 5,
+  })
 }

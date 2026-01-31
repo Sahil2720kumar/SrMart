@@ -15,7 +15,7 @@ import { ActivityIndicator, Text } from 'react-native';
 // Run this ONCE in your app to clear old data
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// AsyncStorage.removeItem('delivery-store').then(() => {
+// AsyncStorage.removeItem('cart-store').then(() => {
 //   console.log('Cart store cleared!');
 // });
 

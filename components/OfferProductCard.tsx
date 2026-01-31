@@ -1,9 +1,10 @@
 import { HeartIcon } from "@/assets/svgs/HeartIcon"
 import { Text, TouchableOpacity, View } from "react-native"
 import Feather from '@expo/vector-icons/Feather';
-import { Product } from "@/types/product.types";
-import { CartItem } from "@/types/cart.types";
+import { blurhash, Product } from "@/types/categories-products.types";
+import { CartItem } from "@/types/orders-carts.types";
 import { router } from "expo-router";
+import { Image } from "expo-image";
 
 interface OfferProductCardProps {
   layoutMode?: "horizontal" | "vertical"
@@ -16,15 +17,9 @@ interface OfferProductCardProps {
 
 }
 
-// Skeleton placeholder component
-const SkeletonImage = () => (
-  <View className="w-full h-28 bg-gray-200 rounded-lg items-center justify-center">
-    <View className="w-12 h-12 bg-gray-300 rounded-lg" />
-    <View className="w-16 h-2 bg-gray-300 rounded mt-2" />
-  </View>
-)
 
-const OfferProductCard = ({ layoutMode="horizontal", item, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: OfferProductCardProps) => {
+
+const OfferProductCard = ({ layoutMode = "horizontal", item, cart, wishlist, toggleWishlist, updateQuantity, addToCart }: OfferProductCardProps) => {
   const cartItem = cart.get(item.id)
   const isInCart = !!cartItem
   const isHorizontal = layoutMode === "horizontal" ? true : false
@@ -39,23 +34,31 @@ const OfferProductCard = ({ layoutMode="horizontal", item, cart, wishlist, toggl
         <HeartIcon filled={wishlist.has(item.id)} />
       </TouchableOpacity>
 
-      {/* Product Image Skeleton */}
-      <SkeletonImage size="medium" />
+      {/* Product Image  */}
+      <View className="w-full h-28 bg-gray-200 rounded-lg items-center justify-center">
+        <Image
+          source={item.image}
+          placeholder={{ blurhash: blurhash }}
+          contentFit="cover"
+          transition={1000}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </View>
 
       {/* Product Info */}
       <View className="mt-3">
         <Text className="text-gray-900 font-semibold text-sm" numberOfLines={2}>
           {item.name}
         </Text>
-        {item.localName && <Text className="text-gray-500 text-xs">({item.localName})</Text>}
-        <Text className="text-gray-400 text-xs mt-1">{item.weight}</Text>
+        {/* {item.localName && <Text className="text-gray-500 text-xs">({item.localName})</Text>} */}
+        <Text className="text-gray-400 text-xs mt-1">{item.unit}</Text>
       </View>
 
       {/* Price and Add Button */}
       <View className="flex-row items-center justify-between mt-3">
         <View>
-          <Text className="text-gray-900 font-bold text-base">${item.price}</Text>
-          <Text className="text-gray-400 text-xs line-through">${item.originalPrice}</Text>
+          <Text className="text-gray-900 font-bold text-base">₹{item.discount_price}</Text>
+          <Text className="text-gray-400 text-xs line-through">₹{item.price}</Text>
         </View>
 
         {isInCart ? (

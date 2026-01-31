@@ -1,16 +1,18 @@
-import { TouchableOpacity, View, Text, Image } from "react-native";
+import { TouchableOpacity, View, Text } from "react-native";
 import { HeartIcon } from "@/assets/svgs/HeartIcon";
-import { Product } from "@/types/product.types";
+import { blurhash, Product } from "@/types/categories-products.types";
 import SkeletonImage from "./SkeletonImage";
-import { CartItem } from "@/types/cart.types";
+import { CartItem } from "@/types/orders-carts.types";
 import Feather from "@expo/vector-icons/Feather";
 import { router } from "expo-router";
+import { Image } from "expo-image";
+import { CartProduct } from "@/store/cartStore";
 
 interface ProductCardProps {
-  from:string
+  from?:string
   layoutMode?: "horizontal" | "vertical"
   item: Product
-  cart: Map<string, CartItem>
+  cart: Map<string, CartProduct>
   wishlist: Set<string>
   toggleWishlist: (productId: string) => void
   updateQuantity: (productId: string, delta: number) => void
@@ -38,9 +40,15 @@ const ProductCard = ({ from,item, layoutMode, cart, wishlist, toggleWishlist, up
       </TouchableOpacity>
 
       {/* Product image */}
-      <View className="min-h-[120px] flex-auto items-center justify-center bg-gray-50 pt-4">
+      <View className="min-h-[120px] max-h-32 flex-auto items-center justify-center bg-gray-50 pt-4">
         {/* <Image source={require(`@/assets/images/aashirvaad-atta-wheat-flour-bag.jpg`)} className="w-[80px] h-[100px]" resizeMode="contain" /> */}
-        <SkeletonImage size="large" />
+        <Image
+          source={item.image}
+          placeholder={{ blurhash: blurhash }}
+          contentFit="cover"
+          transition={1000}
+          style={{ width: '100%', height: '100%' }}
+        />
       </View>
 
       {/* Product info */}
@@ -48,12 +56,12 @@ const ProductCard = ({ from,item, layoutMode, cart, wishlist, toggleWishlist, up
         <Text className="text-sm font-medium text-gray-900 mb-1" numberOfLines={2}>
           {item.name}
         </Text>
-        <Text className="text-xs text-gray-500 mb-2">{item.weight}</Text>
+        <Text className="text-xs text-gray-500 mb-2">{item.unit}</Text>
 
         <View className="flex-row items-center justify-between ">
           <View className="flex-row items-center">
-            <Text className="text-base font-bold text-gray-900">₹{item.price}</Text>
-            <Text className="text-xs text-gray-400 line-through ml-2">₹{item.originalPrice}</Text>
+            <Text className="text-base font-bold text-gray-900">₹{item.discount_price}</Text>
+            <Text className="text-xs text-gray-400 line-through ml-2">₹{item.price}</Text>
           </View>
           {isInCart ? (
             <View className="flex-row items-center">
