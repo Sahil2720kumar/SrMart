@@ -18,6 +18,8 @@ export type DiscountType =
   | 'flat'
   | 'bogo';
 
+export type CouponApplicableTo = 'all' | 'category' | 'vendor' | 'product';
+
 export interface Offer {
   id: string;                     // uuid
   title: string;
@@ -84,3 +86,25 @@ export type OfferProductInsert = Omit<
   'id' | 'created_at'
 >;
 
+
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description?: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  min_order_amount: number;
+  max_discount_amount?: number;
+  usage_limit?: number;
+  usage_count: number;
+  usage_limit_per_user: number;
+  applicable_to: CouponApplicableTo;
+  applicable_id?: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}

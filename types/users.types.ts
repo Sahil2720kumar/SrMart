@@ -73,3 +73,78 @@ export interface DeliveryBoy {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface CustomerAddress {
+  id: string;                 // uuid
+  customer_id: string;        // uuid (FK → customers.user_id)
+
+  label: string | null;
+
+  address_line1: string;
+  address_line2: string | null;
+
+  city: string;
+  state: string;
+  pincode: string;
+
+  latitude: number | null;    // numeric(10,8)
+  longitude: number | null;   // numeric(11,8)
+
+  is_default: boolean | null;
+
+  created_at: string;         // timestamptz (ISO string)
+  updated_at: string;         // timestamptz (ISO string)
+}
+
+
+export interface CustomerAddressInsert {
+  id?: string;
+
+  customer_id?: string;
+
+  label?: string | null;
+
+  address_line1: string;
+  address_line2?: string | null;
+
+  city: string;
+  state: string;
+  pincode: string;
+
+  latitude?: number | null;
+  longitude?: number | null;
+
+  is_default?: boolean | null;
+
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomerAddressUpdate {
+  label?: string | null;
+
+  address_line1?: string;
+  address_line2?: string | null;
+
+  city?: string;
+  state?: string;
+  pincode?: string;
+
+  latitude?: number | null;
+  longitude?: number | null;
+
+  is_default?: boolean | null;
+
+  updated_at?: string;
+}
+
+export interface CustomerAddressWithCustomer extends CustomerAddress {
+  customer?: {
+    user_id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+  } | null;
+}
+

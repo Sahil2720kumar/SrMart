@@ -2,8 +2,9 @@ import { supabase } from "@/lib/supabase"
 import { useAuthStore } from "@/store/authStore"
 import { useProfileStore } from "@/store/profileStore"
 import Feather from "@expo/vector-icons/Feather"
-import { router } from "expo-router"
+import { RelativePathString, router } from "expo-router"
 import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native"
+import { useCustomerProfile } from "@/hooks/queries"
 
 type MenuItem = {
   id: string
@@ -12,19 +13,20 @@ type MenuItem = {
   route?: string
   iconColor?: string
 }
-
+ 
 const menuItems: MenuItem[] = [
-  { id: "1", iconName: "edit-2", title: "Edit Profile", route: "edit-profile", iconColor: "#3b82f6" },
-  { id: "2", iconName: "lock", title: "Change Password", route: "change-password", iconColor: "#8b5cf6" },
-  // { id: "3", iconName: "credit-card", title: "Payment Method", route: "PaymentMethod", iconColor: "#f59e0b" },
-  { id: "4", iconName: "package", title: "My Orders", route: "Orders", iconColor: "#10b981" },
-  { id: "5", iconName: "shield", title: "Privacy Policy", route: "privacy-policy", iconColor: "#ef4444" },
-  { id: "6", iconName: "file-text", title: "Terms & Conditions", route: "terms-and-conditions", iconColor: "#6366f1" },
+  { id: "1", iconName: "edit-2" as const, title: "Edit Profile", route: "edit-profile", iconColor: "#3b82f6" },
+  // { id: "2", iconName: "lock" as const, title: "Change Password", route: "change-password", iconColor: "#8b5cf6" },
+  { id: "3", iconName: "map-pin" as const, title: "My Addresses", route: "my-addresses", iconColor: "#10b981" },
+  { id: "4", iconName: "package" as const, title: "My Orders", route: "Orders", iconColor: "#10b981" },
+  { id: "5", iconName: "shield" as const, title: "Privacy Policy", route: "privacy-policy", iconColor: "#ef4444" },
+  { id: "6", iconName: "file-text" as const, title: "Terms & Conditions", route: "terms-and-conditions", iconColor: "#6366f1" },
 ]
 
 export default function ProfileScreen({ navigation }: { navigation?: any }) {
   const { setSession } = useAuthStore()
   const { setUser, setCustomerProfile } = useProfileStore()
+  const { data: customerProfile } = useCustomerProfile()
 
   const handleLogout = async () => {
     console.log("Logout pressed")
@@ -34,15 +36,12 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
     } catch (err) {
       console.error("Logout error:", err)
     } finally {
-      // Clear local state no matter what
       setSession(null)
       setCustomerProfile(null)
       setUser(null)
-      // router.dismissAll()
       router.replace('/auth/login')
     }
   }
-
 
   const handleMenuPress = (route?: string) => {
     console.log("Navigate to:", route)
@@ -50,8 +49,27 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
       router.navigate("/(tabs)/customer/order/orders")
       return;
     }
-    // In your app: navigation?.navigate(route)
-    router.navigate(`/(tabs)/customer/account/${route}`)
+    router.navigate(`/(tabs)/customer/account/${route}` as RelativePathString)
+  }
+
+  // Get user initials
+  const getInitials = () => {
+    if (!customerProfile) return "SM"
+    const firstName = customerProfile.first_name?.[0] || ""
+    const lastName = customerProfile.last_name?.[0] || ""
+    return (firstName + lastName).toUpperCase() || "SM"
+  }
+
+  // Get full name
+  const getFullName = () => {
+    if (!customerProfile) return "Smith Mate"
+    return `${customerProfile.first_name || ""} ${customerProfile.last_name || ""}`.trim() || "User"
+  }
+
+  // Get email from auth or profile
+  const getEmail = () => {
+    const session = useAuthStore.getState().session
+    return session?.user?.email || "user@example.com"
   }
 
   return (
@@ -89,14 +107,22 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
                   elevation: 5,
                 }}
               >
-                {/* Profile Image Placeholder */}
-                <View className="w-full h-full bg-gradient-to-br items-center justify-center" style={{ backgroundColor: "#16a34a" }}>
-                  <Text style={{ fontSize: 46, color: "#fff" }}>SM</Text>
-                </View>
+                {customerProfile?.profile_image ? (
+                  <Image 
+                    source={{ uri: customerProfile.profile_image }} 
+                    className="w-full h-full"
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View className="w-full h-full items-center justify-center" style={{ backgroundColor: "#16a34a" }}>
+                    <Text style={{ fontSize: 46, color: "#fff" }}>{getInitials()}</Text>
+                  </View>
+                )}
               </View>
 
               {/* Edit Badge */}
               <TouchableOpacity
+                onPress={() => router.navigate("/(tabs)/customer/account/edit-profile")}
                 className="absolute bottom-1 right-1 w-9 h-9 rounded-full items-center justify-center border border-white"
                 style={{
                   backgroundColor: "#5ac268",
@@ -112,12 +138,12 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             </View>
 
             {/* User Info */}
-            <Text className="text-white text-2xl font-bold mb-2">Smith Mate</Text>
+            <Text className="text-white text-2xl font-bold mb-2">{getFullName()}</Text>
             <View
               className="bg-white/20 px-4 py-2 rounded-full"
               style={{ backdropFilter: "blur(10px)" }}
             >
-              <Text className="text-white text-sm">smithmate@example.com</Text>
+              <Text className="text-white text-sm">{getEmail()}</Text>
             </View>
           </View>
         </View>
@@ -147,7 +173,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
                   className="w-12 h-12 rounded-2xl items-center justify-center mr-4"
                   style={{ backgroundColor: `${item.iconColor}15` }}
                 >
-                  <Feather name={item.iconName} size={22} color={item.iconColor} />
+                  <Feather name={item.iconName as any} size={22} color={item.iconColor} />
                 </View>
 
                 {/* Title */}

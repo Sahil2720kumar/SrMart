@@ -1,37 +1,731 @@
-app
-|── delivery
-|   |── _layout.tsx
-|   |
-|   |── (tabs)
-|   |   |── _layout.tsx
-|   |   |── home.tsx
-|   |   |── orders.tsx
-|   |   |── earnings.tsx
-|   |   |── profile.tsx
-|   |
-|   |── order
-|   |   |── [orderId].tsx
-|   |
-|   |── onboarding
-|   |   |── index.tsx
-|   |   |── personal-details.tsx
-|   |   |── vehicle-details.tsx
-|   |   |── documents.tsx
-|   |   |── approval-pending.tsx
-|   |
-|   |── auth
-|   |   |── login.tsx
-|   |   |── verify-otp.tsx
-|   |
-|   |── navigation
-|   |   |── index.tsx
-|   |
-|   |── profile
-|   |   |── index.tsx
-|   |   |── edit.tsx
-|   |   |── vehicle.tsx
-|   |   |── bank.tsx
-|   |
-|   |── support
-|       |── index.tsx
-|       |── ticket.tsx
+create table public.orders (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  customer_id uuid not null,
+  vendor_id uuid not null,
+  delivery_boy_id uuid null,
+  delivery_address_id uuid not null,
+  coupon_id uuid null,
+  order_number character varying(50) not null,
+  status character varying(30) not null default 'pending'::character varying,
+  item_count integer null default 0,
+  subtotal numeric(10, 2) not null,
+  delivery_fee numeric(10, 2) null default 0.00,
+  tax numeric(10, 2) null default 0.00,
+  tax_percentage numeric(5, 2) null default 5.00,
+  discount numeric(10, 2) null default 0.00,
+  coupon_discount numeric(10, 2) null default 0.00,
+  total_amount numeric(10, 2) not null,
+  payment_method character varying(50) not null,
+  payment_status character varying(20) null default 'pending'::character varying,
+  payment_id character varying(255) null,
+  special_instructions text null,
+  cancellation_reason text null,
+  cancelled_by character varying(20) null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  confirmed_at timestamp with time zone null,
+  picked_up_at timestamp with time zone null,
+  delivered_at timestamp with time zone null,
+  cancelled_at timestamp with time zone null,
+  constraint orders_pkey primary key (id),
+  constraint orders_order_number_key unique (order_number),
+  constraint orders_customer_id_fkey foreign KEY (customer_id) references customers (user_id) on delete set null,
+  constraint orders_delivery_address_id_fkey foreign KEY (delivery_address_id) references customer_addresses (id) on delete set null,
+  constraint orders_delivery_boy_id_fkey foreign KEY (delivery_boy_id) references delivery_boys (user_id) on delete set null,
+  constraint orders_vendor_id_fkey foreign KEY (vendor_id) references vendors (user_id) on delete set null,
+  constraint orders_coupon_id_fkey foreign KEY (coupon_id) references coupons (id) on delete set null,
+  constraint orders_discount_check check ((discount >= (0)::numeric)),
+  constraint orders_delivery_fee_check check ((delivery_fee >= (0)::numeric)),
+  constraint orders_payment_method_check check (
+    (
+      (payment_method)::text = any (
+        (
+          array[
+            'cod'::character varying,
+            'upi'::character varying,
+            'card'::character varying,
+            'netbanking'::character varying,
+            'wallet'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint orders_payment_status_check check (
+    (
+      (payment_status)::text = any (
+        (
+          array[
+            'pending'::character varying,
+            'paid'::character varying,
+            'failed'::character varying,
+            'refunded'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint orders_coupon_discount_check check ((coupon_discount >= (0)::numeric)),
+  constraint orders_status_check check (
+    (
+      (status)::text = any (
+        (
+          array[
+            'pending'::character varying,
+            'confirmed'::character varying,
+            'processing'::character varying,
+            'ready_for_pickup'::character varying,
+            'picked_up'::character varying,
+            'out_for_delivery'::character varying,
+            'delivered'::character varying,
+            'cancelled'::character varying,
+            'refunded'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint orders_subtotal_check check ((subtotal >= (0)::numeric)),
+  constraint orders_tax_check check ((tax >= (0)::numeric)),
+  constraint orders_total_amount_check check ((total_amount >= (0)::numeric)),
+  constraint orders_cancelled_by_check check (
+    (
+      (cancelled_by)::text = any (
+        (
+          array[
+            'customer'::character varying,
+            'vendor'::character varying,
+            'admin'::character varying,
+            'system'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_customer on public.orders using btree (customer_id) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_vendor on public.orders using btree (vendor_id) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_delivery_boy on public.orders using btree (delivery_boy_id) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_status on public.orders using btree (status) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_payment_status on public.orders using btree (payment_status) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_created_at on public.orders using btree (created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_orders_order_number on public.orders using btree (order_number) TABLESPACE pg_default;
+
+create trigger trigger_update_product_sales
+after
+update on orders for EACH row
+execute FUNCTION update_product_sales ();
+
+create trigger trigger_update_stock_on_order
+after INSERT
+or
+update on orders for EACH row
+execute FUNCTION update_stock_on_order ();
+
+create trigger update_orders_updated_at BEFORE
+update on orders for EACH row
+execute FUNCTION update_updated_at_column ();
+
+
+create table public.order_groups (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  customer_id uuid not null,
+  razorpay_order_id text null,
+  razorpay_payment_id text null,
+  payment_method character varying(50) null,
+  payment_status character varying(20) null default 'pending'::character varying,
+  total_amount numeric(10, 2) not null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint order_groups_pkey primary key (id),
+  constraint order_groups_customer_id_fkey foreign KEY (customer_id) references customers (user_id) on delete CASCADE,
+  constraint order_groups_payment_status_check check (
+    (
+      (payment_status)::text = any (
+        (
+          array[
+            'pending'::character varying,
+            'paid'::character varying,
+            'failed'::character varying,
+            'refunded'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+
+create table public.wallets (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  user_id uuid not null,
+  user_type character varying(20) not null,
+  available_balance numeric(10, 2) null default 0.00,
+  pending_balance numeric(10, 2) null default 0.00,
+  lifetime_earnings numeric(10, 2) null default 0.00,
+  earnings_today numeric(10, 2) null default 0.00,
+  earnings_this_week numeric(10, 2) null default 0.00,
+  earnings_this_month numeric(10, 2) null default 0.00,
+  total_withdrawn numeric(10, 2) null default 0.00,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint wallets_pkey primary key (id),
+  constraint wallets_user_id_key unique (user_id),
+  constraint wallets_user_id_fkey foreign KEY (user_id) references users (auth_id) on delete CASCADE,
+  constraint wallets_earnings_today_check check ((earnings_today >= (0)::numeric)),
+  constraint wallets_lifetime_earnings_check check ((lifetime_earnings >= (0)::numeric)),
+  constraint wallets_pending_balance_check check ((pending_balance >= (0)::numeric)),
+  constraint wallets_total_withdrawn_check check ((total_withdrawn >= (0)::numeric)),
+  constraint wallets_available_balance_check check ((available_balance >= (0)::numeric)),
+  constraint wallets_user_type_check check (
+    (
+      (user_type)::text = any (
+        (
+          array[
+            'vendor'::character varying,
+            'delivery_boy'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint wallets_earnings_this_month_check check ((earnings_this_month >= (0)::numeric)),
+  constraint wallets_earnings_this_week_check check ((earnings_this_week >= (0)::numeric))
+) TABLESPACE pg_default;
+
+create index IF not exists idx_wallets_user on public.wallets using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_wallets_user_type on public.wallets using btree (user_type) TABLESPACE pg_default;
+
+create trigger update_wallets_updated_at BEFORE
+update on wallets for EACH row
+execute FUNCTION update_updated_at_column ();
+
+
+create table public.wallet_transactions (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  wallet_id uuid not null,
+  transaction_type character varying(20) not null,
+  amount numeric(10, 2) not null,
+  order_id uuid null,
+  cashout_id uuid null,
+  description text not null,
+  balance_after numeric(10, 2) not null,
+  metadata jsonb null default '{}'::jsonb,
+  created_at timestamp with time zone null default now(),
+  constraint wallet_transactions_pkey primary key (id),
+  constraint wallet_transactions_order_id_fkey foreign KEY (order_id) references orders (id) on delete set null,
+  constraint wallet_transactions_wallet_id_fkey foreign KEY (wallet_id) references wallets (id) on delete CASCADE,
+  constraint wallet_transactions_amount_check check ((amount > (0)::numeric)),
+  constraint wallet_transactions_transaction_type_check check (
+    (
+      (transaction_type)::text = any (
+        (
+          array[
+            'credit'::character varying,
+            'debit'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_wallet_transactions_wallet on public.wallet_transactions using btree (wallet_id, created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_wallet_transactions_order on public.wallet_transactions using btree (order_id) TABLESPACE pg_default;
+
+
+
+create table public.products (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  vendor_id uuid not null,
+  category_id uuid not null,
+  sub_category_id uuid null,
+  sku character varying(100) not null,
+  slug character varying(250) not null,
+  name character varying(200) not null,
+  description text null,
+  short_description character varying(500) null,
+  price numeric(10, 2) not null,
+  discount_price numeric(10, 2) null,
+  discount_percentage numeric GENERATED ALWAYS as (
+    case
+      when (
+        (discount_price is not null)
+        and (price > (0)::numeric)
+      ) then round(
+        (
+          ((price - discount_price) / price) * (100)::numeric
+        ),
+        2
+      )
+      else (0)::numeric
+    end
+  ) STORED (5, 2) null,
+  unit character varying(50) not null,
+  stock_quantity integer null default 0,
+  low_stock_threshold integer null default 10,
+  stock_status character varying GENERATED ALWAYS as (
+    case
+      when (stock_quantity = 0) then 'out_of_stock'::text
+      when (stock_quantity <= low_stock_threshold) then 'low_stock'::text
+      else 'in_stock'::text
+    end
+  ) STORED (20) null,
+  image character varying(500) null,
+  is_available boolean null default true,
+  is_trending boolean null default false,
+  is_best_seller boolean null default false,
+  is_featured boolean null default false,
+  is_organic boolean null default false,
+  is_veg boolean null default true,
+  commission_type character varying(20) null default 'default'::character varying,
+  commission_rate numeric(5, 2) null,
+  attributes jsonb null default '{}'::jsonb,
+  total_sales integer null default 0,
+  rating numeric(3, 2) null default 0.00,
+  review_count integer null default 0,
+  meta_title character varying(200) null,
+  meta_description text null,
+  orders_today integer null default 0,
+  orders_this_week integer null default 0,
+  orders_this_month integer null default 0,
+  revenue_today numeric(10, 2) null default 0.00,
+  revenue_this_week numeric(10, 2) null default 0.00,
+  revenue_this_month numeric(10, 2) null default 0.00,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  expiry_date character varying null,
+  barcode character varying null,
+  constraint products_pkey primary key (id),
+  constraint products_vendor_id_slug_key unique (vendor_id, slug),
+  constraint products_sku_key unique (sku),
+  constraint products_category_id_fkey foreign KEY (category_id) references categories (id) on delete RESTRICT,
+  constraint products_sub_category_id_fkey foreign KEY (sub_category_id) references sub_categories (id) on delete set null,
+  constraint products_vendor_id_fkey foreign KEY (vendor_id) references vendors (user_id) on delete CASCADE,
+  constraint products_price_check check ((price >= (0)::numeric)),
+  constraint products_rating_check check (
+    (
+      (rating >= (0)::numeric)
+      and (rating <= (5)::numeric)
+    )
+  ),
+  constraint products_commission_type_check check (
+    (
+      (commission_type)::text = any (
+        (
+          array[
+            'default'::character varying,
+            'category'::character varying,
+            'subcategory'::character varying,
+            'custom'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint products_stock_quantity_check check ((stock_quantity >= 0)),
+  constraint products_commission_rate_check check (
+    (
+      (commission_rate >= (0)::numeric)
+      and (commission_rate <= (100)::numeric)
+    )
+  ),
+  constraint products_low_stock_threshold_check check ((low_stock_threshold >= 0)),
+  constraint products_discount_price_check check ((discount_price >= (0)::numeric))
+) TABLESPACE pg_default;
+
+create index IF not exists idx_products_vendor on public.products using btree (vendor_id) TABLESPACE pg_default;
+
+create index IF not exists idx_products_category on public.products using btree (category_id) TABLESPACE pg_default;
+
+create index IF not exists idx_products_sub_category on public.products using btree (sub_category_id) TABLESPACE pg_default;
+
+create index IF not exists idx_products_sku on public.products using btree (sku) TABLESPACE pg_default;
+
+create index IF not exists idx_products_slug on public.products using btree (slug) TABLESPACE pg_default;
+
+create index IF not exists idx_products_stock_status on public.products using btree (stock_status) TABLESPACE pg_default;
+
+create index IF not exists idx_products_available on public.products using btree (is_available) TABLESPACE pg_default
+where
+  (is_available = true);
+
+create index IF not exists idx_products_trending on public.products using btree (is_trending) TABLESPACE pg_default
+where
+  (is_trending = true);
+
+create index IF not exists idx_products_best_seller on public.products using btree (is_best_seller) TABLESPACE pg_default
+where
+  (is_best_seller = true);
+
+create index IF not exists idx_products_featured on public.products using btree (is_featured) TABLESPACE pg_default
+where
+  (is_featured = true);
+
+create index IF not exists idx_products_price on public.products using btree (price) TABLESPACE pg_default;
+
+create index IF not exists idx_products_rating on public.products using btree (rating desc) TABLESPACE pg_default;
+
+create index IF not exists idx_products_created_at on public.products using btree (created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_products_search on public.products using gin (
+  to_tsvector(
+    'english'::regconfig,
+    (
+      ((name)::text || ' '::text) || COALESCE(description, ''::text)
+    )
+  )
+) TABLESPACE pg_default;
+
+create trigger update_products_updated_at BEFORE
+update on products for EACH row
+execute FUNCTION update_updated_at_column ();
+
+create table public.coupons (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  code character varying(50) not null,
+  description text null,
+  discount_type character varying(20) not null,
+  discount_value numeric(10, 2) not null,
+  min_order_amount numeric(10, 2) null default 0.00,
+  max_discount_amount numeric(10, 2) null,
+  usage_limit integer null,
+  usage_count integer null default 0,
+  usage_limit_per_user integer null default 1,
+  applicable_to character varying(20) null default 'all'::character varying,
+  applicable_id uuid null,
+  start_date timestamp with time zone not null,
+  end_date timestamp with time zone not null,
+  is_active boolean null default true,
+  created_by uuid null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint coupons_pkey primary key (id),
+  constraint coupons_code_key unique (code),
+  constraint coupons_created_by_fkey foreign KEY (created_by) references users (auth_id) on delete set null,
+  constraint coupons_discount_value_check check ((discount_value > (0)::numeric)),
+  constraint coupons_max_discount_amount_check check ((max_discount_amount >= (0)::numeric)),
+  constraint coupons_min_order_amount_check check ((min_order_amount >= (0)::numeric)),
+  constraint coupons_usage_limit_check check ((usage_limit > 0)),
+  constraint coupons_applicable_to_check check (
+    (
+      (applicable_to)::text = any (
+        (
+          array[
+            'all'::character varying,
+            'category'::character varying,
+            'vendor'::character varying,
+            'product'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint coupons_usage_limit_per_user_check check ((usage_limit_per_user > 0)),
+  constraint coupons_check check ((end_date > start_date)),
+  constraint coupons_discount_type_check check (
+    (
+      (discount_type)::text = any (
+        (
+          array[
+            'percentage'::character varying,
+            'flat'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_coupons_code on public.coupons using btree (code) TABLESPACE pg_default
+where
+  (is_active = true);
+
+create index IF not exists idx_coupons_active on public.coupons using btree (is_active, start_date, end_date) TABLESPACE pg_default;
+
+create trigger update_coupons_updated_at BEFORE
+update on coupons for EACH row
+execute FUNCTION update_updated_at_column ();
+
+create table public.customers (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  user_id uuid not null,
+  first_name character varying(100) not null,
+  last_name character varying(100) not null,
+  profile_image character varying(500) null,
+  date_of_birth date null,
+  gender character varying(10) null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint customers_pkey primary key (id),
+  constraint customers_user_id_key unique (user_id),
+  constraint customers_user_id_fkey foreign KEY (user_id) references users (auth_id) on delete CASCADE,
+  constraint customers_gender_check check (
+    (
+      (gender)::text = any (
+        (
+          array[
+            'male'::character varying,
+            'female'::character varying,
+            'other'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_customers_user_id on public.customers using btree (user_id) TABLESPACE pg_default;
+
+create trigger update_customers_updated_at BEFORE
+update on customers for EACH row
+execute FUNCTION update_updated_at_column ();
+
+create table public.vendors (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  user_id uuid not null,
+  store_name character varying(200) not null,
+  store_description text null,
+  store_image character varying(500) null,
+  store_banner character varying(500) null,
+  address text not null,
+  city character varying(100) not null,
+  state character varying(100) not null,
+  pincode character varying(20) not null,
+  latitude numeric(10, 8) null,
+  longitude numeric(11, 8) null,
+  is_verified boolean null default false,
+  is_open boolean null default true,
+  rating numeric(3, 2) null default 0.00,
+  review_count integer null default 0,
+  total_orders integer null default 0,
+  kyc_status character varying(20) null default 'pending'::character varying,
+  kyc_verified_at timestamp with time zone null,
+  kyc_rejected_reason text null,
+  business_hours jsonb null default '{}'::jsonb,
+  admin_notes text null,
+  suspended_until timestamp with time zone null,
+  suspension_reason text null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint vendors_pkey primary key (id),
+  constraint vendors_user_id_key unique (user_id),
+  constraint vendors_user_id_fkey foreign KEY (user_id) references users (auth_id) on delete CASCADE,
+  constraint vendors_kyc_status_check check (
+    (
+      (kyc_status)::text = any (
+        (
+          array[
+            'pending'::character varying,
+            'under_review'::character varying,
+            'approved'::character varying,
+            'rejected'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint vendors_rating_check check (
+    (
+      (rating >= (0)::numeric)
+      and (rating <= (5)::numeric)
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_vendors_user_id on public.vendors using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_vendors_kyc_status on public.vendors using btree (kyc_status) TABLESPACE pg_default;
+
+create index IF not exists idx_vendors_verified on public.vendors using btree (is_verified) TABLESPACE pg_default
+where
+  (is_verified = true);
+
+create index IF not exists idx_vendors_location on public.vendors using btree (latitude, longitude) TABLESPACE pg_default;
+
+create index IF not exists idx_vendors_city on public.vendors using btree (city) TABLESPACE pg_default;
+
+create trigger update_vendors_updated_at BEFORE
+update on vendors for EACH row
+execute FUNCTION update_updated_at_column ();
+
+
+create table public.delivery_boys (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  user_id uuid not null,
+  first_name character varying(100) not null,
+  last_name character varying(100) not null,
+  profile_photo character varying(500) null,
+  vehicle_type character varying(50) null,
+  vehicle_number character varying(50) null,
+  license_number character varying(50) null,
+  is_available boolean null default true,
+  is_online boolean null default false,
+  current_latitude numeric(10, 8) null,
+  current_longitude numeric(11, 8) null,
+  rating numeric(3, 2) null default 0.00,
+  review_count integer null default 0,
+  total_deliveries integer null default 0,
+  kyc_status character varying(20) null default 'pending'::character varying,
+  kyc_verified_at timestamp with time zone null,
+  kyc_rejected_reason text null,
+  admin_notes text null,
+  suspended_until timestamp with time zone null,
+  suspension_reason text null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint delivery_boys_pkey primary key (id),
+  constraint delivery_boys_user_id_key unique (user_id),
+  constraint delivery_boys_user_id_fkey foreign KEY (user_id) references users (auth_id) on delete CASCADE,
+  constraint delivery_boys_kyc_status_check check (
+    (
+      (kyc_status)::text = any (
+        (
+          array[
+            'pending'::character varying,
+            'under_review'::character varying,
+            'approved'::character varying,
+            'rejected'::character varying
+          ]
+        )::text[]
+      )
+    )
+  ),
+  constraint delivery_boys_rating_check check (
+    (
+      (rating >= (0)::numeric)
+      and (rating <= (5)::numeric)
+    )
+  ),
+  constraint delivery_boys_vehicle_type_check check (
+    (
+      (vehicle_type)::text = any (
+        (
+          array[
+            'bike'::character varying,
+            'scooter'::character varying,
+            'bicycle'::character varying,
+            'car'::character varying,
+            'van'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_delivery_boys_user_id on public.delivery_boys using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_delivery_boys_available on public.delivery_boys using btree (is_available, is_online) TABLESPACE pg_default;
+
+create index IF not exists idx_delivery_boys_location on public.delivery_boys using btree (current_latitude, current_longitude) TABLESPACE pg_default;
+
+create trigger update_delivery_boys_updated_at BEFORE
+update on delivery_boys for EACH row
+execute FUNCTION update_updated_at_column ();
+
+
+create table public.users (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  email character varying(255) not null,
+  phone character varying(20) not null,
+  role character varying(20) not null,
+  is_active boolean null default true,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  auth_id uuid null,
+  constraint users_pkey primary key (id),
+  constraint users_auth_id_key unique (auth_id),
+  constraint users_email_key unique (email),
+  constraint users_phone_key unique (phone),
+  constraint users_auth_id_fkey foreign KEY (auth_id) references auth.users (id),
+  constraint users_role_check check (
+    (
+      (role)::text = any (
+        (
+          array[
+            'customer'::character varying,
+            'vendor'::character varying,
+            'delivery_boy'::character varying,
+            'admin'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_users_email on public.users using btree (email) TABLESPACE pg_default;
+
+create index IF not exists idx_users_phone on public.users using btree (phone) TABLESPACE pg_default;
+
+create index IF not exists idx_users_role on public.users using btree (role) TABLESPACE pg_default
+where
+  (is_active = true);
+
+create index IF not exists idx_users_auth_id on public.users using btree (auth_id) TABLESPACE pg_default;
+
+create trigger update_users_updated_at BEFORE
+update on users for EACH row
+execute FUNCTION update_updated_at_column ();
+
+
+here full rpc function to calculate commission
+
+DECLARE
+    v_commission_rate DECIMAL(5, 2);
+    v_commission_type VARCHAR(20);
+    v_product_rate DECIMAL(5, 2);
+    v_subcategory_rate DECIMAL(5, 2);
+    v_category_rate DECIMAL(5, 2);
+BEGIN
+    SELECT 
+        p.commission_type,
+        p.commission_rate,
+        sc.commission_rate,
+        c.commission_rate
+    INTO 
+        v_commission_type,
+        v_product_rate,
+        v_subcategory_rate,
+        v_category_rate
+    FROM products p
+    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE p.id = p_product_id;
+    
+    -- Priority 1: Product-level custom commission
+    IF v_commission_type = 'custom' AND v_product_rate IS NOT NULL THEN
+        RETURN v_product_rate;
+    END IF;
+    
+    -- Priority 2: Product commission_type = 'subcategory'
+    IF v_commission_type = 'subcategory' AND v_subcategory_rate IS NOT NULL THEN
+        RETURN v_subcategory_rate;
+    END IF;
+    
+    -- Priority 3: Product commission_type = 'category' OR Sub-category commission
+    IF v_subcategory_rate IS NOT NULL THEN
+        RETURN v_subcategory_rate;
+    END IF;
+    
+    -- Priority 4: Category commission
+    IF v_category_rate IS NOT NULL THEN
+        RETURN v_category_rate;
+    END IF;
+    
+    -- Priority 5: Platform default
+    RETURN 10.00;
+END;
+
+
+

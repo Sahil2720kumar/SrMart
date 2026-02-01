@@ -3,16 +3,22 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
-import { Customer, DeliveryBoy, User, Vendor } from '@/types/users.types';
+import { Customer, CustomerAddress, CustomerAddressInsert, CustomerAddressUpdate, DeliveryBoy, User, Vendor } from '@/types/users.types';
 
 import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { randomUUID } from 'expo-crypto';
 import { Category, Product, ProductImage, SubCategory } from '@/types/categories-products.types';
 import { BankAccountType, VendorBankDetails } from '@/types/payments-wallets.types';
-import { KycDocument, KycDocumentInsert, KycDocumentType, KycDocumentUpdate, KycUserType } from '@/types/documents-kyc.types';
+import {
+  KycDocument,
+  KycDocumentInsert,
+  KycDocumentType,
+  KycDocumentUpdate,
+  KycUserType,
+} from '@/types/documents-kyc.types';
 import { Offer, ProductOffer } from '@/types/offers.types';
-
+import { useProfileStore } from '@/store/profileStore';
 
 // ==========================================
 // 1. USER & PROFILE HOOKS
@@ -25,11 +31,7 @@ export function useFetchUser() {
   return useQuery({
     queryKey: ['user'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', id)
-        .single()
+      const { data, error } = await supabase.from('users').select('*').eq('auth_id', id).single();
       if (error) throw error;
       return data;
     },
@@ -50,8 +52,17 @@ export function useCustomerProfile(userId?: string) {
         .select('*')
         .eq('user_id', id)
         .single();
-      if (error) throw error;
-      return data;
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('phone')
+        .eq('auth_id', id)
+        .single();
+
+      console.log('userData', userData);
+
+      if (error || userError) throw error || userError;
+      return { ...data, phone: userData?.phone };
     },
 
     enabled: !!id,
@@ -66,11 +77,7 @@ export function useVendorProfile(userId?: string) {
   return useQuery({
     queryKey: queryKeys.vendors.byUser(id!),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('*')
-        .eq('user_id', id)
-        .single();
+      const { data, error } = await supabase.from('vendors').select('*').eq('user_id', id).single();
       if (error) throw error;
       return data;
     },
@@ -99,13 +106,16 @@ export function useDeliveryBoyProfile(userId?: string) {
   });
 }
 
-
 export function useCreateCustomerProfile() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
   return useMutation({
     mutationFn: async (customerData: Customer) => {
-      const { data, error } = await supabase.from('customers').insert(customerData).select().single();
+      const { data, error } = await supabase
+        .from('customers')
+        .insert(customerData)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
@@ -138,13 +148,16 @@ export function useCreateVendorProfile() {
   });
 }
 
-
 export function useCreateDeliveryBoyProfile() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
   return useMutation({
     mutationFn: async (deliveryBoyData: DeliveryBoy) => {
-      const { data, error } = await supabase.from('delivery_boys').insert(deliveryBoyData).select().single();
+      const { data, error } = await supabase
+        .from('delivery_boys')
+        .insert(deliveryBoyData)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
@@ -158,29 +171,358 @@ export function useCreateDeliveryBoyProfile() {
   });
 }
 
+// Update customer profile
 export function useUpdateCustomerProfile() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+  const {setCustomerProfile,setUser}=useProfileStore()
+  return useMutation({
+    mutationFn: async (updates: any) => {
+      const { data: customerData, error } = await supabase
+        .from('customers')
+        .update({
+          first_name: updates.first_name,
+          last_name: updates.last_name,
+          date_of_birth: updates.date_of_birth,
+          gender: updates.gender,
+          profile_image: updates.profile_image,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', session?.user?.id)
+        .select('*')
+        .single();
+    
+      setCustomerProfile(customerData)
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .update({
+          phone: updates.phone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('auth_id', session?.user?.id)
+        .select('*')
+        .single();
+    
+      // console.log("userData", userData);
+      setUser(userData)
+      
+      if (error) throw error;
+      if (userError) throw userError;
+    
+      // ✅ Return SAME SHAPE as useCustomerProfile
+      return {
+        ...customerData,
+        phone: userData?.phone,
+      };
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.customers.byUser(session?.user?.id!),
+      });
+    },
+  });
+}
+
+// Upload profile image
+export function useUploadProfileImage() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+  const updateProfile = useUpdateCustomerProfile();
+
+  return useMutation({
+    mutationFn: async (imageUri: string) => {
+      if (!session?.user?.id) throw new Error('No user session');
+
+      try {
+        // Delete old profile image if exists
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('profile_image')
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (customerData?.profile_image) {
+          // Extract the file path from the URL
+          const urlParts = customerData.profile_image.split('/customers/');
+          if (urlParts.length > 1) {
+            const oldPath = urlParts[1];
+            await supabase.storage.from('customers').remove([oldPath]);
+          }
+        }
+
+        // Use File API to read image as base64
+        const localFile = new File(imageUri);
+        const base64 = await localFile.base64();
+
+        // Generate unique filename
+        const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${session.user.id}/${fileName}`;
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('customers')
+          .upload(filePath, decode(base64), {
+            contentType: `image/${fileExt}`,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw uploadError;
+        }
+
+        // Get public URL
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('customers').getPublicUrl(filePath);
+
+        return { publicUrl, filePath };
+      } catch (error) {
+        console.error('Upload error:', error);
+        throw error;
+      }
+    },
+    onSuccess: async ({ publicUrl }) => {
+      // Update customer profile with new image URL
+      await updateProfile.mutateAsync({
+        profile_image: publicUrl,
+        updated_at: new Date().toISOString(),
+      });
+      // Invalidate the query to refetch fresh data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.customers.byUser(session?.user?.id!),
+      });
+    },
+  });
+}
+
+
+//==========================================
+// 4. ADDRESS HOOKS
+//==========================================
+
+export const addressQueryKeys = {
+  all: ['customer-addresses'] as const,
+  byCustomer: (customerId: string) => ['customer-addresses', customerId] as const,
+  byId: (id: string) => ['customer-address', id] as const,
+};
+
+// Get customer ID helper
+const getCustomerId = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('user_id')
+    .eq('user_id', userId)
+    .single();
+  
+  if (error) throw error;
+  return data.user_id;
+};
+
+// Fetch all addresses for the current user
+export function useCustomerAddresses() {
+  const session = useAuthStore((state) => state.session);
+
+  return useQuery({
+    queryKey: addressQueryKeys.byCustomer(session?.user?.id!),
+    queryFn: async () => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      const customerId = await getCustomerId(session.user.id);
+
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as CustomerAddress[];
+    },
+    enabled: !!session?.user?.id,
+  });
+}
+
+// Fetch single address by ID
+export function useCustomerAddress(addressId: string) {
+  return useQuery({
+    queryKey: addressQueryKeys.byId(addressId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .select('*')
+        .eq('id', addressId)
+        .single();
+
+      if (error) throw error;
+      return data as CustomerAddress;
+    },
+    enabled: !!addressId,
+  });
+}
+
+// Create new address
+export function useCreateAddress() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async (updates: any) => {
+    mutationFn: async (address: CustomerAddressInsert) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+
+      console.log("address",address);
+      
+      const customerId = await getCustomerId(session.user.id);
+
+      // If this is set as default, unset all other defaults first
+      if (address.is_default) {
+        await supabase
+          .from('customer_addresses')
+          .update({ is_default: false })
+          .eq('customer_id', customerId);
+      }
+
       const { data, error } = await supabase
-        .from('customers')
-        .update(updates)
-        .eq('user_id', session?.user?.id)
+        .from('customer_addresses')
+        .insert({
+          customer_id: customerId,
+          ...address,
+        })
         .select()
         .single();
+
       if (error) throw error;
-      return data;
+      return data as CustomerAddress;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(
-        queryKeys.customers.byUser(session?.user?.id!),
-        data
-      );
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: addressQueryKeys.byCustomer(session?.user?.id!) 
+      });
     },
   });
 }
+
+// Update existing address
+export function useUpdateAddress() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({ 
+      id, 
+      updates 
+    }: { 
+      id: string; 
+      updates: CustomerAddressUpdate 
+    }) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      console.log("address",updates);
+      const customerId = await getCustomerId(session.user.id);
+
+      // If setting as default, unset all other defaults first
+      if (updates.is_default) {
+        await supabase
+          .from('customer_addresses')
+          .update({ is_default: false })
+          .eq('customer_id', customerId);
+      }
+
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('customer_id', customerId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as CustomerAddress;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: addressQueryKeys.byCustomer(session?.user?.id!) 
+      });
+      queryClient.setQueryData(addressQueryKeys.byId(data.id), data);
+    },
+  });
+}
+
+// Delete address
+export function useDeleteAddress() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      const customerId = await getCustomerId(session.user.id);
+
+      const { error } = await supabase
+        .from('customer_addresses')
+        .delete()
+        .eq('id', id)
+        .eq('customer_id', customerId);
+
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: addressQueryKeys.byCustomer(session?.user?.id!) 
+      });
+    },
+  });
+}
+
+// Set address as default
+export function useSetDefaultAddress() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      const customerId = await getCustomerId(session.user.id);
+
+      // Unset all defaults first
+      await supabase
+        .from('customer_addresses')
+        .update({ is_default: false })
+        .eq('customer_id', customerId);
+
+      // Set the selected address as default
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .update({ 
+          is_default: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('customer_id', customerId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as CustomerAddress;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: addressQueryKeys.byCustomer(session?.user?.id!) 
+      });
+    },
+  });
+}
+
+
 
 // ==========================================
 // 2. VENDOR HOOKS
@@ -195,9 +537,7 @@ export function useVendors(filters?: {
   return useQuery({
     queryKey: queryKeys.vendors.list(filters),
     queryFn: async () => {
-      let query = supabase
-        .from('vendors')
-        .select('*, users(email, phone)');
+      let query = supabase.from('vendors').select('*, users(email, phone)');
 
       if (filters?.city) {
         query = query.eq('city', filters.city);
@@ -253,10 +593,7 @@ export function useUpdateVendorProfile() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(
-        queryKeys.vendors.byUser(session?.user?.id!),
-        data
-      );
+      queryClient.setQueryData(queryKeys.vendors.byUser(session?.user?.id!), data);
       queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all });
     },
   });
@@ -271,10 +608,12 @@ export function useCategories() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('categories')
-        .select(`
+        .select(
+          `
           *,
           products:products(count)
-        `)
+        `
+        )
         .eq('is_active', true)
         .order('display_order', { ascending: true });
 
@@ -340,7 +679,6 @@ export function useSubCategories(categoryId: string) {
   });
 }
 
-
 /**
  * Get single subcategory details by ID
  */
@@ -371,7 +709,7 @@ export function useProductsBySubCategory(subCategoryId: string) {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('sub_category_id', subCategoryId)
+        .eq('sub_category_id', subCategoryId);
 
       if (error) throw error;
       return data;
@@ -384,7 +722,7 @@ export function useProductsBySubCategory(subCategoryId: string) {
 // ==========================================
 // 4. PRODUCT HOOKS
 // ==========================================
- 
+
 export function useProducts(filters?: {
   vendorId?: string;
   categoryId?: string;
@@ -426,9 +764,7 @@ export function useProducts(filters?: {
       const from = page * limit;
       const to = from + limit - 1;
 
-      const { data, error } = await query
-        .range(from, to)
-        .order('created_at', { ascending: false });
+      const { data, error } = await query.range(from, to).order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as Product[];
@@ -443,13 +779,15 @@ export function useProductDetail(productId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select(`
+        .select(
+          `
           *,
           vendors(*),
           categories(name, slug),
           sub_categories(name, slug),
           product_images(*)
-        `)
+        `
+        )
         .eq('id', productId)
         .single();
 
@@ -486,7 +824,7 @@ export function useInfiniteProducts(filters?: {
         .select('*, vendors(store_name, store_image), categories(name, slug)')
         .eq('is_available', true);
 
-      if (filters?.categoryId && filters?.categoryId!=="all") {
+      if (filters?.categoryId && filters?.categoryId !== 'all') {
         query = query.eq('category_id', filters.categoryId);
       }
       if (filters?.subCategoryId) {
@@ -505,9 +843,7 @@ export function useInfiniteProducts(filters?: {
         query = query.eq('is_featured', true);
       }
 
-      const { data, error } = await query
-        .range(from, to)
-        .order('created_at', { ascending: false });
+      const { data, error } = await query.range(from, to).order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as Product[];
@@ -518,8 +854,6 @@ export function useInfiniteProducts(filters?: {
     initialPageParam: 0,
   });
 }
-
-
 
 export function useProductReviews(productId: string) {
   return useQuery({
@@ -558,12 +892,15 @@ export function useSimilarProducts(productId: string, categoryId: string, limit:
   });
 }
 
-
 export function useCreateProduct() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
 
-  const uploadImage = async (imageUri: string, index: number, productSku: string): Promise<string> => {
+  const uploadImage = async (
+    imageUri: string,
+    index: number,
+    productSku: string
+  ): Promise<string> => {
     try {
       // New API - replace FileSystem.readAsStringAsync
       const localFile = new File(imageUri);
@@ -588,9 +925,7 @@ export function useCreateProduct() {
       }
 
       // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('vendors')
-        .getPublicUrl(data.path);
+      const { data: urlData } = supabase.storage.from('vendors').getPublicUrl(data.path);
 
       return urlData.publicUrl;
     } catch (error) {
@@ -600,7 +935,10 @@ export function useCreateProduct() {
   };
 
   return useMutation({
-    mutationFn: async ({ product, productImages }: {
+    mutationFn: async ({
+      product,
+      productImages,
+    }: {
       product: Omit<Product, 'id' | 'created_at' | 'updated_at' | 'image'>;
       productImages: Array<{
         uri: string;
@@ -624,8 +962,7 @@ export function useCreateProduct() {
 
       // Find primary image URL (first image by default)
       const primaryImageUrl =
-        uploadedImageUrls[productImages.findIndex((img) => img.isPrimary)] ||
-        uploadedImageUrls[0];
+        uploadedImageUrls[productImages.findIndex((img) => img.isPrimary)] || uploadedImageUrls[0];
 
       // Step 2: Create product record
       console.log('Creating product...');
@@ -682,9 +1019,7 @@ export function useCreateProduct() {
         is_primary: img.isPrimary,
       }));
 
-      const { error: imagesError } = await supabase
-        .from('product_images')
-        .insert(imageRecords);
+      const { error: imagesError } = await supabase.from('product_images').insert(imageRecords);
 
       if (imagesError) {
         console.error('Product images error:', imagesError);
@@ -706,7 +1041,6 @@ export function useCreateProduct() {
   });
 }
 
-
 export function useProductsByVendorId() {
   const vendorId = useAuthStore((state) => state.session?.user.id);
   return useQuery({
@@ -716,14 +1050,16 @@ export function useProductsByVendorId() {
 
       const { data, error } = await supabase
         .from('products')
-        .select('id,name,discount_price,stock_quantity,stock_status,is_available,image,categories(name)')
+        .select(
+          'id,name,discount_price,stock_quantity,stock_status,is_available,image,categories(name)'
+        )
         .eq('vendor_id', vendorId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       // Transform data to include stock status
-      return data
+      return data;
     },
     enabled: !!vendorId,
   });
@@ -732,11 +1068,10 @@ export function useProductsByVendorId() {
 export type ProductWithCategory = Product & {
   categories: {
     name: string;
-
   } | null;
   sub_categories: {
-    name: string
-  } | null
+    name: string;
+  } | null;
 };
 
 /**
@@ -792,7 +1127,6 @@ export function useProductImagesByProductId(productId: string) {
   });
 }
 
-
 /**
  * Hook to update a product
  */
@@ -803,10 +1137,10 @@ export function useUpdateProduct() {
   return useMutation({
     mutationFn: async ({
       productId,
-      updates
+      updates,
     }: {
       productId: string;
-      updates: Partial<Product>
+      updates: Partial<Product>;
     }) => {
       if (!vendorId) throw new Error('No vendor ID');
 
@@ -828,14 +1162,11 @@ export function useUpdateProduct() {
     },
     onSuccess: (data, variables) => {
       // Update the specific product detail cache
-      queryClient.setQueryData(
-        ['vendor-product', vendorId, variables.productId],
-        data
-      );
+      queryClient.setQueryData(['vendor-product', vendorId, variables.productId], data);
 
       // Invalidate products list to refresh
       queryClient.invalidateQueries({
-        queryKey: ['vendor-products', vendorId]
+        queryKey: ['vendor-products', vendorId],
       });
     },
   });
@@ -859,7 +1190,6 @@ export function useUploadProductImage() {
       isPrimary?: boolean;
     }) => {
       if (!vendorId) throw new Error('No vendor ID');
-
 
       // You'll need to get the SKU from the product
       // For now, we'll fetch it
@@ -892,9 +1222,9 @@ export function useUploadProductImage() {
       if (uploadError) throw uploadError;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('vendors')
-        .getPublicUrl(uploadData.path);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('vendors').getPublicUrl(uploadData.path);
 
       // Get the current highest display_order
       const { data: existingImages } = await supabase
@@ -904,9 +1234,8 @@ export function useUploadProductImage() {
         .order('display_order', { ascending: false })
         .limit(1);
 
-      const nextDisplayOrder = existingImages && existingImages.length > 0
-        ? existingImages[0].display_order + 1
-        : 0;
+      const nextDisplayOrder =
+        existingImages && existingImages.length > 0 ? existingImages[0].display_order + 1 : 0;
 
       // If this is marked as primary, unset other primary images first
       if (isPrimary) {
@@ -939,7 +1268,7 @@ export function useUploadProductImage() {
     onSuccess: (data, variables) => {
       // Invalidate product images cache
       queryClient.invalidateQueries({
-        queryKey: ['product-images', vendorId, variables.productId]
+        queryKey: ['product-images', vendorId, variables.productId],
       });
     },
   });
@@ -980,9 +1309,7 @@ export function useDeleteProductImage() {
         const filePath = urlParts[1];
 
         // Delete from storage (don't throw error if this fails, as DB record is already deleted)
-        await supabase.storage
-          .from('vendors')
-          .remove([filePath]);
+        await supabase.storage.from('vendors').remove([filePath]);
       }
 
       return { imageId };
@@ -990,7 +1317,7 @@ export function useDeleteProductImage() {
     onSuccess: (data, variables) => {
       // Invalidate product images cache
       queryClient.invalidateQueries({
-        queryKey: ['product-images', vendorId, variables.productId]
+        queryKey: ['product-images', vendorId, variables.productId],
       });
     },
   });
@@ -1029,7 +1356,7 @@ export function useUpdateImageOrder() {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['product-images', vendorId, variables.productId]
+        queryKey: ['product-images', vendorId, variables.productId],
       });
     },
   });
@@ -1043,13 +1370,7 @@ export function useSetPrimaryImage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      productId,
-      imageId,
-    }: {
-      productId: string;
-      imageId: string;
-    }) => {
+    mutationFn: async ({ productId, imageId }: { productId: string; imageId: string }) => {
       if (!vendorId) throw new Error('No vendor ID');
 
       // First, unset all other primary images for this product
@@ -1064,7 +1385,7 @@ export function useSetPrimaryImage() {
         .update({ is_primary: true })
         .eq('id', imageId)
         .eq('product_id', productId)
-        .select("*")
+        .select('*')
         .single();
 
       const { data: Product, error: ProductError } = await supabase
@@ -1088,7 +1409,6 @@ export function useSetPrimaryImage() {
     },
   });
 }
-
 
 // Inventory Quries and Mutations
 
@@ -1127,7 +1447,7 @@ export function useUpdateProductStock() {
   return useMutation({
     mutationFn: async ({
       productId,
-      stockQuantity
+      stockQuantity,
     }: {
       productId: string;
       stockQuantity: number;
@@ -1154,15 +1474,15 @@ export function useUpdateProductStock() {
     onSuccess: (data, variables) => {
       // Invalidate inventory cache
       queryClient.invalidateQueries({
-        queryKey: ['vendor-inventory', vendorId]
+        queryKey: ['vendor-inventory', vendorId],
       });
 
       // Also invalidate specific product cache
       queryClient.invalidateQueries({
-        queryKey: ['vendor-product', vendorId, variables.productId]
+        queryKey: ['vendor-product', vendorId, variables.productId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['vendor-product', vendorId]
+        queryKey: ['vendor-product', vendorId],
       });
     },
   });
@@ -1180,9 +1500,7 @@ export function useBulkUpdateStock() {
   //   { productId: '2', stockQuantity: 50 },
   // ]);
   return useMutation({
-    mutationFn: async (
-      updates: Array<{ productId: string; stockQuantity: number }>
-    ) => {
+    mutationFn: async (updates: Array<{ productId: string; stockQuantity: number }>) => {
       if (!vendorId) throw new Error('No vendor ID');
 
       const results = await Promise.all(
@@ -1224,12 +1542,11 @@ export function useBulkUpdateStock() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['vendor-inventory', vendorId]
+        queryKey: ['vendor-inventory', vendorId],
       });
     },
   });
 }
-
 
 /**
  * Hook to update product stock status to out of stock
@@ -1239,11 +1556,7 @@ export function useUpdateProductStockToOutOfStock() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      productId,
-    }: {
-      productId: string;
-    }) => {
+    mutationFn: async ({ productId }: { productId: string }) => {
       if (!vendorId) throw new Error('No vendor ID');
 
       const { data, error } = await supabase
@@ -1265,27 +1578,26 @@ export function useUpdateProductStockToOutOfStock() {
     onSuccess: (data, variables) => {
       // Invalidate inventory cache
       queryClient.invalidateQueries({
-        queryKey: ['vendor-inventory', vendorId]
+        queryKey: ['vendor-inventory', vendorId],
       });
 
       // Also invalidate specific product cache
       queryClient.invalidateQueries({
-        queryKey: ['vendor-product', vendorId]
+        queryKey: ['vendor-product', vendorId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['vendor-product', vendorId, variables.productId]
+        queryKey: ['vendor-product', vendorId, variables.productId],
       });
     },
   });
 }
 
-
-
 // Query Keys
 export const bankQueryKeys = {
   all: ['bank-details'] as const,
   vendor: (vendorId: string) => [...bankQueryKeys.all, 'vendor', vendorId] as const,
-  deliveryBoy: (deliveryBoyId: string) => [...bankQueryKeys.all, 'delivery-boy', deliveryBoyId] as const,
+  deliveryBoy: (deliveryBoyId: string) =>
+    [...bankQueryKeys.all, 'delivery-boy', deliveryBoyId] as const,
 };
 
 // ==================== VENDOR BANK QUERIES ====================
@@ -1357,10 +1669,10 @@ export function useAddVendorBankDetails() {
     onSuccess: (data) => {
       // Invalidate and refetch vendor bank details
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.vendor(data.vendor_id)
+        queryKey: bankQueryKeys.vendor(data.vendor_id),
       });
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.all
+        queryKey: bankQueryKeys.all,
       });
     },
   });
@@ -1409,10 +1721,10 @@ export function useUpdateVendorBankDetails() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.vendor(data.vendor_id)
+        queryKey: bankQueryKeys.vendor(data.vendor_id),
       });
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.all
+        queryKey: bankQueryKeys.all,
       });
     },
   });
@@ -1437,10 +1749,10 @@ export function useDeleteVendorBankDetails() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.vendor(variables.vendor_id)
+        queryKey: bankQueryKeys.vendor(variables.vendor_id),
       });
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.all
+        queryKey: bankQueryKeys.all,
       });
     },
   });
@@ -1450,7 +1762,7 @@ export function useDeleteVendorBankDetails() {
 
 /**
  * Hook to fetch delivery boy bank details
-  * @param deliveryBoyId - The delivery boy's ID
+ * @param deliveryBoyId - The delivery boy's ID
  */
 export function useDeliveryBoyBankDetails(deliveryBoyId: string) {
   return useQuery({
@@ -1513,10 +1825,10 @@ export function useAddDeliveryBoyBankDetails() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id)
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id),
       });
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.all
+        queryKey: bankQueryKeys.all,
       });
     },
   });
@@ -1564,16 +1876,14 @@ export function useUpdateDeliveryBoyBankDetails() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id)
+        queryKey: bankQueryKeys.deliveryBoy(data.delivery_boy_id),
       });
       queryClient.invalidateQueries({
-        queryKey: bankQueryKeys.all
+        queryKey: bankQueryKeys.all,
       });
     },
   });
 }
-
-
 
 // Query Keys
 export const kycQueryKeys = {
@@ -1664,12 +1974,16 @@ export function useKycSummary(userId: string, userType: KycUserType) {
 
   const summary = {
     total: documents?.length || 0,
-    verified: documents?.filter(d => d.status === 'verified' || d.status === 'approved').length || 0,
-    pending: documents?.filter(d => d.status === 'pending').length || 0,
-    rejected: documents?.filter(d => d.status === 'rejected').length || 0,
-    notUploaded: documents?.filter(d => d.status === 'not_uploaded').length || 0,
-    required: documents?.filter(d => d.is_required).length || 0,
-    requiredVerified: documents?.filter(d => d.is_required && (d.status === 'verified' || d.status === 'approved')).length || 0,
+    verified:
+      documents?.filter((d) => d.status === 'verified' || d.status === 'approved').length || 0,
+    pending: documents?.filter((d) => d.status === 'pending').length || 0,
+    rejected: documents?.filter((d) => d.status === 'rejected').length || 0,
+    notUploaded: documents?.filter((d) => d.status === 'not_uploaded').length || 0,
+    required: documents?.filter((d) => d.is_required).length || 0,
+    requiredVerified:
+      documents?.filter(
+        (d) => d.is_required && (d.status === 'verified' || d.status === 'approved')
+      ).length || 0,
     progress: 0,
     isComplete: false,
   };
@@ -1727,9 +2041,9 @@ export function useUploadKycDocument() {
         console.log('Upload successful:', uploadData);
 
         // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('vendors')
-          .getPublicUrl(filePath);
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('vendors').getPublicUrl(filePath);
 
         documentUrl = publicUrl;
         console.log('Public URL:', publicUrl);
@@ -1786,13 +2100,13 @@ export function useUploadKycDocument() {
     onSuccess: (data) => {
       // Invalidate relevant queries
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byDocument(data.user_id, data.document_type)
+        queryKey: kycQueryKeys.byDocument(data.user_id, data.document_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -1805,10 +2119,7 @@ export function useUpdateKycDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: {
-      id: string;
-      updates: KycDocumentUpdate;
-    }) => {
+    mutationFn: async (input: { id: string; updates: KycDocumentUpdate }) => {
       const { data, error } = await supabase
         .from('kyc_documents')
         .update({
@@ -1824,13 +2135,13 @@ export function useUpdateKycDocument() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.single(data.id)
+        queryKey: kycQueryKeys.single(data.id),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -1857,9 +2168,7 @@ export function useDeleteKycDocument() {
         if (urlParts.length > 1) {
           const filePath = urlParts[1]; // {vendorId}/kycDocuments/{filename}
 
-          const { error: storageError } = await supabase.storage
-            .from('vendors')
-            .remove([filePath]);
+          const { error: storageError } = await supabase.storage.from('vendors').remove([filePath]);
 
           // Don't throw on storage error, continue with DB deletion
           if (storageError) {
@@ -1880,10 +2189,10 @@ export function useDeleteKycDocument() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(variables.userId, variables.userType)
+        queryKey: kycQueryKeys.byUser(variables.userId, variables.userType),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -1913,12 +2222,9 @@ export function useReplaceKycDocument() {
           if (urlParts.length > 1) {
             const filePath = urlParts[1];
 
-            await supabase.storage
-              .from('vendors')
-              .remove([filePath]);
+            await supabase.storage.from('vendors').remove([filePath]);
           }
         }
-
 
         // Extract file extension
         const fileExt = input.imageUri.split('.').pop() || 'jpg';
@@ -1942,9 +2248,9 @@ export function useReplaceKycDocument() {
 
         console.log('Replace upload successful:', uploadData);
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('vendors')
-          .getPublicUrl(filePath);
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('vendors').getPublicUrl(filePath);
 
         // Update document record
         const { data, error } = await supabase
@@ -1972,13 +2278,13 @@ export function useReplaceKycDocument() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.single(data.id)
+        queryKey: kycQueryKeys.single(data.id),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -1994,10 +2300,7 @@ export function useVerifyKycDocument() {
   const session = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async (input: {
-      documentId: string;
-      status: 'verified' | 'approved';
-    }) => {
+    mutationFn: async (input: { documentId: string; status: 'verified' | 'approved' }) => {
       const { data, error } = await supabase
         .from('kyc_documents')
         .update({
@@ -2016,13 +2319,13 @@ export function useVerifyKycDocument() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.single(data.id)
+        queryKey: kycQueryKeys.single(data.id),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -2036,10 +2339,7 @@ export function useRejectKycDocument() {
   const session = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async (input: {
-      documentId: string;
-      rejectionReason: string;
-    }) => {
+    mutationFn: async (input: { documentId: string; rejectionReason: string }) => {
       const { data, error } = await supabase
         .from('kyc_documents')
         .update({
@@ -2058,13 +2358,13 @@ export function useRejectKycDocument() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type)
+        queryKey: kycQueryKeys.byUser(data.user_id, data.user_type),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.single(data.id)
+        queryKey: kycQueryKeys.single(data.id),
       });
       queryClient.invalidateQueries({
-        queryKey: kycQueryKeys.all
+        queryKey: kycQueryKeys.all,
       });
     },
   });
@@ -2096,28 +2396,27 @@ export function useDocumentStatus(userId: string, documentType: KycDocumentType)
   };
 }
 
-
 // ─── Query Keys ──────────────────────────────────────────────────────────────
 
 export const offerQueryKeys = {
   offers: {
-    all: ["offers"] as const,
-    active: ["offers", "active"] as const,
-    detail: (offerId: string) => ["offers", "detail", offerId] as const,
+    all: ['offers'] as const,
+    active: ['offers', 'active'] as const,
+    detail: (offerId: string) => ['offers', 'detail', offerId] as const,
   },
   offerProducts: {
     // products linked via offer_products junction (applicable_to = 'product')
-    byOffer: (offerId: string) => ["offer-products", offerId] as const,
+    byOffer: (offerId: string) => ['offer-products', offerId] as const,
   },
   products: {
-    byCategory: (categoryId: string) => ["products", "by-category", categoryId] as const,
-    byVendor: (vendorId: string) => ["products", "by-vendor", vendorId] as const,
+    byCategory: (categoryId: string) => ['products', 'by-category', categoryId] as const,
+    byVendor: (vendorId: string) => ['products', 'by-vendor', vendorId] as const,
   },
   productOffers: {
     // all offers that apply to a given product (junction + category + vendor)
-    byProduct: (productId: string) => ["product-offers", productId] as const,
+    byProduct: (productId: string) => ['product-offers', productId] as const,
   },
-} as const
+} as const;
 
 // ─── 1. useOffers — All active offers (AllOffersScreen) ─────────────────────
 
@@ -2126,55 +2425,66 @@ export const offerQueryKeys = {
 async function countByCategory(categoryId: string): Promise<number> {
   // 1. resolve all active sub_category ids under this category
   const { data: subCats, error: e1 } = await supabase
-    .from("sub_categories")
-    .select("id")
-    .eq("category_id", categoryId)
-    .eq("is_active", true)
+    .from('sub_categories')
+    .select('id')
+    .eq('category_id', categoryId)
+    .eq('is_active', true);
 
-  if (e1) throw e1
-  if (subCats.length === 0) return 0
+  if (e1) throw e1;
+  if (subCats.length === 0) return 0;
 
   // 2. count products that belong to any of those sub_categories
   const { count, error: e2 } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("is_available", true)
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_available', true)
     // .neq("stock_status", "out_of_stock")
-    .in("sub_category_id", subCats.map((s: any) => s.id))
+    .in(
+      'sub_category_id',
+      subCats.map((s: any) => s.id)
+    );
 
-  if (e2) throw e2
-  return count ?? 0
+  if (e2) throw e2;
+  return count ?? 0;
 }
 
 async function countByVendor(vendorId: string): Promise<number> {
   const { count, error } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("vendor_id", vendorId)
-    .eq("is_available", true)
-    // .neq("stock_status", "out_of_stock")
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('vendor_id', vendorId)
+    .eq('is_available', true);
+  // .neq("stock_status", "out_of_stock")
 
-  if (error) throw error
-  return count ?? 0
+  if (error) throw error;
+  return count ?? 0;
 }
 
 async function countByOfferProducts(offerId: string): Promise<number> {
   // count rows in the junction table for this offer
   const { count, error } = await supabase
-    .from("offer_products")
-    .select("id", { count: "exact", head: true })
-    .eq("offer_id", offerId)
+    .from('offer_products')
+    .select('id', { count: 'exact', head: true })
+    .eq('offer_id', offerId);
 
-  if (error) throw error
-  return count ?? 0
+  if (error) throw error;
+  return count ?? 0;
 }
 
-async function getProductCount(offer: { id: string; applicable_to: string; applicable_id?: string | null }): Promise<number> {
+async function getProductCount(offer: {
+  id: string;
+  applicable_to: string;
+  applicable_id?: string | null;
+}): Promise<number> {
   switch (offer.applicable_to) {
-    case "category": return offer.applicable_id ? countByCategory(offer.applicable_id) : 0
-    case "vendor":   return offer.applicable_id ? countByVendor(offer.applicable_id)   : 0
-    case "product":  return countByOfferProducts(offer.id)
-    default:         return 0
+    case 'category':
+      return offer.applicable_id ? countByCategory(offer.applicable_id) : 0;
+    case 'vendor':
+      return offer.applicable_id ? countByVendor(offer.applicable_id) : 0;
+    case 'product':
+      return countByOfferProducts(offer.id);
+    default:
+      return 0;
   }
 }
 
@@ -2186,7 +2496,7 @@ export function useOffers() {
     queryFn: async () => {
       // Phase 1: fetch all active offers
       const { data, error } = await supabase
-        .from("offers")
+        .from('offers')
         .select(
           `
           id,
@@ -2207,61 +2517,64 @@ export function useOffers() {
           banner_image
         `
         )
-        .eq("is_active", true)
-        .lte("start_date", new Date().toISOString())
+        .eq('is_active', true)
+        .lte('start_date', new Date().toISOString())
         .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-        .order("display_order", { ascending: true })
+        .order('display_order', { ascending: true });
 
-      if (error) throw error
+      if (error) throw error;
 
       // Phase 2: batch-resolve product counts in parallel
       //   • category / vendor  → dedupe by applicable_id (same target = same count)
       //   • product            → keyed by offer.id (each offer has its own junction rows)
 
-      const sharedIds = new Map<string, { id: string; applicable_to: string; applicable_id: string }>()
-      const productOfferIds: string[] = []
+      const sharedIds = new Map<
+        string,
+        { id: string; applicable_to: string; applicable_id: string }
+      >();
+      const productOfferIds: string[] = [];
 
       for (const offer of data) {
-        if (offer.applicable_to === "product") {
-          productOfferIds.push(offer.id)
+        if (offer.applicable_to === 'product') {
+          productOfferIds.push(offer.id);
         } else if (offer.applicable_id && !sharedIds.has(offer.applicable_id)) {
           sharedIds.set(offer.applicable_id, {
             id: offer.id,
             applicable_to: offer.applicable_to,
             applicable_id: offer.applicable_id,
-          })
+          });
         }
       }
 
-      const countMap = new Map<string, number>()
+      const countMap = new Map<string, number>();
 
       // shared counts (category / vendor) — deduplicated
       await Promise.all(
         Array.from(sharedIds.values()).map(async (entry) => {
-          const count = await getProductCount(entry)
-          countMap.set(entry.applicable_id, count)
+          const count = await getProductCount(entry);
+          countMap.set(entry.applicable_id, count);
         })
-      )
+      );
 
       // junction counts (product) — one per offer
       await Promise.all(
         productOfferIds.map(async (offerId) => {
-          const count = await countByOfferProducts(offerId)
-          countMap.set(offerId, count)
+          const count = await countByOfferProducts(offerId);
+          countMap.set(offerId, count);
         })
-      )
+      );
 
       // Phase 3: attach the resolved count to each offer
       return data.map((offer: any) => ({
         ...offer,
         item_count:
-          offer.applicable_to === "product"
+          offer.applicable_to === 'product'
             ? (countMap.get(offer.id) ?? 0)
             : (countMap.get(offer.applicable_id) ?? 0),
-      })) as Offer[]
+      })) as Offer[];
     },
     staleTime: 1000 * 60 * 10, // 10 min
-  })
+  });
 }
 
 // ─── 2. useOfferDetail — Single offer row (OfferScreen header) ──────────────
@@ -2271,18 +2584,18 @@ export function useOfferDetail(offerId: string) {
     queryKey: offerQueryKeys.offers.detail(offerId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("offers")
-        .select("*")
-        .eq("id", offerId)
-        .eq("is_active", true)
-        .single()
+        .from('offers')
+        .select('*')
+        .eq('id', offerId)
+        .eq('is_active', true)
+        .single();
 
-      if (error) throw error
-      return data as Offer
+      if (error) throw error;
+      return data as Offer;
     },
     enabled: !!offerId,
     staleTime: 1000 * 60 * 10,
-  })
+  });
 }
 
 // ─── 3. useOfferProductsByCategory — Products via category (applicable_to = 'category') ─
@@ -2293,16 +2606,16 @@ export function useOfferProductsByCategory(categoryId: string, enabled: boolean 
     queryFn: async () => {
       // resolve all active sub_category ids under this category
       const { data: subCats, error: subErr } = await supabase
-        .from("sub_categories")
-        .select("id")
-        .eq("category_id", categoryId)
-        .eq("is_active", true)
+        .from('sub_categories')
+        .select('id')
+        .eq('category_id', categoryId)
+        .eq('is_active', true);
 
-      if (subErr) throw subErr
-      if (subCats.length === 0) return []
+      if (subErr) throw subErr;
+      if (subCats.length === 0) return [];
 
       const { data, error } = await supabase
-        .from("products")
+        .from('products')
         .select(
           `
           id,
@@ -2329,17 +2642,20 @@ export function useOfferProductsByCategory(categoryId: string, enabled: boolean 
           vendor_id
         `
         )
-        .eq("is_available", true)
+        .eq('is_available', true)
         // .neq("stock_status", "out_of_stock")
-        .in("sub_category_id", subCats.map((s: any) => s.id))
-        .order("is_featured", { ascending: false })
+        .in(
+          'sub_category_id',
+          subCats.map((s: any) => s.id)
+        )
+        .order('is_featured', { ascending: false });
 
-      if (error) throw error
-      return data
+      if (error) throw error;
+      return data;
     },
     enabled: enabled && !!categoryId,
     staleTime: 1000 * 60 * 5,
-  })
+  });
 }
 
 // ─── 4. useOfferProductsByVendor — Products via vendor (applicable_to = 'vendor') ─
@@ -2349,7 +2665,7 @@ export function useOfferProductsByVendor(vendorId: string, enabled: boolean = tr
     queryKey: offerQueryKeys.products.byVendor(vendorId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
+        .from('products')
         .select(
           `
           id,
@@ -2376,17 +2692,17 @@ export function useOfferProductsByVendor(vendorId: string, enabled: boolean = tr
           vendor_id
         `
         )
-        .eq("vendor_id", vendorId)
-        .eq("is_available", true)
+        .eq('vendor_id', vendorId)
+        .eq('is_available', true)
         // .neq("stock_status", "out_of_stock")
-        .order("is_featured", { ascending: false })
+        .order('is_featured', { ascending: false });
 
-      if (error) throw error
-      return data
+      if (error) throw error;
+      return data;
     },
     enabled: enabled && !!vendorId,
     staleTime: 1000 * 60 * 5,
-  })
+  });
 }
 
 // ─── 5. useOfferProductsByJunction — Products via offer_products (applicable_to = 'product') ─
@@ -2397,18 +2713,18 @@ export function useOfferProductsByJunction(offerId: string, enabled: boolean = t
     queryFn: async () => {
       // 1. get all product_ids linked to this offer
       const { data: rows, error: e1 } = await supabase
-        .from("offer_products")
-        .select("product_id")
-        .eq("offer_id", offerId)
+        .from('offer_products')
+        .select('product_id')
+        .eq('offer_id', offerId);
 
-      if (e1) throw e1
-      if (rows.length === 0) return []
+      if (e1) throw e1;
+      if (rows.length === 0) return [];
 
-      const productIds = rows.map((r: any) => r.product_id)
+      const productIds = rows.map((r: any) => r.product_id);
 
       // 2. fetch the actual products (only available + in stock)
       const { data, error: e2 } = await supabase
-        .from("products")
+        .from('products')
         .select(
           `
           id,
@@ -2435,16 +2751,16 @@ export function useOfferProductsByJunction(offerId: string, enabled: boolean = t
           vendor_id
         `
         )
-        .in("id", productIds)
-        .eq("is_available", true)
-        // .neq("stock_status", "out_of_stock")
+        .in('id', productIds)
+        .eq('is_available', true);
+      // .neq("stock_status", "out_of_stock")
 
-      if (e2) throw e2
-      return data
+      if (e2) throw e2;
+      return data;
     },
     enabled: enabled && !!offerId,
     staleTime: 1000 * 60 * 5,
-  })
+  });
 }
 
 // ─── 6. useOfferProductsFetcher — Orchestrator hook (used inside OfferScreen) ─
@@ -2453,28 +2769,43 @@ export function useOfferProductsByJunction(offerId: string, enabled: boolean = t
 // three product queries.  Consumers get a single { products, isLoading, error }.
 
 export function useOfferProductsFetcher(offer: Offer | undefined) {
-  const applicableTo = offer?.applicable_to
-  const applicableId = offer?.applicable_id
+  const applicableTo = offer?.applicable_to;
+  const applicableId = offer?.applicable_id;
 
   // 'category' → products via sub_categories.category_id
-  const categoryEnabled = !!offer && applicableTo === "category" && !!applicableId
-  const categoryQuery = useOfferProductsByCategory(applicableId ?? "", categoryEnabled)
+  const categoryEnabled = !!offer && applicableTo === 'category' && !!applicableId;
+  const categoryQuery = useOfferProductsByCategory(applicableId ?? '', categoryEnabled);
 
   // 'vendor' → products via vendor_id
-  const vendorEnabled = !!offer && applicableTo === "vendor" && !!applicableId
-  const vendorQuery = useOfferProductsByVendor(applicableId ?? "", vendorEnabled)
+  const vendorEnabled = !!offer && applicableTo === 'vendor' && !!applicableId;
+  const vendorQuery = useOfferProductsByVendor(applicableId ?? '', vendorEnabled);
 
   // 'product' → products via offer_products junction table
-  const junctionEnabled = !!offer && applicableTo === "product"
-  const junctionQuery = useOfferProductsByJunction(offer?.id ?? "", junctionEnabled)
+  const junctionEnabled = !!offer && applicableTo === 'product';
+  const junctionQuery = useOfferProductsByJunction(offer?.id ?? '', junctionEnabled);
 
   // Pick the active query result
-  if (categoryEnabled) return { products: categoryQuery.data ?? [], isLoading: categoryQuery.isLoading, error: categoryQuery.error }
-  if (vendorEnabled)   return { products: vendorQuery.data ?? [],   isLoading: vendorQuery.isLoading,   error: vendorQuery.error }
-  if (junctionEnabled) return { products: junctionQuery.data ?? [], isLoading: junctionQuery.isLoading, error: junctionQuery.error }
+  if (categoryEnabled)
+    return {
+      products: categoryQuery.data ?? [],
+      isLoading: categoryQuery.isLoading,
+      error: categoryQuery.error,
+    };
+  if (vendorEnabled)
+    return {
+      products: vendorQuery.data ?? [],
+      isLoading: vendorQuery.isLoading,
+      error: vendorQuery.error,
+    };
+  if (junctionEnabled)
+    return {
+      products: junctionQuery.data ?? [],
+      isLoading: junctionQuery.isLoading,
+      error: junctionQuery.error,
+    };
 
   // offer not yet loaded
-  return { products: [], isLoading: true, error: null }
+  return { products: [], isLoading: true, error: null };
 }
 
 // ─── 7. useProductOffers — All offers that apply to a given product ─────────
@@ -2487,70 +2818,70 @@ export function useProductOffers(productId: string) {
     queryFn: async () => {
       // ── 1. offers where this product is in the junction table ──
       const { data: junctionRows, error: e1 } = await supabase
-        .from("offer_products")
-        .select("offer_id")
-        .eq("product_id", productId)
+        .from('offer_products')
+        .select('offer_id')
+        .eq('product_id', productId);
 
-      if (e1) throw e1
+      if (e1) throw e1;
 
-      let junctionOffers: any[] = []
+      let junctionOffers: any[] = [];
       if (junctionRows.length > 0) {
-        const offerIds = junctionRows.map((r: any) => r.offer_id)
+        const offerIds = junctionRows.map((r: any) => r.offer_id);
         const { data, error: e2 } = await supabase
-          .from("offers")
-          .select("id, title, discount_type, discount_value, offer_type")
-          .in("id", offerIds)
-          .eq("is_active", true)
+          .from('offers')
+          .select('id, title, discount_type, discount_value, offer_type')
+          .in('id', offerIds)
+          .eq('is_active', true);
 
-        if (e2) throw e2
-        junctionOffers = data
+        if (e2) throw e2;
+        junctionOffers = data;
       }
 
       // ── 2. offers scoped to the product's category ──
       const { data: product, error: e3 } = await supabase
-        .from("products")
-        .select("category_id, sub_category_id, vendor_id")
-        .eq("id", productId)
-        .single()
+        .from('products')
+        .select('category_id, sub_category_id, vendor_id')
+        .eq('id', productId)
+        .single();
 
-      if (e3) throw e3
+      if (e3) throw e3;
 
       const { data: categoryOffers, error: e4 } = await supabase
-        .from("offers")
-        .select("id, title, discount_type, discount_value, offer_type")
-        .eq("applicable_to", "category")
-        .eq("applicable_id", product.category_id)
-        .eq("is_active", true)
+        .from('offers')
+        .select('id, title, discount_type, discount_value, offer_type')
+        .eq('applicable_to', 'category')
+        .eq('applicable_id', product.category_id)
+        .eq('is_active', true);
 
-      if (e4) throw e4
+      if (e4) throw e4;
 
       // ── 3. offers scoped to the product's vendor ──
-      let vendorOffers: any[] = []
+      let vendorOffers: any[] = [];
       if (product.vendor_id) {
         const { data: vOffers, error: e5 } = await supabase
-          .from("offers")
-          .select("id, title, discount_type, discount_value, offer_type")
-          .eq("applicable_to", "vendor")
-          .eq("applicable_id", product.vendor_id)
-          .eq("is_active", true)
+          .from('offers')
+          .select('id, title, discount_type, discount_value, offer_type')
+          .eq('applicable_to', 'vendor')
+          .eq('applicable_id', product.vendor_id)
+          .eq('is_active', true);
 
-        if (e5) throw e5
-        vendorOffers = vOffers
+        if (e5) throw e5;
+        vendorOffers = vOffers;
       }
 
       // ── merge & dedupe by offer id ──
-      const seen = new Set<string>()
-      const unique: ProductOffer[] = []
+      const seen = new Set<string>();
+      const unique: ProductOffer[] = [];
       for (const o of [...junctionOffers, ...categoryOffers, ...vendorOffers]) {
         if (!seen.has(o.id)) {
-          seen.add(o.id)
-          unique.push(o as ProductOffer)
+          seen.add(o.id);
+          unique.push(o as ProductOffer);
         }
       }
 
-      return unique
+      return unique;
     },
     enabled: !!productId,
     staleTime: 1000 * 60 * 5,
-  })
+  });
 }

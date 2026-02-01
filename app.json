@@ -21,8 +21,15 @@
         {
           "photosPermission": "Please grant permissions to upload images."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location for accurate delivery addresses."
+        }
       ]
     ],
+    
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true
@@ -39,14 +46,22 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to help you add accurate delivery addresses.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to help you add accurate delivery addresses."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.sahilkr2909.SrMart"
+      "package": "com.sahilkr2909.SrMart",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "extra": {
       "router": {},
