@@ -15,6 +15,8 @@ export default function Index() {
   const { initialized } = useAuthStore();
   const { user } = useProfileStore();
 
+  
+
   const [loading, setLoading] = useState(true);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [index, setIndex] = useState(0);
