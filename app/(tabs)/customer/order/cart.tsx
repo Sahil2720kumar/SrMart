@@ -14,8 +14,6 @@ import { BlurView } from "expo-blur"
 import { useCustomerAddresses, useProducts } from "@/hooks/queries"
 import { FullPageError } from "@/components/ErrorComp"
 
-
-
 export default function CartScreen() {
   const { data: recommendedProducts = [], isLoading: isLoadingRecommendedProducts, isError: isErrorRecommendedProducts } = useProducts()
   const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
@@ -42,8 +40,6 @@ export default function CartScreen() {
   const handleNavigateToCoupon = useCallback(() => {
     router.push("/customer/order/discount-coupon")
   }, []);
-
-
 
   if (isLoadingAddresses || isLoadingRecommendedProducts) {
     return (
@@ -183,8 +179,8 @@ export default function CartScreen() {
                 <Feather name="home" size={24} color="#16a34a" />
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress.label}</Text>
-                <Text className="text-xs text-gray-500 mt-1">{selectedAddress.address_line1}</Text>
+                <Text className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress?.label || 'Home'}</Text>
+                <Text className="text-xs text-gray-500 mt-1">{selectedAddress?.address_line1 || 'Select address'}</Text>
               </View>
             </View>
             <View>

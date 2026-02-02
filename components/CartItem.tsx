@@ -1,6 +1,7 @@
 import { CartProduct } from "@/store/cartStore";
 import { blurhash, Product } from "@/types/categories-products.types";
 import { Image } from "expo-image";
+import { memo } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
 
@@ -51,4 +52,4 @@ const CartItemComp = ({ item, cart, wishlist, toggleWishlist, updateQuantity, ad
   )
 }
 
-export default CartItemComp
+export default memo(CartItemComp)

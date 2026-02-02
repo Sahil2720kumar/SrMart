@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { Product } from '@/types/categories-products.types';
+import useDiscountStore from './useDiscountStore';
 
 /* =======================
    TYPES
@@ -87,13 +88,18 @@ const useCartStore = create<CartState>()(
       },
 
       /* ---------- CLEAR CART ---------- */
-      clearCart: () =>
+      clearCart: () => {
         set({
           cart: new Map(),
           cartItems: [],
           totalItems: 0,
           totalPrice: 0,
-        }),
+        });
+
+        // Clear discount when cart is cleared
+        const discountStore = useDiscountStore.getState();
+        discountStore.removeDiscount();
+      },
     }),
     {
       name: 'cart-store',
@@ -109,16 +115,11 @@ const useCartStore = create<CartState>()(
       merge: (persistedState: any, currentState) => {
         if (!persistedState?.cart) return currentState;
 
-        const restoredCart = new Map<string, CartProduct>(
-          persistedState.cart
-        );
+        const restoredCart = new Map<string, CartProduct>(persistedState.cart);
 
         const cartItems = Array.from(restoredCart.values());
 
-        const totalItems = cartItems.reduce(
-          (sum, item) => sum + item.quantity,
-          0
-        );
+        const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
         const totalPrice = cartItems.reduce(
           (sum, item) => sum + item.product?.discount_price! * item.quantity,
@@ -141,16 +142,10 @@ const useCartStore = create<CartState>()(
    HELPERS
 ======================= */
 
-function recalcAndSet(
-  cart: Map<string, CartProduct>,
-  set: (state: Partial<CartState>) => void
-) {
+function recalcAndSet(cart: Map<string, CartProduct>, set: (state: Partial<CartState>) => void) {
   const cartItems = Array.from(cart.values());
 
-  const totalItems = cartItems.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  );
+  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const totalPrice = cartItems.reduce(
     (sum, item) => sum + item.product?.discount_price! * item.quantity,
@@ -163,6 +158,19 @@ function recalcAndSet(
     totalItems,
     totalPrice,
   });
+
+  // Validate and recalculate discount after cart changes
+
+  const discountStore = useDiscountStore.getState();
+  
+  console.log(discountStore.validateDiscount(totalPrice, cartItems));
+  
+  if (discountStore.validateDiscount(totalPrice, cartItems)) {
+    discountStore.recalculateDiscount(totalPrice, cartItems);
+    return;
+  } else {
+    discountStore.removeDiscount();
+  }
 }
 
 export default useCartStore;

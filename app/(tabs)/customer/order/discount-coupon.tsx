@@ -9,12 +9,14 @@ import {
   useValidateCoupon,
   calculateCouponDiscount,
 } from '@/hooks/queries/orders';
+import { useFilteredCoupons, getCouponSuggestions } from '@/hooks/queries/Usefilteredcoupons';
 import { Coupon } from '@/types/offers.types';
 
 export default function DiscountCouponScreen() {
   const [couponCode, setCouponCode] = useState('');
   const [error, setError] = useState('');
 
+  const cartItems = useCartStore((s) => s.cartItems);
   const totalPrice = useCartStore((s) => s.totalPrice);
   const {
     discountAmount,
@@ -26,6 +28,16 @@ export default function DiscountCouponScreen() {
   const { data: coupons, isLoading } = useActiveCoupons();
   const validateCoupon = useValidateCoupon();
 
+  // Use the filtered coupons hook
+  const { filterCoupons, loadingCategories } = useFilteredCoupons(
+    cartItems,
+    totalPrice,
+    calculateCouponDiscount
+  );
+
+  const { eligible: eligibleCoupons, ineligible: ineligibleCoupons } =
+    filterCoupons(coupons);
+
   const finalAmount = Math.max(totalPrice - discountAmount, 0);
 
   const handleApplyCoupon = async (coupon: Coupon) => {
@@ -35,13 +47,15 @@ export default function DiscountCouponScreen() {
         orderAmount: totalPrice,
       });
 
-      // Apply to store
       applyDiscount(
         coupon.code,
         coupon.discount_type === 'percentage' ? 'percent' : 'flat',
         totalPrice,
         coupon.discount_value,
-        coupon.max_discount_amount
+        coupon.max_discount_amount,
+        coupon.min_order_amount,
+        coupon.applicable_to,
+        coupon.applicable_id
       );
 
       setError('');
@@ -61,7 +75,6 @@ export default function DiscountCouponScreen() {
 
       const coupon = result.coupon;
 
-      // Apply to store
       applyDiscount(
         coupon.code,
         coupon.discount_type === 'percentage' ? 'percent' : 'flat',
@@ -94,21 +107,221 @@ export default function DiscountCouponScreen() {
     return 'FREE SHIPPING';
   };
 
+  const renderCouponCard = (
+    coupon: Coupon,
+    discount: number,
+    isEligible: boolean,
+    eligibilityReason?: string,
+    conflictingItems?: Array<{ id: string; name: string }>
+  ) => {
+    const isSelected = activeDiscount?.code === coupon.code;
+    const remainingUses = coupon.usage_limit
+      ? coupon.usage_limit - coupon.usage_count
+      : null;
+
+    return (
+      <View
+        key={coupon.id}
+        className={`border rounded-2xl overflow-hidden ${isSelected
+            ? 'border-green-500 bg-green-50'
+            : isEligible
+              ? 'border-gray-200 bg-white'
+              : 'border-gray-200 bg-gray-50 opacity-75'
+          }`}
+      >
+        {/* Coupon Header */}
+        <View className="flex-row items-start p-4">
+          <View
+            className={`w-14 h-14 rounded-xl items-center justify-center ${coupon.discount_type === 'percentage'
+                ? isEligible ? 'bg-purple-100' : 'bg-gray-100'
+                : coupon.discount_type === 'flat'
+                  ? isEligible ? 'bg-blue-100' : 'bg-gray-100'
+                  : isEligible ? 'bg-orange-100' : 'bg-gray-100'
+              }`}
+          >
+            <Feather
+              name={
+                coupon.discount_type === 'percentage'
+                  ? 'percent'
+                  : coupon.discount_type === 'flat'
+                    ? 'tag'
+                    : 'truck'
+              }
+              size={24}
+              color={
+                isEligible
+                  ? coupon.discount_type === 'percentage'
+                    ? '#9333ea'
+                    : coupon.discount_type === 'flat'
+                      ? '#2563eb'
+                      : '#ea580c'
+                  : '#9ca3af'
+              }
+            />
+          </View>
+
+          <View className="flex-1 ml-3">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-base font-bold text-gray-900 flex-1">
+                {getDiscountLabel(coupon)}
+              </Text>
+              {remainingUses && remainingUses < 10 && (
+                <View className="bg-orange-100 px-2 py-0.5 rounded-full">
+                  <Text className="text-orange-700 text-xs font-semibold">
+                    {remainingUses} left
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {coupon.description && (
+              <Text className="text-sm text-gray-600 mt-0.5 mb-2">
+                {coupon.description}
+              </Text>
+            )}
+
+            <View className="flex-row items-center mt-2 flex-wrap gap-2">
+              <View
+                className={`px-2.5 py-1 rounded-md ${isEligible
+                    ? coupon.discount_type === 'percentage'
+                      ? 'bg-purple-100'
+                      : coupon.discount_type === 'flat'
+                        ? 'bg-blue-100'
+                        : 'bg-orange-100'
+                    : 'bg-gray-200'
+                  }`}
+              >
+                <Text
+                  className={`text-xs font-bold ${isEligible
+                      ? coupon.discount_type === 'percentage'
+                        ? 'text-purple-700'
+                        : coupon.discount_type === 'flat'
+                          ? 'text-blue-700'
+                          : 'text-orange-700'
+                      : 'text-gray-700'
+                    }`}
+                >
+                  {coupon.code}
+                </Text>
+              </View>
+
+              <View className="flex-row items-center">
+                <Feather name="clock" size={12} color="#9ca3af" />
+                <Text className="text-xs text-gray-500 ml-1">
+                  Valid till {formatDate(coupon.end_date)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Action Section */}
+        {isEligible ? (
+          <View
+            className={`flex-row items-center justify-between px-4 py-3 border-t ${isSelected
+                ? 'border-green-200 bg-green-100'
+                : 'border-gray-100 bg-gray-50'
+              }`}
+          >
+            <View className="flex-row items-center">
+              <Text className="text-sm text-gray-600">You save: </Text>
+              <Text className="text-base font-bold text-green-600">
+                ₹{discount.toFixed(2)}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => {
+                if (isSelected) {
+                  removeDiscount();
+                } else {
+                  handleApplyCoupon(coupon);
+                }
+              }}
+              disabled={validateCoupon.isPending}
+              className={`px-5 py-2 rounded-full ${isSelected ? 'bg-green-600' : 'bg-green-500'
+                }`}
+            >
+              <View className="flex-row items-center">
+                {validateCoupon.isPending ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <>
+                    {isSelected && (
+                      <Feather name="check" size={14} color="white" />
+                    )}
+                    <Text
+                      className={`text-white font-semibold text-sm ${isSelected ? 'ml-1' : ''
+                        }`}
+                    >
+                      {isSelected ? 'Applied' : 'Apply'}
+                    </Text>
+                  </>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View className="px-4 py-3 bg-amber-50 border-t border-amber-100">
+            <View className="flex-row items-start mb-2">
+              <Feather name="alert-circle" size={14} color="#f59e0b" className="mt-0.5" />
+              <View className="flex-1 ml-2">
+                <Text className="text-amber-700 text-sm font-medium">
+                  {eligibilityReason}
+                </Text>
+              </View>
+            </View>
+
+            {conflictingItems && conflictingItems.length > 0 && (
+              <View className="mt-2 bg-white rounded-lg p-2">
+                <Text className="text-xs text-amber-600 font-semibold mb-1">
+                  Remove these items to apply:
+                </Text>
+                {conflictingItems.map(item => (
+                  <View key={item.id} className="flex-row items-center mt-1">
+                    <Feather name="x" size={12} color="#f59e0b" />
+                    <Text className="text-xs text-amber-700 ml-1 flex-1" numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Terms */}
+        <View className="px-4 pb-3">
+          <View className="flex-row items-start">
+            <Feather name="info" size={12} color="#9ca3af" className="mt-0.5" />
+            <Text className="text-xs text-gray-500 ml-1.5">
+              Minimum order value: ₹{coupon.min_order_amount}
+              {coupon.max_discount_amount &&
+                ` • Maximum discount: ₹${coupon.max_discount_amount}`}
+              {coupon.applicable_to !== 'all' &&
+                ` • Applicable to: ${coupon.applicable_to}`}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View className="flex-1 bg-gray-50">
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           headerShown: true,
           title: 'Apply Coupon',
           headerStyle: { backgroundColor: '#fff' },
-        }} 
+        }}
       />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Manual Coupon Entry */}
         <View className="bg-white px-4 py-5 mb-2">
           <Text className="text-base font-bold text-gray-900 mb-3">Enter Coupon Code</Text>
-          
+
           <View className="flex-row items-center gap-3">
             <View className="flex-1 flex-row items-center bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
               <Feather name="tag" size={20} color="#9ca3af" />
@@ -129,23 +342,21 @@ export default function DiscountCouponScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            
+
             <TouchableOpacity
               onPress={handleManualApply}
               disabled={couponCode.length === 0 || validateCoupon.isPending}
-              className={`px-6 py-3.5 rounded-xl ${
-                couponCode.length > 0 && !validateCoupon.isPending
+              className={`px-6 py-3.5 rounded-xl ${couponCode.length > 0 && !validateCoupon.isPending
                   ? 'bg-green-500'
                   : 'bg-gray-200'
-              }`}
+                }`}
             >
               {validateCoupon.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text
-                  className={`font-semibold ${
-                    couponCode.length > 0 ? 'text-white' : 'text-gray-400'
-                  }`}
+                  className={`font-semibold ${couponCode.length > 0 ? 'text-white' : 'text-gray-400'
+                    }`}
                 >
                   Apply
                 </Text>
@@ -161,199 +372,29 @@ export default function DiscountCouponScreen() {
           )}
         </View>
 
-        {/* Available Coupons */}
+        {/* Eligible Coupons */}
         <View className="px-4 py-5 bg-white mt-2">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-base font-bold text-gray-900">Available Coupons</Text>
-            {coupons && coupons.length > 0 && (
+            {eligibleCoupons.length > 0 && (
               <View className="bg-green-50 px-3 py-1 rounded-full">
                 <Text className="text-green-600 text-xs font-semibold">
-                  {coupons.length} Offers
+                  {eligibleCoupons.length} Applicable
                 </Text>
               </View>
             )}
           </View>
 
-          {isLoading ? (
+          {isLoading || loadingCategories ? (
             <View className="py-12 items-center justify-center">
               <ActivityIndicator size="large" color="#22c55e" />
               <Text className="text-gray-500 text-sm mt-2">Loading coupons...</Text>
             </View>
-          ) : coupons && coupons.length > 0 ? (
+          ) : eligibleCoupons.length > 0 ? (
             <View className="gap-3">
-              {coupons.map((coupon) => {
-                const isSelected = activeDiscount?.code === coupon.code;
-                const isEligible = totalPrice >= coupon.min_order_amount;
-                const discount = calculateCouponDiscount(coupon, totalPrice);
-                const remainingUses = coupon.usage_limit
-                  ? coupon.usage_limit - coupon.usage_count
-                  : null;
-
-                return (
-                  <View
-                    key={coupon.id}
-                    className={`border rounded-2xl overflow-hidden ${
-                      isSelected
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 bg-white'
-                    }`}
-                  >
-                    {/* Coupon Header with Discount Badge */}
-                    <View className="flex-row items-start p-4">
-                      <View
-                        className={`w-14 h-14 rounded-xl items-center justify-center ${
-                          coupon.discount_type === 'percentage'
-                            ? 'bg-purple-100'
-                            : coupon.discount_type === 'flat'
-                            ? 'bg-blue-100'
-                            : 'bg-orange-100'
-                        }`}
-                      >
-                        <Feather
-                          name={
-                            coupon.discount_type === 'percentage'
-                              ? 'percent'
-                              : coupon.discount_type === 'flat'
-                              ? 'tag'
-                              : 'truck'
-                          }
-                          size={24}
-                          color={
-                            coupon.discount_type === 'percentage'
-                              ? '#9333ea'
-                              : coupon.discount_type === 'flat'
-                              ? '#2563eb'
-                              : '#ea580c'
-                          }
-                        />
-                      </View>
-
-                      <View className="flex-1 ml-3">
-                        <View className="flex-row items-center justify-between mb-1">
-                          <Text className="text-base font-bold text-gray-900 flex-1">
-                            {getDiscountLabel(coupon)}
-                          </Text>
-                          {remainingUses && remainingUses < 10 && (
-                            <View className="bg-orange-100 px-2 py-0.5 rounded-full">
-                              <Text className="text-orange-700 text-xs font-semibold">
-                                {remainingUses} left
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-
-                        {coupon.description && (
-                          <Text className="text-sm text-gray-600 mt-0.5 mb-2">
-                            {coupon.description}
-                          </Text>
-                        )}
-
-                        <View className="flex-row items-center mt-2 flex-wrap gap-2">
-                          <View
-                            className={`px-2.5 py-1 rounded-md ${
-                              coupon.discount_type === 'percentage'
-                                ? 'bg-purple-100'
-                                : coupon.discount_type === 'flat'
-                                ? 'bg-blue-100'
-                                : 'bg-orange-100'
-                            }`}
-                          >
-                            <Text
-                              className={`text-xs font-bold ${
-                                coupon.discount_type === 'percentage'
-                                  ? 'text-purple-700'
-                                  : coupon.discount_type === 'flat'
-                                  ? 'text-blue-700'
-                                  : 'text-orange-700'
-                              }`}
-                            >
-                              {coupon.code}
-                            </Text>
-                          </View>
-
-                          <View className="flex-row items-center">
-                            <Feather name="clock" size={12} color="#9ca3af" />
-                            <Text className="text-xs text-gray-500 ml-1">
-                              Valid till {formatDate(coupon.end_date)}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Discount Amount & Apply Button */}
-                    <View
-                      className={`flex-row items-center justify-between px-4 py-3 border-t ${
-                        isSelected
-                          ? 'border-green-200 bg-green-100'
-                          : 'border-gray-100 bg-gray-50'
-                      }`}
-                    >
-                      <View className="flex-row items-center">
-                        <Text className="text-sm text-gray-600">You save: </Text>
-                        <Text className="text-base font-bold text-green-600">
-                          ₹{discount.toFixed(2)}
-                        </Text>
-                      </View>
-
-                      {isEligible ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (isSelected) {
-                              removeDiscount();
-                            } else {
-                              handleApplyCoupon(coupon);
-                            }
-                          }}
-                          disabled={validateCoupon.isPending}
-                          className={`px-5 py-2 rounded-full ${
-                            isSelected ? 'bg-green-600' : 'bg-green-500'
-                          }`}
-                        >
-                          <View className="flex-row items-center">
-                            {validateCoupon.isPending ? (
-                              <ActivityIndicator size="small" color="white" />
-                            ) : (
-                              <>
-                                {isSelected && (
-                                  <Feather name="check" size={14} color="white" />
-                                )}
-                                <Text
-                                  className={`text-white font-semibold text-sm ${
-                                    isSelected ? 'ml-1' : ''
-                                  }`}
-                                >
-                                  {isSelected ? 'Applied' : 'Apply'}
-                                </Text>
-                              </>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      ) : (
-                        <View className="bg-red-50 px-3 py-1.5 rounded-full">
-                          <Text className="text-red-600 text-xs font-medium">
-                            Add ₹{(coupon.min_order_amount - totalPrice).toFixed(0)} more
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Terms */}
-                    <View className="px-4 pb-3">
-                      <View className="flex-row items-start">
-                        <Feather name="info" size={12} color="#9ca3af" className="mt-0.5" />
-                        <Text className="text-xs text-gray-500 ml-1.5">
-                          Minimum order value: ₹{coupon.min_order_amount}
-                          {coupon.max_discount_amount &&
-                            ` • Maximum discount: ₹${coupon.max_discount_amount}`}
-                          {coupon.applicable_to !== 'all' &&
-                            ` • Applicable to: ${coupon.applicable_to}`}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
+              {eligibleCoupons.map(({ coupon, discount }) =>
+                renderCouponCard(coupon, discount, true)
+              )}
             </View>
           ) : (
             <View className="py-12 items-center justify-center">
@@ -361,14 +402,42 @@ export default function DiscountCouponScreen() {
                 <Feather name="tag" size={32} color="#9ca3af" />
               </View>
               <Text className="text-gray-900 text-base font-semibold mb-1">
-                No Coupons Available
+                No Eligible Coupons
               </Text>
               <Text className="text-gray-500 text-sm text-center px-8">
-                Check back later for exciting offers
+                {ineligibleCoupons.length > 0
+                  ? 'Check requirements below to unlock offers'
+                  : 'Check back later for exciting offers'}
               </Text>
             </View>
           )}
         </View>
+
+        {/* Ineligible Coupons */}
+        {ineligibleCoupons.length > 0 && (
+          <View className="px-4 py-5 bg-white mt-2">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-base font-bold text-gray-900">Not Eligible Yet</Text>
+              <View className="bg-amber-50 px-3 py-1 rounded-full">
+                <Text className="text-amber-600 text-xs font-semibold">
+                  {ineligibleCoupons.length} Coupons
+                </Text>
+              </View>
+            </View>
+
+            <View className="gap-3">
+              {ineligibleCoupons.map(({ coupon, eligibility, discount }) =>
+                renderCouponCard(
+                  coupon,
+                  discount,
+                  false,
+                  eligibility.reason,
+                  eligibility.conflictingItems
+                )
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Cart Summary */}
         <View className="bg-white px-4 py-5 mt-2">
@@ -416,7 +485,7 @@ export default function DiscountCouponScreen() {
             <View className="flex-row items-start">
               <Feather name="check-circle" size={14} color="#16a34a" className="mt-0.5" />
               <Text className="text-xs text-gray-700 ml-2 flex-1">
-                Save more by combining offers on eligible products
+                Coupons are automatically filtered based on your cart items
               </Text>
             </View>
           </View>
