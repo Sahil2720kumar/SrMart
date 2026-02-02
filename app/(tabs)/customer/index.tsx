@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, FlatList, StatusBar } from "react-native"
+import { useEffect, useState } from "react"
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, FlatList, StatusBar, ActivityIndicator } from "react-native"
 
 // Icons
 import { LocationIcon } from "@/assets/svgs/LocationIcon"
@@ -18,67 +18,19 @@ import OfferProductCard from "@/components/OfferProductCard"
 
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
+import { useCategories, useCustomerAddresses, useProducts } from "@/hooks/queries"
+import { FullPageError } from "@/components/ErrorComp"
 
 
-// Category data
-const categories = [
-  { id: "1", name: "Vegetables\n& Fruits", image: "/fresh-vegetables-fruits-grocery.jpg" },
-  { id: "2", name: "Dairy &\nBreakfast", image: "/dairy-milk-eggs-breakfast.jpg" },
-  { id: "3", name: "Cold Drinks\n& Juices", image: "/cold-drinks-cola-juice-bottles.jpg" },
-  { id: "4", name: "Instant &\nFrozen Food", image: "/instant-noodles-frozen-food-packets.jpg" },
-  { id: "5", name: "Tea &\nCoffee", image: "/tea-coffee-powder-jar.jpg" },
-  { id: "6", name: "Atta, Rice\n& Dal", image: "/rice-dal-flour-atta-bags.jpg" },
-  { id: "7", name: "Masala, Oil\n& Dry Fruits", image: "/cooking-oil-spices-dry-fruits.jpg" },
-  { id: "8", name: "Chicken,\nMeat & Fish", image: "/chicken-meat-fish-fresh.jpg" },
-]
 
-// Products data
-const bestDeals = [
-  {
-    id: "1",
-    name: "Surf Excel Easy Wash Detergent Power",
-    weight: "500 ml",
-    price: 120,
-    originalPrice: 140,
-    image: "/surf-excel-detergent-blue-pack.jpg",
-    wishlisted: false,
-  },
-  {
-    id: "2",
-    name: "Fortune Arhar Dal (Toor Dal)",
-    weight: "1 kg",
-    price: 100,
-    originalPrice: 120,
-    image: "/fortune-arhar-dal-yellow-packet.jpg",
-    wishlisted: false,
-  },
-  {
-    id: "3",
-    name: "Tata Salt Iodized",
-    weight: "1 kg",
-    price: 80,
-    originalPrice: 100,
-    image: "/tata-salt-white-packet.jpg",
-    wishlisted: false,
-  },
-  {
-    id: "4",
-    name: "Aashirvaad Atta Whole Wheat",
-    weight: "5 kg",
-    price: 250,
-    originalPrice: 300,
-    image: "/aashirvaad-atta-wheat-flour-bag.jpg",
-    wishlisted: false,
-  },
-]
-
-const addresses = [
-  { id: "1", label: "Home", address: "6391 Elgin St. Celina, Delaware 10299", isDefault: true },
-  { id: "2", label: "Office", address: "123 Business Ave. New York, NY 10001", isDefault: false },
-  { id: "3", label: "Apartment", address: "456 Oak Lane. Los Angeles, CA 90001", isDefault: false },
-]
 
 export default function HomeScreen() {
+  const { data: categories = [], isLoading: isLoadingCategories, isError: isErrorCategories } = useCategories()
+  const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
+  const { data: Products = [], isLoading: isLoadingProducts, isError: isErrorProducts } = useProducts()
+
+
+
 
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -86,7 +38,16 @@ export default function HomeScreen() {
   const { wishlist, toggleWishlist } = useWishlistStore()
 
   const [showAddressSheet, setShowAddressSheet] = useState(false)
-  const [selectedAddress, setSelectedAddress] = useState(addresses[0])
+  const [selectedAddress, setSelectedAddress] = useState<any>(null)
+
+  useEffect(() => {
+    if (!selectedAddress && addresses.length > 0) {
+      const defaultAddress =
+        addresses.find(a => a.is_default) || addresses[0]
+  
+      setSelectedAddress(defaultAddress)
+    }
+  }, [addresses])
 
 
 
@@ -107,6 +68,21 @@ export default function HomeScreen() {
     }
   }
 
+  if (isLoadingAddresses || isLoadingCategories || isLoadingProducts) {
+    return (
+      <View className="flex-1 items-center justify-center py-20">
+        <ActivityIndicator size="large" color="#22c55e" />
+        <Text className="text-gray-500 mt-4">Loading...</Text>
+      </View>
+    )
+  }
+
+  if (isErrorAddresses||isErrorCategories||isErrorProducts) {
+    return(
+      <FullPageError code="500"/>
+    )
+  }
+
 
   return (
     <View className="flex-1 bg-white">
@@ -118,13 +94,13 @@ export default function HomeScreen() {
           <View className="flex-row items-center">
             <LocationIcon />
             <View className="ml-2">
-              <TouchableOpacity onPress={()=>setShowAddressSheet(!showAddressSheet)} className="flex-row items-center">
-                <Text className="text-md font-medium text-gray-900">{selectedAddress.label}</Text>
+              <TouchableOpacity onPress={() => setShowAddressSheet(!showAddressSheet)} className="flex-row items-center">
+                <Text className="text-md font-medium text-gray-900">{selectedAddress?.label || ""}</Text>
                 <View className="ml-1">
                   <ChevronDownIcon />
                 </View>
               </TouchableOpacity>
-              <Text className="text-sm text-gray-500 mt-0.5">{selectedAddress.address}</Text>
+              <Text className="text-sm text-gray-500 mt-0.5">{selectedAddress?.address_line1 || ""}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/order/cart")} className="w-10 h-10 items-center justify-center">
@@ -155,7 +131,7 @@ export default function HomeScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Categories */}
-        <View className="px-4 mb-4">
+        <View className="px-4 mb-4 ">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Shop By Category</Text>
             <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/category")}>
@@ -163,7 +139,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="flex-row flex-wrap">
+          <View className="flex-row flex-wrap items-center justify-center">
             {categories.map((category) => (
               <CategoryItem key={category.id} item={category} />
             ))}
@@ -198,7 +174,7 @@ export default function HomeScreen() {
           </View>
 
           <FlatList
-            data={bestDeals}
+            data={Products}
             renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
@@ -217,7 +193,7 @@ export default function HomeScreen() {
           </View>
 
           <FlatList
-            data={bestDeals}
+            data={Products}
             renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
             keyExtractor={(item) => item.id}
             horizontal
@@ -246,6 +222,7 @@ export default function HomeScreen() {
           onClose={() => setShowAddressSheet(false)}
           onAddNewAddress={() => {
             setShowAddressSheet(false)
+            router.push("/customer/account/my-addresses")
           }}
         />
 

@@ -120,15 +120,7 @@ export default function MyAddressesScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "My Addresses",
-          headerTitleAlign:"center"
-        }}
-      />
-
+    <SafeAreaView className="flex-1 bg-gray-50 ">
       <View className="flex-1">
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
@@ -137,7 +129,7 @@ export default function MyAddressesScreen() {
         ) : (
           <ScrollView
             className="flex-1"
-            contentContainerStyle={{ padding: 16 }}
+            contentContainerStyle={{ padding: 16,paddingTop:0 }}
             showsVerticalScrollIndicator={false}
           >
             {/* Header Stats */}

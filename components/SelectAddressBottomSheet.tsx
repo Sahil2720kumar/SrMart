@@ -1,4 +1,4 @@
-import { Address } from "@/types/address.types"
+import { CustomerAddress } from "@/types/users.types"
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet"
 import { useMemo, useRef } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
@@ -15,9 +15,9 @@ const SelectAddressBottomSheet = ({
   onAddNewAddress,
 }: {
   isVisible: boolean
-  addresses: Address[]
-  selectedAddress: Address
-  onSelectAddress: (address: Address) => void
+  addresses: CustomerAddress[]
+  selectedAddress: CustomerAddress
+  onSelectAddress: (address: CustomerAddress) => void
   onClose: () => void
   onAddNewAddress: () => void
 }) => {
@@ -40,7 +40,7 @@ const SelectAddressBottomSheet = ({
       enablePanDownToClose={true}
       handleIndicatorStyle={{ backgroundColor: "#d1d5db" }}
       backgroundStyle={{
-        backgroundColor: "#fff", 
+        backgroundColor: "#fff",
         // borderTopLeftRadius: "1rem",
         // borderTopRightRadius: "1rem"
       }}
@@ -53,58 +53,76 @@ const SelectAddressBottomSheet = ({
 
         {/* Address List */}
         <View className="mb-6">
-          {addresses.map((address) => (
-            <TouchableOpacity
-              key={address.id}
-              onPress={() => onSelectAddress(address)}
-              className="flex-row items-start bg-white border border-gray-200 rounded-2xl p-4 mb-3"
-            >
-              {/* Icon */}
-              <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3 mt-1">
-                <Text style={{ fontSize: 18 }}>
-                  {address.label === "Home" ? "🏠" : address.label === "Office" ? "🏢" : "🏘️"}
-                </Text>
-              </View>
+          {addresses?.map((address) => {
+            if (!address) return null
 
-              {/* Address Info */}
-              <View className="flex-1">
-                <View className="flex-row items-center mb-1">
-                  <Text className="text-sm font-semibold text-gray-900">{address.label}</Text>
-                  {address.isDefault && (
-                    <View className="bg-green-100 rounded-full px-2 py-0.5 ml-2">
-                      <Text className="text-green-600 text-xs font-medium">Default</Text>
-                    </View>
+            const isSelected = selectedAddress?.id === address.id
+
+            return (
+              <TouchableOpacity
+                key={address.id}
+                onPress={() => onSelectAddress(address)}
+                className="flex-row items-start bg-white border border-gray-200 rounded-2xl p-4 mb-3"
+              >
+                {/* Icon */}
+                <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3 mt-1">
+                  <Text style={{ fontSize: 18 }}>
+                    {address.label === "Home"
+                      ? "🏠"
+                      : address.label === "Office"
+                        ? "🏢"
+                        : "🏘️"}
+                  </Text>
+                </View>
+
+                {/* Address Info */}
+                <View className="flex-1">
+                  <View className="flex-row items-center mb-1">
+                    <Text className="text-sm font-semibold text-gray-900">
+                      {address.label}
+                    </Text>
+
+                    {address.is_default && (
+                      <View className="bg-green-100 rounded-full px-2 py-0.5 ml-2">
+                        <Text className="text-green-600 text-xs font-medium">
+                          Default
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text className="text-xs text-gray-500 leading-tight">
+                    {address.address_line1}
+                  </Text>
+                </View>
+
+                {/* Radio Button */}
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    borderWidth: 2,
+                    borderColor: isSelected ? "#16a34a" : "#d1d5db",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: isSelected ? "#dcfce7" : "#ffffff",
+                  }}
+                >
+                  {isSelected && (
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: "#16a34a",
+                      }}
+                    />
                   )}
                 </View>
-                <Text className="text-xs text-gray-500 leading-tight">{address.address}</Text>
-              </View>
-
-              {/* Radio Button */}
-              <View
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 12,
-                  borderWidth: 2,
-                  borderColor: selectedAddress.id === address.id ? "#16a34a" : "#d1d5db",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: selectedAddress.id === address.id ? "#dcfce7" : "#ffffff",
-                }}
-              >
-                {selectedAddress.id === address.id && (
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: "#16a34a",
-                    }}
-                  />
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            )
+          })}
         </View>
 
         {/* Add New Address Button */}

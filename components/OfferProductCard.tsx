@@ -5,11 +5,12 @@ import { blurhash, Product } from "@/types/categories-products.types";
 import { CartItem } from "@/types/orders-carts.types";
 import { router } from "expo-router";
 import { Image } from "expo-image";
+import { CartProduct } from "@/store/cartStore";
 
 interface OfferProductCardProps {
   layoutMode?: "horizontal" | "vertical"
   item: Product
-  cart: Map<string, CartItem>
+  cart: Map<string, CartProduct>
   wishlist: Set<string>
   toggleWishlist: (productId: string) => void
   updateQuantity: (productId: string, delta: number) => void

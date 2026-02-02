@@ -1,76 +1,141 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { CartProduct } from '@/store/cartStore';
 
-export type DiscountType = 'flat' | 'percent';
-
+/* =======================
+   TYPES
+======================= */
 export interface ActiveDiscount {
   code: string;
-  type: DiscountType;
-  value: number;        // calculated discount amount
+  type: 'percent' | 'flat' | 'free_shipping';
+  value: number;
+  maxDiscount?: number;
+  // New fields for filtering
+  applicableCategories?: string[];
+  applicableVendors?: string[];
 }
 
-
-
-interface DiscountState {
+export interface DiscountState {
   activeDiscount: ActiveDiscount | null;
   discountAmount: number;
-
+  
   applyDiscount: (
     code: string,
-    type: DiscountType,
-    cartSubtotal: number,
+    type: 'percent' | 'flat' | 'free_shipping',
+    orderAmount: number,
     value: number,
-    maxDiscount?: number
+    maxDiscount?: number,
+    applicableCategories?: string[],
+    applicableVendors?: string[]
   ) => void;
-
+  
   removeDiscount: () => void;
+  
+  // New method to calculate discount based on eligible items
+  calculateDiscountForCart: (cartItems: CartProduct[]) => number;
 }
 
+/* =======================
+   STORE
+======================= */
 const useDiscountStore = create<DiscountState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activeDiscount: null,
       discountAmount: 0,
 
       applyDiscount: (
         code,
         type,
-        cartSubtotal,
+        orderAmount,
         value,
-        maxDiscount
+        maxDiscount,
+        applicableCategories,
+        applicableVendors
       ) => {
-        let amount = 0;
+        const discount: ActiveDiscount = {
+          code,
+          type,
+          value,
+          maxDiscount,
+          applicableCategories,
+          applicableVendors,
+        };
+
+        // Calculate initial discount amount
+        let discountAmount = 0;
 
         if (type === 'percent') {
-          amount = (cartSubtotal * value) / 100;
-        } else {
-          amount = value;
+          discountAmount = (orderAmount * value) / 100;
+          if (maxDiscount) {
+            discountAmount = Math.min(discountAmount, maxDiscount);
+          }
+        } else if (type === 'flat') {
+          discountAmount = Math.min(value, orderAmount);
         }
 
-        if (maxDiscount) {
-          amount = Math.min(amount, maxDiscount);
-        }
-
-        set({
-          activeDiscount: {
-            code,
-            type,
-            value: amount,
-          },
-          discountAmount: amount,
-        });
+        set({ activeDiscount: discount, discountAmount });
       },
 
       removeDiscount: () => {
-        set({
-          activeDiscount: null,
-          discountAmount: 0,
+        set({ activeDiscount: null, discountAmount: 0 });
+      },
+
+      calculateDiscountForCart: (cartItems) => {
+        const { activeDiscount } = get();
+        if (!activeDiscount) return 0;
+
+        // Filter eligible items based on category and vendor
+        const eligibleItems = cartItems.filter((item) => {
+          const product = item.product;
+          if (!product) return false;
+
+          // Check category filter
+          const categoryMatch =
+            !activeDiscount.applicableCategories ||
+            activeDiscount.applicableCategories.length === 0 ||
+            activeDiscount.applicableCategories.includes(product.category_id!);
+
+          // Check vendor filter
+          const vendorMatch =
+            !activeDiscount.applicableVendors ||
+            activeDiscount.applicableVendors.length === 0 ||
+            activeDiscount.applicableVendors.includes(product.vendor_id!);
+
+          return categoryMatch && vendorMatch;
         });
+
+        // Calculate total of eligible items
+        const eligibleTotal = eligibleItems.reduce(
+          (sum, item) =>
+            sum + (item.product?.discount_price || 0) * item.quantity,
+          0
+        );
+
+        // Calculate discount based on type
+        let discountAmount = 0;
+
+        if (activeDiscount.type === 'percent') {
+          discountAmount = (eligibleTotal * activeDiscount.value) / 100;
+          if (activeDiscount.maxDiscount) {
+            discountAmount = Math.min(
+              discountAmount,
+              activeDiscount.maxDiscount
+            );
+          }
+        } else if (activeDiscount.type === 'flat') {
+          discountAmount = Math.min(activeDiscount.value, eligibleTotal);
+        }
+
+        // Update the discount amount in store
+        set({ discountAmount });
+
+        return discountAmount;
       },
     }),
     {
-      name: 'active-discount-store',
+      name: 'discount-store',
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

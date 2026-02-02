@@ -7,34 +7,18 @@ import useDiscountStore from "@/store/useDiscountStore"
 import Feather from "@expo/vector-icons/Feather"
 import { router, Stack, useFocusEffect, useSegments } from "expo-router"
 import { useMemo, useCallback, useRef, useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView, FlatList } from "react-native"
+import { View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator } from "react-native"
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Address } from "@/types/address.types"
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
+import { useCustomerAddresses, useProducts } from "@/hooks/queries"
+import { FullPageError } from "@/components/ErrorComp"
 
-type RecommendedProduct = {
-  id: string
-  name: string
-  weight: string
-  price: number
-  originalPrice: number
-}
 
-const recommendedProducts: RecommendedProduct[] = [
-  { id: "r1", name: "Surf Excel Easy Wash Detergent Power", weight: "500 ml", price: 12, originalPrice: 14 },
-  { id: "r2", name: "Fortune Arhar Dal (Toor Dal)", weight: "1 kg", price: 10, originalPrice: 12 },
-  { id: "r3", name: "Nescafe Clasico Coffee", weight: "200g", price: 8, originalPrice: 10 },
-  { id: "r4", name: "Everest Kashmirila Red Chilli Powder", weight: "1 kg", price: 5, originalPrice: 8 },
-]
-
-const addresses: Address[] = [
-  { id: "1", label: "Home", address: "6391 Elgin St. Celina, Delaware 10299", isDefault: true },
-  { id: "2", label: "Office", address: "123 Business Ave. New York, NY 10001", isDefault: false },
-  { id: "3", label: "Apartment", address: "456 Oak Lane. Los Angeles, CA 90001", isDefault: false },
-]
 
 export default function CartScreen() {
+  const { data: recommendedProducts = [], isLoading: isLoadingRecommendedProducts, isError: isErrorRecommendedProducts } = useProducts()
+  const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
   const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
   const { wishlist, toggleWishlist } = useWishlistStore()
   const {
@@ -42,7 +26,7 @@ export default function CartScreen() {
     activeDiscount,
     removeDiscount,
   } = useDiscountStore()
-  
+
   const bottomSheetRef = useRef<BottomSheet>(null);
   const [showAddressSheet, setShowAddressSheet] = useState(false)
   const [selectedAddress, setSelectedAddress] = useState(addresses[0])
@@ -59,6 +43,23 @@ export default function CartScreen() {
     router.push("/customer/order/discount-coupon")
   }, []);
 
+
+
+  if (isLoadingAddresses || isLoadingRecommendedProducts) {
+    return (
+      <View className="flex-1 items-center justify-center py-20">
+        <ActivityIndicator size="large" color="#22c55e" />
+        <Text className="text-gray-500 mt-4">Loading products...</Text>
+      </View>
+    )
+  }
+
+  if (isErrorAddresses || isErrorRecommendedProducts) {
+    return (
+      <FullPageError code="500" />
+    )
+  }
+
   return (
     <View className="flex-1 bg-white">
       <Stack.Screen options={{ headerShown: true }} />
@@ -68,7 +69,7 @@ export default function CartScreen() {
           <FlatList
             data={cartItems}
             renderItem={({ item }) => <CartItemComp item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.productId}
             scrollEnabled={false}
           />
         </View>
@@ -89,22 +90,20 @@ export default function CartScreen() {
         {/* Apply Coupon */}
         <TouchableOpacity
           onPress={handleNavigateToCoupon}
-          className={`mx-4 mb-4 flex-row items-center rounded-2xl p-4 ${
-            activeDiscount 
-              ? 'bg-green-50 border-2 border-green-500' 
+          className={`mx-4 mb-4 flex-row items-center rounded-2xl p-4 ${activeDiscount
+              ? 'bg-green-50 border-2 border-green-500'
               : 'bg-white border border-green-500'
-          }`}
+            }`}
         >
-          <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${
-            activeDiscount ? 'bg-green-500' : 'bg-green-100'
-          }`}>
+          <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${activeDiscount ? 'bg-green-500' : 'bg-green-100'
+            }`}>
             {activeDiscount ? (
               <Feather name="check" size={16} color="white" />
             ) : (
               <Feather name="tag" size={16} color="#16a34a" />
             )}
           </View>
-          
+
           <View className="flex-1">
             {activeDiscount ? (
               <>
@@ -115,9 +114,9 @@ export default function CartScreen() {
               <Text className="text-base font-medium text-gray-900">APPLY COUPON</Text>
             )}
           </View>
-          
+
           {activeDiscount ? (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
                 removeDiscount();
@@ -127,7 +126,7 @@ export default function CartScreen() {
               <Feather name="x-circle" size={20} color="#16a34a" />
             </TouchableOpacity>
           ) : null}
-          
+
           <Feather name="chevron-right" size={20} color="#9ca3af" />
         </TouchableOpacity>
 
@@ -137,7 +136,7 @@ export default function CartScreen() {
             <Text className="text-gray-600">Item Total</Text>
             <Text className="text-gray-900 font-semibold">₹{itemTotal.toFixed(2)}</Text>
           </View>
-          
+
           {activeDiscount && (
             <View className="flex-row justify-between items-center mb-3">
               <View className="flex-row items-center">
@@ -149,21 +148,21 @@ export default function CartScreen() {
               <Text className="text-green-600 font-semibold">-₹{discountAmount.toFixed(2)}</Text>
             </View>
           )}
-          
+
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-gray-600">Delivery</Text>
             <Text className={`font-semibold ${deliveryFee === 0 ? "text-green-500" : "text-gray-900"}`}>
               {deliveryFee === 0 ? "Free" : `₹${deliveryFee.toFixed(2)}`}
             </Text>
           </View>
-          
+
           <View className="h-px bg-gray-200 mb-4" />
-          
+
           <View className="flex-row justify-between items-center">
             <Text className="text-base font-bold text-gray-900">Grand Total</Text>
             <Text className="text-base font-bold text-gray-900">₹{grandTotal.toFixed(2)}</Text>
           </View>
-          
+
           {activeDiscount && (
             <View className="mt-2 bg-green-50 rounded-lg p-2">
               <View className="flex-row items-center">
@@ -185,7 +184,7 @@ export default function CartScreen() {
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress.label}</Text>
-                <Text className="text-xs text-gray-500 mt-1">{selectedAddress.address}</Text>
+                <Text className="text-xs text-gray-500 mt-1">{selectedAddress.address_line1}</Text>
               </View>
             </View>
             <View>

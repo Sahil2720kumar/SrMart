@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
+import { Coupon, CouponUsage } from '@/types/offers.types';
 
 // ==========================================
 // ORDER HOOKS
@@ -264,232 +265,231 @@ export function useCancelOrder() {
 }
 
 // ==========================================
-// ADDRESS HOOKS
-// ==========================================
-
-export function useAddresses() {
-  const session = useAuthStore((state) => state.session);
-  const customerId = session?.user?.id;
-
-  return useQuery({
-    queryKey: queryKeys.addresses.all(customerId!),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('customer_addresses')
-        .select('*')
-        .eq('customer_id', customerId)
-        .order('is_default', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!customerId,
-  });
-}
-
-export function useDefaultAddress() {
-  const session = useAuthStore((state) => state.session);
-  const customerId = session?.user?.id;
-
-  return useQuery({
-    queryKey: queryKeys.addresses.default(customerId!),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('customer_addresses')
-        .select('*')
-        .eq('customer_id', customerId)
-        .eq('is_default', true)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!customerId,
-  });
-}
-
-export function useAddAddress() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation({
-    mutationFn: async (addressData: any) => {
-      // If this is set as default, unset other defaults first
-      if (addressData.is_default) {
-        await supabase
-          .from('customer_addresses')
-          .update({ is_default: false })
-          .eq('customer_id', session?.user?.id);
-      }
-
-      const { data, error } = await supabase
-        .from('customer_addresses')
-        .insert({
-          ...addressData,
-          customer_id: session?.user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.addresses.all(session?.user?.id!) 
-      });
-    },
-  });
-}
-
-export function useUpdateAddress() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation({
-    mutationFn: async ({ addressId, updates }: { addressId: string; updates: any }) => {
-      if (updates.is_default) {
-        await supabase
-          .from('customer_addresses')
-          .update({ is_default: false })
-          .eq('customer_id', session?.user?.id);
-      }
-
-      const { data, error } = await supabase
-        .from('customer_addresses')
-        .update(updates)
-        .eq('id', addressId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.addresses.all(session?.user?.id!) 
-      });
-    },
-  });
-}
-
-export function useDeleteAddress() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation({
-    mutationFn: async (addressId: string) => {
-      const { error } = await supabase
-        .from('customer_addresses')
-        .delete()
-        .eq('id', addressId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.addresses.all(session?.user?.id!) 
-      });
-    },
-  });
-}
-
-// ==========================================
 // COUPON & OFFER HOOKS
 // ==========================================
 
+// Query keys
+export const couponQueryKeys = {
+  all: ['coupons'] as const,
+  active: () => ['coupons', 'active'] as const,
+  byCode: (code: string) => ['coupons', 'code', code] as const,
+  usage: (userId: string) => ['coupon-usage', userId] as const,
+  userUsage: (userId: string, couponId: string) => ['coupon-usage', userId, couponId] as const,
+};
+
+// Fetch all active coupons
 export function useActiveCoupons() {
   return useQuery({
-    queryKey: queryKeys.coupons.active,
+    queryKey: couponQueryKeys.active(),
     queryFn: async () => {
       const now = new Date().toISOString();
+
       const { data, error } = await supabase
         .from('coupons')
         .select('*')
         .eq('is_active', true)
         .lte('start_date', now)
-        .gte('end_date', now);
+        .gte('end_date', now)
+        .order('discount_value', { ascending: false });
+
       if (error) throw error;
-      return data;
+      return data as Coupon[];
     },
-    staleTime: 1000 * 60 * 5,
   });
 }
 
-export function useValidateCoupon() {
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation({
-    mutationFn: async ({ 
-      code, 
-      orderAmount 
-    }: { 
-      code: string; 
-      orderAmount: number;
-    }) => {
-      const now = new Date().toISOString();
-      
-      const { data: coupon, error } = await supabase
+// Fetch coupon by code
+export function useCouponByCode(code: string) {
+  return useQuery({
+    queryKey: couponQueryKeys.byCode(code),
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('coupons')
         .select('*')
         .eq('code', code.toUpperCase())
         .eq('is_active', true)
-        .lte('start_date', now)
-        .gte('end_date', now)
         .single();
 
-      if (error) throw new Error('Invalid coupon code');
+      if (error) throw error;
+      return data as Coupon;
+    },
+    enabled: !!code && code.length > 0,
+  });
+}
 
-      // Check usage limit
+// Check user's coupon usage count for a specific coupon
+export function useUserCouponUsage(couponId: string) {
+  const session = useAuthStore((state) => state.session);
+
+  return useQuery({
+    queryKey: couponQueryKeys.userUsage(session?.user?.id!, couponId),
+    queryFn: async () => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('coupon_usage')
+        .select('*')
+        .eq('coupon_id', couponId)
+        .eq('customer_id', session.user.id);
+
+      if (error) throw error;
+      return data as CouponUsage[];
+    },
+    enabled: !!session?.user?.id && !!couponId,
+  });
+}
+
+// Validate coupon eligibility
+export function useValidateCoupon() {
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({
+      couponCode,
+      orderAmount,
+      cartItems,
+    }: {
+      couponCode: string;
+      orderAmount: number;
+      cartItems?: any[];
+    }) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      // Fetch coupon
+      const { data: coupon, error: couponError } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', couponCode.toUpperCase())
+        .eq('is_active', true)
+        .single();
+
+      if (couponError || !coupon) {
+        throw new Error('Invalid coupon code');
+      }
+
+      // Check date validity
+      const now = new Date();
+      const startDate = new Date(coupon.start_date);
+      const endDate = new Date(coupon.end_date);
+
+      if (now < startDate) {
+        throw new Error('Coupon not yet valid');
+      }
+
+      if (now > endDate) {
+        throw new Error('Coupon has expired');
+      }
+
+      // Check minimum order amount
+      if (orderAmount < coupon.min_order_amount) {
+        throw new Error(`Minimum order amount of ₹${coupon.min_order_amount} required`);
+      }
+
+      // Check total usage limit
       if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
         throw new Error('Coupon usage limit reached');
       }
 
-      // Check minimum order amount
-      if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) {
-        throw new Error(`Minimum order amount is ₹${coupon.min_order_amount}`);
-      }
-
       // Check user usage limit
-      const { count } = await supabase
+      const { data: userUsages, error: usageError } = await supabase
         .from('coupon_usage')
-        .select('*', { count: 'exact', head: true })
+        .select('*')
         .eq('coupon_id', coupon.id)
-        .eq('customer_id', session?.user?.id);
+        .eq('customer_id', session.user.id);
 
-      if (count && count >= (coupon.usage_limit_per_user || 1)) {
-        throw new Error('You have already used this coupon');
+      if (usageError) throw usageError;
+
+      if (userUsages && userUsages.length >= coupon.usage_limit_per_user) {
+        throw new Error('You have already used this coupon maximum times');
       }
 
       // Calculate discount
-      let discount = 0;
+      let discountAmount = 0;
       if (coupon.discount_type === 'percentage') {
-        discount = (orderAmount * coupon.discount_value) / 100;
+        discountAmount = (orderAmount * coupon.discount_value) / 100;
         if (coupon.max_discount_amount) {
-          discount = Math.min(discount, coupon.max_discount_amount);
+          discountAmount = Math.min(discountAmount, coupon.max_discount_amount);
         }
-      } else {
-        discount = coupon.discount_value;
+      } else if (coupon.discount_type === 'fixed_amount') {
+        discountAmount = coupon.discount_value;
       }
 
-      return { coupon, discount };
+      return {
+        coupon,
+        discountAmount,
+        finalAmount: Math.max(orderAmount - discountAmount, 0),
+      };
     },
   });
 }
 
-export function useActiveOffers() {
-  return useQuery({
-    queryKey: queryKeys.offers.active,
-    queryFn: async () => {
-      const now = new Date().toISOString();
-      const { data, error } = await supabase
-        .from('offers')
-        .select('*')
-        .eq('is_active', true)
-        .lte('start_date', now)
-        .or(`end_date.is.null,end_date.gte.${now}`)
-        .order('display_order');
-      if (error) throw error;
-      return data;
+// Record coupon usage (call this when order is placed)
+export function useRecordCouponUsage() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({
+      couponId,
+      orderId,
+    }: {
+      couponId: string;
+      orderId?: string;
+    }) => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+
+      // Record usage
+      const { data: usage, error: usageError } = await supabase
+        .from('coupon_usage')
+        .insert({
+          coupon_id: couponId,
+          customer_id: session.user.id,
+          order_id: orderId,
+        })
+        .select()
+        .single();
+
+      if (usageError) throw usageError;
+
+      // Increment usage count
+      const { error: updateError } = await supabase.rpc('increment_coupon_usage', {
+        coupon_id: couponId,
+      });
+
+      if (updateError) throw updateError;
+
+      return usage;
     },
-    staleTime: 1000 * 60 * 5,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: couponQueryKeys.active() });
+      queryClient.invalidateQueries({ queryKey: couponQueryKeys.usage(session?.user?.id!) });
+    },
   });
 }
+
+// Calculate discount helper
+export function calculateCouponDiscount(
+  coupon: Coupon,
+  orderAmount: number
+): number {
+  if (orderAmount < coupon.min_order_amount) {
+    return 0;
+  }
+
+  let discount = 0;
+  
+  if (coupon.discount_type === 'percentage') {
+    discount = (orderAmount * coupon.discount_value) / 100;
+    if (coupon.max_discount_amount) {
+      discount = Math.min(discount, coupon.max_discount_amount);
+    }
+  } else if (coupon.discount_type === 'flat') {
+    discount = coupon.discount_value;
+  }
+
+  return discount;
+}
+
 
 // ==========================================
 // REVIEW HOOKS

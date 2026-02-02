@@ -108,3 +108,13 @@ export interface Coupon {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface CouponUsage {
+  id: string;                 // uuid
+  coupon_id: string;          // uuid → coupons.id
+  customer_id: string;        // uuid → customers.user_id
+  order_id: string;           // uuid → orders.id
+  discount_amount: number;    // numeric(10,2)
+  used_at: string;            // timestamptz (ISO string)
+}

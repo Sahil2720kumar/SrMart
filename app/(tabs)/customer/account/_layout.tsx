@@ -81,6 +81,20 @@ export default function SearchLayout() {
           headerTintColor: '#000',
         }}
       />
+      <Stack.Screen
+        name="my-addresses"
+        options={{
+          headerShown: true,
+          title: 'My Addresses',
+          headerBackTitle: 'Back',
+          // Optional: customize header
+          headerStyle: {
+            backgroundColor: '#fff',
+          },
+          headerTitleAlign: 'center',
+          headerTintColor: '#000',
+        }}
+      />
     
  
     </Stack>
