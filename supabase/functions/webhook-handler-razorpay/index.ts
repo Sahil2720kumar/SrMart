@@ -21,9 +21,7 @@ serve(async (req) => {
     const razorpayOrderId = payload.payload.payment.entity.order_id;
     const razorpayPaymentId = payload.payload.payment.entity.id;
 
-    // ========================================
     // 1. Update Order Group
-    // ========================================
     const { data: orderGroup, error: groupError } = await supabase
       .from("order_groups")
       .update({
@@ -42,9 +40,7 @@ serve(async (req) => {
       );
     }
 
-    // ========================================
     // 2. Update All Orders in Group
-    // ========================================
     const { data: orders, error: ordersError } = await supabase
       .from("orders")
       .update({
@@ -63,9 +59,7 @@ serve(async (req) => {
       );
     }
 
-    // ========================================
-    // 3. Credit Vendor Wallets (Pending)
-    // ========================================
+    // 3. Credit Vendor Wallets (Pending Balance) ⭐
     for (const order of orders ?? []) {
       const { error: walletError } = await supabase.rpc(
         "credit_vendor_wallet_pending",
@@ -81,6 +75,12 @@ serve(async (req) => {
         );
         // Continue with other orders even if one fails
       }
+    }
+
+    // 4. Send notifications to vendors ⭐
+    for (const order of orders ?? []) {
+      // TODO: Send push notification to vendor
+      // "New order received! Please accept or reject."
     }
 
     return new Response(

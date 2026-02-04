@@ -4,98 +4,309 @@ import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
 import { Coupon, CouponUsage } from '@/types/offers.types';
+import { Order, OrderFilters, OrderStatus } from '@/types/orders-carts.types';
 
 // ==========================================
 // ORDER HOOKS
 // ==========================================
 
-export function useOrders(filters?: {
-  status?: string;
-  startDate?: string;
-  endDate?: string;
-}) {
+
+export const orderQueryKeys = {
+  orders: {
+    all: ['orders'] as const,
+    lists: () => [...orderQueryKeys.orders.all, 'list'] as const,
+    list: (filters?: OrderFilters) => [...orderQueryKeys.orders.lists(), filters] as const,
+    byCustomer: (customerId: string, filters?: OrderFilters) => 
+      [...orderQueryKeys.orders.lists(), 'customer', customerId, filters] as const,
+    byVendor: (vendorId: string, filters?: OrderFilters) => 
+      [...orderQueryKeys.orders.lists(), 'vendor', vendorId, filters] as const,
+    details: () => [...orderQueryKeys.orders.all, 'detail'] as const,
+    detail: (id: string) => [...orderQueryKeys.orders.details(), id] as const,
+    timeline: (id: string) => [...orderQueryKeys.orders.detail(id), 'timeline'] as const,
+  },
+  orderGroups: {
+    all: ['order-groups'] as const,
+    lists: () => [...orderQueryKeys.orderGroups.all, 'list'] as const,
+    list: (filters?: OrderFilters) => [...orderQueryKeys.orderGroups.lists(), filters] as const,
+    byCustomer: (customerId: string) => 
+      [...orderQueryKeys.orderGroups.lists(), 'customer', customerId] as const,
+    details: () => [...orderQueryKeys.orderGroups.all, 'detail'] as const,
+    detail: (id: string) => [...orderQueryKeys.orderGroups.details(), id] as const,
+  },
+} as const;
+
+// ============================================================================
+// QUERY: Get Customer Orders
+// ============================================================================
+export function useCustomerOrders(filters?: OrderFilters) {
   const session = useAuthStore((state) => state.session);
-  const userId = session?.user?.id;
+  const customerId = session?.user?.id;
 
   return useQuery({
-    queryKey: queryKeys.orders.byCustomer(userId!, filters),
+    queryKey: orderQueryKeys.orders.byCustomer(customerId!, filters),
     queryFn: async () => {
+      if (!customerId) throw new Error('User not authenticated');
+
       let query = supabase
         .from('orders')
         .select(`
-          *,
-          vendors(store_name, store_image),
-          customer_addresses(*),
-          delivery_boys(first_name, last_name)
+          id,
+          order_number,
+          status,
+          payment_status,
+          payment_method,
+          item_count,
+          subtotal,
+          delivery_fee,
+          tax,
+          tax_percentage,
+          discount,
+          coupon_discount,
+          total_amount,
+          special_instructions,
+          cancellation_reason,
+          cancelled_by,
+          created_at,
+          updated_at,
+          confirmed_at,
+          picked_up_at,
+          delivered_at,
+          cancelled_at,
+          vendors!inner(
+            user_id,
+            store_name,
+            store_image,
+            store_banner,
+            rating,
+            review_count
+          ),
+          customer_addresses!inner(
+            id,
+            label,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            pincode
+          ),
+          delivery_boys(
+            user_id,
+            first_name,
+            last_name,
+            profile_photo,
+            rating
+          ),
+          order_items(
+            id,
+            product_id,
+            product_name,
+            product_image,
+            quantity,
+            unit_price,
+            discount_price,
+            total_price
+          )
         `)
-        .eq('customer_id', userId);
+        .eq('customer_id', customerId);
 
+      // Apply filters
       if (filters?.status) {
-        query = query.eq('status', filters.status);
+        if (filters.status === 'active') {
+          query = query.not('status', 'in', '(delivered,cancelled,refunded)');
+        } else if (filters.status === 'completed') {
+          query = query.eq('status', 'delivered');
+        } else if (filters.status !== 'all') {
+          query = query.eq('status', filters.status);
+        }
       }
+
       if (filters?.startDate) {
         query = query.gte('created_at', filters.startDate);
       }
+
+      if (filters?.endDate) {
+        query = query.lte('created_at', filters.endDate);
+      }
+
+      if (filters?.search) {
+        query = query.or(`order_number.ilike.%${filters.search}%,vendors.store_name.ilike.%${filters.search}%`);
+      }
+
+      // Pagination
+      if (filters?.limit) {
+        query = query.limit(filters.limit);
+      }
+
+      if (filters?.offset) {
+        query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as Order[];
+    },
+    enabled: !!customerId,
+    staleTime: 1000 * 30, // 30 seconds
+  });
+}
+
+// ============================================================================
+// QUERY: Get Vendor Orders
+// ============================================================================
+export function useVendorOrders(filters?: OrderFilters) {
+  const session = useAuthStore((state) => state.session);
+  const vendorId = session?.user?.id;
+
+  return useQuery({
+    queryKey: orderQueryKeys.orders.byVendor(vendorId!, filters),
+    queryFn: async () => {
+      if (!vendorId) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          status,
+          payment_status,
+          payment_method,
+          item_count,
+          subtotal,
+          delivery_fee,
+          tax,
+          discount,
+          coupon_discount,
+          total_amount,
+          special_instructions,
+          vendor_accepted_at,
+          vendor_rejected_at,
+          created_at,
+          confirmed_at,
+          delivered_at,
+          customers!inner(
+            user_id,
+            first_name,
+            last_name,
+            profile_image
+          ),
+          customer_addresses!inner(
+            id,
+            label,
+            address_line1,
+            city,
+            state,
+            pincode
+          ),
+          delivery_boys(
+            user_id,
+            first_name,
+            last_name,
+            profile_photo
+          ),
+          order_items(
+            id,
+            product_name,
+            product_image,
+            quantity,
+            unit_price,
+            total_price,
+            commission_rate,
+            commission_amount
+          )
+        `)
+        .eq('vendor_id', vendorId);
+
+      // Apply filters
+      if (filters?.status && filters.status !== 'all') {
+        query = query.eq('status', filters.status);
+      }
+
+      if (filters?.startDate) {
+        query = query.gte('created_at', filters.startDate);
+      }
+
       if (filters?.endDate) {
         query = query.lte('created_at', filters.endDate);
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
+
       if (error) throw error;
       return data;
     },
-    enabled: !!userId,
-    staleTime: 1000 * 30, // 30 seconds
+    enabled: !!vendorId,
+    refetchInterval: 1000 * 30, // Auto-refetch every 30 seconds for new orders
   });
 }
 
-export function useVendorOrders(filters?: { status?: string }) {
-  const session = useAuthStore((state) => state.session);
-  const userId = session?.user?.id;
-
-  return useQuery({
-    queryKey: queryKeys.orders.byVendor(userId!, filters),
-    queryFn: async () => {
-      let query = supabase
-        .from('orders')
-        .select(`
-          *,
-          customers(first_name, last_name),
-          customer_addresses(*),
-          delivery_boys(first_name, last_name)
-        `)
-        .eq('vendor_id', userId);
-
-      if (filters?.status) {
-        query = query.eq('status', filters.status);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!userId,
-    refetchInterval: 1000 * 30, // Auto-refetch every 30 seconds
-  });
-}
-
+// ============================================================================
+// QUERY: Get Order Detail
+// ============================================================================
 export function useOrderDetail(orderId: string) {
   return useQuery({
-    queryKey: queryKeys.orders.detail(orderId),
+    queryKey: orderQueryKeys.orders.detail(orderId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
         .select(`
           *,
-          vendors(*),
-          customers(*),
-          delivery_boys(*),
-          customer_addresses(*),
-          order_items(*, products(*)),
-          order_tracking(*)
+          vendors!inner(
+            user_id,
+            store_name,
+            store_description,
+            store_image,
+            store_banner,
+            address,
+            city,
+            state,
+            rating,
+            review_count,
+            business_hours
+          ),
+          customers!inner(
+            user_id,
+            first_name,
+            last_name,
+            profile_image
+          ),
+          delivery_boys(
+            user_id,
+            first_name,
+            last_name,
+            profile_photo,
+            vehicle_type,
+            vehicle_number,
+            rating,
+            review_count
+          ),
+          customer_addresses!inner(
+            id,
+            label,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            pincode,
+            latitude,
+            longitude
+          ),
+          order_items(
+            id,
+            product_id,
+            product_name,
+            product_image,
+            quantity,
+            unit_price,
+            discount_price,
+            total_price,
+            commission_rate,
+            commission_amount
+          )
         `)
         .eq('id', orderId)
         .single();
+
       if (error) throw error;
       return data;
     },
@@ -103,162 +314,346 @@ export function useOrderDetail(orderId: string) {
   });
 }
 
-export function useCreateOrder() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation({
-    mutationFn: async (orderData: {
-      vendor_id: string;
-      delivery_address_id: string;
-      items: any[];
-      payment_method: string;
-      subtotal: number;
-      delivery_fee: number;
-      tax: number;
-      total_amount: number;
-      coupon_id?: string;
-      coupon_discount?: number;
-      special_instructions?: string;
-    }) => {
-      // Generate order number
-      const orderNumber = `ORD${Date.now()}`;
-
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          customer_id: session?.user?.id,
-          vendor_id: orderData.vendor_id,
-          delivery_address_id: orderData.delivery_address_id,
-          order_number: orderNumber,
-          subtotal: orderData.subtotal,
-          delivery_fee: orderData.delivery_fee,
-          tax: orderData.tax,
-          coupon_id: orderData.coupon_id,
-          coupon_discount: orderData.coupon_discount || 0,
-          total_amount: orderData.total_amount,
-          payment_method: orderData.payment_method,
-          special_instructions: orderData.special_instructions,
-          item_count: orderData.items.length,
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = orderData.items.map((item) => ({
-        order_id: order.id,
-        product_id: item.product_id,
-        product_name: item.name,
-        product_image: item.image,
-        product_sku: item.sku,
-        quantity: item.quantity,
-        unit: item.unit,
-        unit_price: item.price,
-        discount_price: item.discount_price,
-        total_price: item.total_price,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Add tracking entry
-      await supabase.from('order_tracking').insert({
-        order_id: order.id,
-        status: 'pending',
-        description: 'Order placed successfully',
-      });
-
-      return order;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.orders.byCustomer(session?.user?.id!) 
-      });
-    },
-  });
-}
-
-export function useUpdateOrderStatus() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ 
-      orderId, 
-      status, 
-      description 
-    }: { 
-      orderId: string; 
-      status: string; 
-      description?: string;
-    }) => {
+// ============================================================================
+// QUERY: Get Order Timeline
+// ============================================================================
+export function useOrderTimeline(orderId: string) {
+  return useQuery({
+    queryKey: orderQueryKeys.orders.timeline(orderId),
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .update({ status })
+        .select(`
+          status,
+          created_at,
+          confirmed_at,
+          vendor_accepted_at,
+          picked_up_at,
+          delivered_at,
+          cancelled_at
+        `)
         .eq('id', orderId)
-        .select()
         .single();
 
       if (error) throw error;
 
-      // Add tracking entry
-      await supabase.from('order_tracking').insert({
-        order_id: orderId,
-        status,
-        description: description || `Order ${status}`,
+      const timeline = [];
+
+      // Step 1: Order Placed
+      timeline.push({
+        status: 'Order Placed',
+        completed: !!data.created_at,
+        timestamp: data.created_at,
       });
 
-      return data;
+      // If cancelled, show and stop
+      if (data.cancelled_at) {
+        timeline.push({
+          status: 'Cancelled',
+          completed: true,
+          timestamp: data.cancelled_at,
+        });
+        return timeline;
+      }
+
+      // Step 2: Order Confirmed (combine payment + vendor acceptance)
+      // Show as "Confirmed" when EITHER confirmed_at OR vendor_accepted_at exists
+      timeline.push({
+        status: 'Confirmed',
+        completed: !!data.confirmed_at || !!data.vendor_accepted_at,
+        timestamp: data.confirmed_at || data.vendor_accepted_at,
+      });
+
+      // Step 3: Preparing Order
+      timeline.push({
+        status: 'Preparing Order',
+        completed: !!data.vendor_accepted_at,
+        timestamp: data.vendor_accepted_at,
+      });
+
+      // Step 4: Out for Delivery
+      timeline.push({
+        status: 'Out for Delivery',
+        completed: !!data.picked_up_at,
+        timestamp: data.picked_up_at,
+      });
+
+      // Step 5: Delivered
+      timeline.push({
+        status: 'Delivered',
+        completed: !!data.delivered_at,
+        timestamp: data.delivered_at,
+      });
+
+      return timeline;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(data.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
-    },
+    enabled: !!orderId,
   });
 }
 
+// ============================================================================
+// QUERY: Get Order Group Detail
+// ============================================================================
+export function useOrderGroupDetail(orderGroupId: string) {
+  return useQuery({
+    queryKey: orderQueryKeys.orderGroups.detail(orderGroupId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_groups')
+        .select(`
+          *,
+          customers!inner(
+            user_id,
+            first_name,
+            last_name,
+            profile_image
+          ),
+          orders(
+            *,
+            vendors!inner(
+              user_id,
+              store_name,
+              store_image,
+              rating
+            ),
+            order_items(
+              id,
+              product_name,
+              product_image,
+              quantity,
+              unit_price,
+              discount_price,
+              total_price
+            )
+          )
+        `)
+        .eq('id', orderGroupId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderGroupId,
+  });
+}
+
+// ============================================================================
+// MUTATION: Cancel Order (Customer)
+// ============================================================================
 export function useCancelOrder() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async ({ 
-      orderId, 
-      reason 
-    }: { 
-      orderId: string; 
+    mutationFn: async ({
+      orderId,
+      reason,
+    }: {
+      orderId: string;
       reason: string;
     }) => {
+      const customerId = session?.user?.id;
+      if (!customerId) throw new Error('User not authenticated');
+
+      const { error } = await supabase.rpc('customer_cancel_order', {
+        p_order_id: orderId,
+        p_customer_id: customerId,
+        p_cancellation_reason: reason,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate queries
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(variables.orderId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Vendor Accept Order
+// ============================================================================
+export function useVendorAcceptOrder() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { error } = await supabase.rpc('vendor_accept_order', {
+        p_order_id: orderId,
+        p_vendor_id: vendorId,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(orderId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Vendor Reject Order
+// ============================================================================
+export function useVendorRejectOrder() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      reason,
+    }: {
+      orderId: string;
+      reason: string;
+    }) => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { error } = await supabase.rpc('vendor_reject_order', {
+        p_order_id: orderId,
+        p_vendor_id: vendorId,
+        p_rejection_reason: reason,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(variables.orderId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Update Order Status (Vendor/Admin)
+// ============================================================================
+export function useUpdateOrderStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      status,
+      description,
+    }: {
+      orderId: string;
+      status: OrderStatus;
+      description?: string;
+    }) => {
+      // Update order status
+      const updates: any = {
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Add timestamp fields based on status
+      if (status === 'confirmed') {
+        updates.confirmed_at = new Date().toISOString();
+      } else if (status === 'picked_up') {
+        updates.picked_up_at = new Date().toISOString();
+      } else if (status === 'delivered') {
+        updates.delivered_at = new Date().toISOString();
+      }
+
       const { data, error } = await supabase
         .from('orders')
-        .update({
-          status: 'cancelled',
-          cancellation_reason: reason,
-          cancelled_by: 'customer',
-          cancelled_at: new Date().toISOString(),
-        })
+        .update(updates)
         .eq('id', orderId)
         .select()
         .single();
 
       if (error) throw error;
-
-      await supabase.from('order_tracking').insert({
-        order_id: orderId,
-        status: 'cancelled',
-        description: `Order cancelled by customer. Reason: ${reason}`,
-      });
-
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ 
-        queryKey: queryKeys.orders.byCustomer(session?.user?.id!) 
+        queryKey: orderQueryKeys.orders.detail(data.id) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Reorder (Add order items back to cart)
+// ============================================================================
+export function useReorder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      // Get order items
+      const { data: orderItems, error } = await supabase
+        .from('order_items')
+        .select('product_id, quantity')
+        .eq('order_id', orderId);
+
+      if (error) throw error;
+
+      // Return items to be added to cart
+      // (Your cart logic will handle the actual addition)
+      return orderItems;
+    },
+    onSuccess: () => {
+      // Invalidate cart queries if you have them
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Rate Order (Customer)
+// ============================================================================
+export function useRateOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      rating,
+      review,
+    }: {
+      orderId: string;
+      rating: number;
+      review?: string;
+    }) => {
+      // This would insert into a reviews table
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert({
+          order_id: orderId,
+          rating,
+          review,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(variables.orderId),
       });
     },
   });

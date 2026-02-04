@@ -1,3 +1,5 @@
+import { Vendor } from "./users.types";
+
 export type OrderStatus =
   | 'pending'
   | 'confirmed'
@@ -7,25 +9,25 @@ export type OrderStatus =
   | 'out_for_delivery'
   | 'delivered'
   | 'cancelled'
-  | 'refunded';
+  | 'refunded'
+  | 'all';
 
+export type PaymentMethod = 'cod' | 'upi' | 'card' | 'netbanking' | 'wallet';
 
-export type PaymentMethod =
-  | 'cod'
-  | 'upi'
-  | 'card'
-  | 'netbanking'
-  | 'wallet';
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 
-export type PaymentStatus =
-  | 'pending'
-  | 'paid'
-  | 'failed'
-  | 'refunded';
+export type CancelledBy = 'customer' | 'vendor' | 'admin' | 'system';
 
+export type OrderFilterStatus = OrderStatus | 'all' | 'active' | 'completed';
 
-export type CancelledBy = 'customer' | 'vendor' | 'admin' | 'system'
-
+export interface OrderFilters {
+  status?: OrderFilterStatus;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
 
 export interface OrderGroup {
   id: string;
@@ -42,10 +44,10 @@ export interface OrderGroup {
 export interface Order {
   id: string;
   order_group_id?: string;
-  customer_id: string; // references customers.user_id
-  vendor_id: string; // references vendors.user_id
+  customer_id?: string; // references customers.user_id
+  vendor_id?: string; // references vendors.user_id
   delivery_boy_id?: string; // references delivery_boys.user_id
-  delivery_address_id: string;
+  delivery_address_id?: string;
   coupon_id?: string;
   order_number: string;
   status: OrderStatus;
@@ -69,12 +71,15 @@ export interface Order {
   picked_up_at?: string;
   delivered_at?: string;
   cancelled_at?: string;
+  vendors:Vendor
+  order_items:OrderItem[]
 }
 
 export interface OrderItem {
   id: string;
   order_id: string;
   product_id: string;
+  vendor_id: string;
   product_name: string;
   product_image?: string;
   quantity: number;
@@ -94,4 +99,4 @@ export interface CartItem {
   created_at: string;
   updated_at: string;
   price: number;
-} 
+}
