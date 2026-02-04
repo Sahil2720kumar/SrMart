@@ -180,8 +180,10 @@ export function useVendorOrders(filters?: OrderFilters) {
           total_amount,
           special_instructions,
           vendor_accepted_at,
-          vendor_rejected_at,
+          cancelled_at,
           created_at,
+          cancelled_by,
+          cancellation_reason,
           confirmed_at,
           delivered_at,
           customers!inner(
@@ -217,10 +219,7 @@ export function useVendorOrders(filters?: OrderFilters) {
         `)
         .eq('vendor_id', vendorId);
 
-      // Apply filters
-      if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status);
-      }
+    
 
       if (filters?.startDate) {
         query = query.gte('created_at', filters.startDate);
@@ -461,6 +460,8 @@ export function useCancelOrder() {
         p_cancellation_reason: reason,
       });
 
+      
+
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
@@ -528,6 +529,7 @@ export function useVendorRejectOrder() {
         p_vendor_id: vendorId,
         p_rejection_reason: reason,
       });
+      console.log(error);
 
       if (error) throw error;
     },
@@ -656,6 +658,187 @@ export function useRateOrder() {
         queryKey: orderQueryKeys.orders.detail(variables.orderId),
       });
     },
+  });
+}
+
+
+// ============================================================================
+// QUERY: Get Available Delivery Partners
+// ============================================================================
+export function useAvailableDeliveryPartners(
+  vendorLocation?: { latitude: number; longitude: number }
+) {
+  return useQuery({
+    queryKey: ['delivery-partners', 'available', vendorLocation],
+    queryFn: async () => {
+      let query = supabase
+        .from('delivery_boys')
+        .select(`
+          user_id,
+          first_name,
+          last_name,
+          profile_photo,
+          vehicle_type,
+          vehicle_number,
+          license_number,
+          is_available,
+          is_online,
+          current_latitude,
+          current_longitude,
+          rating,
+          review_count,
+          total_deliveries
+        `)
+        .eq('is_available', true)
+        .eq('is_online', true);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Calculate distance if vendor location provided
+      if (vendorLocation && data) {
+        return data.map((partner) => {
+          const distance = calculateDistance(
+            vendorLocation.latitude,
+            vendorLocation.longitude,
+            partner.current_latitude || 0,
+            partner.current_longitude || 0
+          );
+
+          return {
+            ...partner,
+            distance: distance.toFixed(1),
+            estimatedTime: Math.ceil(distance / 0.5) + '-' + (Math.ceil(distance / 0.5) + 2) + ' min',
+          };
+        }).sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+      }
+
+      return data;
+    },
+  });
+}
+
+// Helper function to calculate distance
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// ============================================================================
+// MUTATION: Assign Delivery Partner
+// ============================================================================
+export function useAssignDeliveryPartner() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      deliveryBoyId,
+    }: {
+      orderId: string;
+      deliveryBoyId: string;
+    }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          delivery_boy_id: deliveryBoyId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(variables.orderId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.all,
+      });
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Mark Order as Ready
+// ============================================================================
+export function useMarkOrderReady() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'ready_for_pickup',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(orderId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.all,
+      });
+    },
+  });
+}
+
+// ============================================================================
+// QUERY: Get Vendor Statistics
+// ============================================================================
+export function useVendorOrderStats(vendorId: string) {
+  return useQuery({
+    queryKey: ['vendor-stats', vendorId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('status, total_amount, created_at')
+        .eq('vendor_id', vendorId);
+
+      if (error) throw error;
+
+      const stats = {
+        total: data.length,
+        new: data.filter((o) => o.status === 'pending' || o.status === 'confirmed').length,
+        preparing: data.filter((o) => o.status === 'processing').length,
+        ready: data.filter((o) => o.status === 'ready_for_pickup').length,
+        completed: data.filter((o) => o.status === 'delivered').length,
+        cancelled: data.filter((o) => o.status === 'cancelled').length,
+        todayRevenue: data
+          .filter((o) => {
+            const orderDate = new Date(o.created_at);
+            const today = new Date();
+            return (
+              orderDate.getDate() === today.getDate() &&
+              orderDate.getMonth() === today.getMonth() &&
+              orderDate.getFullYear() === today.getFullYear()
+            );
+          })
+          .reduce((sum, o) => sum + parseFloat(o.total_amount), 0),
+      };
+
+      return stats;
+    },
+    enabled: !!vendorId,
   });
 }
 

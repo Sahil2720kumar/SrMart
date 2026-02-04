@@ -263,7 +263,7 @@ export default function VendorDashboard() {
             </View>
 
             {/* Orders List */}
-            <View>
+            {/* <View>
               <VendorOrderCard
                 orderId="#ORD-2024-001"
                 customerName="Raj Kumar"
@@ -300,7 +300,7 @@ export default function VendorDashboard() {
                 status="New Order"
                 priority="urgent"
               />
-            </View>
+            </View> */}
 
             {/* Footer */}
             <TouchableOpacity onPress={()=>router.push("/vendor/(tabs)/orders")} className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">

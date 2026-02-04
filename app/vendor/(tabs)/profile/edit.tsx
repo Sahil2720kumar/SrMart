@@ -65,7 +65,7 @@ export default function EditProfileScreen() {
     refetch
   } = useVendorDetail(session?.user?.id || '');
 
-  console.log(vendorData);
+  // console.log(vendorData);
   
 
   // Update mutation

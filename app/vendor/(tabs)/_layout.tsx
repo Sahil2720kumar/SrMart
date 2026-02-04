@@ -228,6 +228,14 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger>
 
+        <TabTrigger name="earnings" href="/vendor/earnings" asChild>
+          <Pressable className="flex-1">
+            <TabButton label="earnings" focused={pathname.startsWith("/vendor/earnings")}>
+              <AntDesign name="dollar" size={24} color={pathname.startsWith("/vendor/earnings") ? "#16a34a" : "#9ca3af"} />
+            </TabButton>
+          </Pressable>
+        </TabTrigger>
+
         <TabTrigger name="orders" href="/vendor/orders" asChild>
           <Pressable className="flex-1">
             <TabButton label="Orders" focused={pathname.startsWith("/vendor/orders")}>

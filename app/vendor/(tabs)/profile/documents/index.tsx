@@ -9,6 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
+  Image,
+  Dimensions,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +29,10 @@ import { useProfileStore } from '@/store/profileStore';
 import { useAuthStore } from '@/store/authStore';
 import { FullPageError } from '@/components/ErrorComp';
 import { KycDocument, KycDocumentStatus, KycDocumentType } from '@/types/documents-kyc.types';
+import { BlurView } from 'expo-blur';
+import DocumentViewerModal from '@/components/DocumentViewerModal';
+
+
 
 const DOCUMENT_CONFIGS: Record<KycDocumentType, {
   label: string;
@@ -98,6 +106,8 @@ function getStatusBadge(status: KycDocumentStatus) {
   }
 }
 
+
+
 export default function VendorDocumentsKYCScreen() {
   const { session } = useAuthStore();
 
@@ -125,6 +135,8 @@ export default function VendorDocumentsKYCScreen() {
   const deleteMutation = useDeleteKycDocument();
 
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<KycDocument | null>(null);
 
   // Helper to get document by type
   const getDocumentByType = (docType: KycDocumentType): KycDocument | undefined => {
@@ -326,22 +338,8 @@ export default function VendorDocumentsKYCScreen() {
       return;
     }
 
-    // Open document URL
-    // You can use Linking.openURL or a document viewer
-    Alert.alert(
-      'View Document',
-      `Document URL: ${doc.document_url}\n\nWould you like to open it?`,
-      [
-        { text: 'Cancel' },
-        {
-          text: 'Open',
-          onPress: () => {
-            // Implement document viewing logic
-            console.log('Opening document:', doc.document_url);
-          },
-        },
-      ]
-    );
+    setSelectedDocument(doc);
+    setViewerVisible(true);
   };
 
   const handleGoBack = () => {
@@ -602,6 +600,25 @@ export default function VendorDocumentsKYCScreen() {
           </View>
         </View>
       </ScrollView>
+
+
+      {viewerVisible && (
+        <BlurView
+          intensity={10}
+          experimentalBlurMethod='dimezisBlurView'
+          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+        />
+      )}
+
+      {/* Document Viewer Modal */}
+      <DocumentViewerModal
+        visible={viewerVisible}
+        document={selectedDocument}
+        onClose={() => {
+          setViewerVisible(false);
+          setSelectedDocument(null);
+        }}
+      />
     </SafeAreaView>
   );
 }

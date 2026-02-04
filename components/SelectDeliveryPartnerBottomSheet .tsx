@@ -2,22 +2,9 @@ import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet"
 import { useEffect, useMemo, useRef } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 import { Feather } from '@expo/vector-icons'
+import { DeliveryBoy } from "@/types/users.types"
 
-// Delivery Partner Type
-export type DeliveryPartner = {
-  id: string
-  name: string
-  phone: string
-  rating: number
-  totalDeliveries: number
-  distance: string
-  estimatedTime: string
-  vehicleType: "bike" | "scooter" | "bicycle"
-  vehicleNumber: string
-  isAvailable: boolean
-  currentOrders: number
-  profileImage?: string
-}
+
 
 const SelectDeliveryPartnerBottomSheet = ({
   isVisible,
@@ -28,9 +15,9 @@ const SelectDeliveryPartnerBottomSheet = ({
   onConfirm,
 }: {
   isVisible: boolean
-  partners: DeliveryPartner[]
-  selectedPartner: DeliveryPartner | null
-  onSelectPartner: (partner: DeliveryPartner) => void
+  partners: DeliveryBoy[]
+  selectedPartner: DeliveryBoy | null
+  onSelectPartner: (partner: DeliveryBoy) => void
   onClose: () => void
   onConfirm: () => void
 }) => {
@@ -100,7 +87,7 @@ const SelectDeliveryPartnerBottomSheet = ({
             <Feather name="users" size={16} color="#059669" />
           </View>
           <Text className="text-emerald-700 font-medium text-sm">
-            {partners.filter(p => p.isAvailable).length} partners available nearby
+            {partners.filter(p => p.is_available).length} partners available nearby
           </Text>
         </View>
 
@@ -108,20 +95,20 @@ const SelectDeliveryPartnerBottomSheet = ({
         {partners.map((partner) => (
           <TouchableOpacity
             key={partner.id}
-            onPress={() => partner.isAvailable && onSelectPartner(partner)}
-            disabled={!partner.isAvailable}
-            className={`bg-white border rounded-2xl p-4 mb-3 ${partner.isAvailable
+            onPress={() => partner.is_available && onSelectPartner(partner)}
+            disabled={!partner.is_available}
+            className={`bg-white border rounded-2xl p-4 mb-3 ${partner.is_available
               ? selectedPartner?.id === partner.id
                 ? 'border-emerald-500 border-2'
                 : 'border-gray-200'
               : 'border-gray-100 bg-gray-50'
               }`}
-            style={{ opacity: partner.isAvailable ? 1 : 0.6 }}
+            style={{ opacity: partner.is_available ? 1 : 0.6 }}
           >
             <View className="flex-row">
               {/* Profile Image/Avatar */}
               <View className="mr-3">
-                {!partner.profileImage ? (
+                {!partner.profile_photo ? (
                   <View className="w-14 h-14 rounded-full overflow-hidden bg-gray-200">
                     <View className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 items-center justify-center">
                       <Feather name="user" size={24} color="#9ca3af" />
@@ -130,7 +117,7 @@ const SelectDeliveryPartnerBottomSheet = ({
                 ) : (
                   <View className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 items-center justify-center">
                     <Text className="text-black text-xl font-bold">
-                      {partner.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      {partner.first_name } {partner.last_name}
                     </Text>
                   </View>
                 )}
@@ -161,16 +148,16 @@ const SelectDeliveryPartnerBottomSheet = ({
                   </View>
                   <Text className="text-xs text-gray-500">•</Text>
                   <Text className="text-xs text-gray-500 ml-2">
-                    {partner.totalDeliveries}+ deliveries
+                    {partner.total_deliveries}+ deliveries
                   </Text>
                 </View>
 
                 {/* Vehicle Info */}
                 <View className="flex-row items-center bg-gray-50 rounded-lg px-3 py-2 mb-3">
-                  <Text className="mr-2">{getVehicleIcon(partner.vehicleType)}</Text>
+                  <Text className="mr-2">{getVehicleIcon(partner.vehicle_type)}</Text>
                   <View className="flex-1">
-                    <Text className="text-xs text-gray-500">{getVehicleLabel(partner.vehicleType)}</Text>
-                    <Text className="text-xs font-semibold text-gray-700">{partner.vehicleNumber}</Text>
+                    <Text className="text-xs text-gray-500">{getVehicleLabel(partner.vehicle_type)}</Text>
+                    <Text className="text-xs font-semibold text-gray-700">{partner.vehicle_number}</Text>
                   </View>
                 </View>
 
@@ -182,7 +169,7 @@ const SelectDeliveryPartnerBottomSheet = ({
                     </View>
                     <View>
                       <Text className="text-xs text-gray-500">Distance</Text>
-                      <Text className="text-xs font-semibold text-gray-900">{partner.distance}</Text>
+                      <Text className="text-xs font-semibold text-gray-900">{partner?.distance || "naajanu"}</Text>
                     </View>
                   </View>
 
@@ -192,34 +179,34 @@ const SelectDeliveryPartnerBottomSheet = ({
                     </View>
                     <View>
                       <Text className="text-xs text-gray-500">ETA</Text>
-                      <Text className="text-xs font-semibold text-gray-900">{partner.estimatedTime}</Text>
+                      <Text className="text-xs font-semibold text-gray-900">{partner?.estimatedTime || "naajanu"}</Text>
                     </View>
                   </View>
 
-                  {partner.isAvailable && partner.currentOrders > 0 && (
+                  {partner.is_available && partner?.currentOrders || 5 > 0 && (
                     <View className="flex-row items-center">
                       <View className="w-7 h-7 rounded-full bg-orange-50 items-center justify-center mr-2">
                         <Feather name="package" size={14} color="#ea580c" />
                       </View>
                       <View>
                         <Text className="text-xs text-gray-500">Active</Text>
-                        <Text className="text-xs font-semibold text-gray-900">{partner.currentOrders}</Text>
+                        <Text className="text-xs font-semibold text-gray-900">{partner?.currentOrders || "naajanu"}</Text>
                       </View>
                     </View>
                   )}
                 </View>
 
                 {/* Contact Button */}
-                {partner.isAvailable && (
+                {partner.is_available && (
                   <TouchableOpacity className="flex-row items-center justify-center bg-blue-50 rounded-lg px-3 py-2 mt-3">
                     <Feather name="phone" size={14} color="#2563eb" />
-                    <Text className="text-blue-600 font-medium text-xs ml-2">{partner.phone}</Text>
+                    <Text className="text-blue-600 font-medium text-xs ml-2">{partner?.phone || 98787777777 }</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {/* Selection Radio */}
-              {partner.isAvailable && (
+              {partner.is_available && (
                 <View className="ml-2 justify-center">
                   <View
                     style={{
@@ -250,7 +237,7 @@ const SelectDeliveryPartnerBottomSheet = ({
           </TouchableOpacity>
         ))}
 
-        {partners.filter(p => p.isAvailable).length === 0 && (
+        {partners.filter(p => p.is_available).length === 0 && (
           <View className="items-center justify-center py-12">
             <View className="w-20 h-20 rounded-full bg-gray-100 items-center justify-center mb-4">
               <Feather name="user-x" size={32} color="#9ca3af" />
@@ -270,7 +257,7 @@ const SelectDeliveryPartnerBottomSheet = ({
             }`}
         >
           <Text className={`font-bold text-base ${selectedPartner ? 'text-white' : 'text-gray-500'}`}>
-            {selectedPartner ? `Assign ${selectedPartner.name}` : 'Select a Partner'}
+            {selectedPartner ? `Assign ${selectedPartner.first_name}` : 'Select a Partner'}
           </Text>
         </TouchableOpacity>
       </BottomSheetScrollView>

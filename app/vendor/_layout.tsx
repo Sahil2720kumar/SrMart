@@ -14,7 +14,7 @@ export default function VendorLayout() {
       <Stack.Screen name="product/[productId]" />
       <Stack.Screen name="order/[orderId]" />
       <Stack.Screen name="inventory/index" />
-      <Stack.Screen name="earnings" />
+      {/* <Stack.Screen name="earnings" /> */}
       <Stack.Screen name="auth" />
     </Stack>
   )

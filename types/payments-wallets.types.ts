@@ -79,3 +79,43 @@ export interface DeliveryBoyBankDetails {
   created_at: string;
   updated_at: string;
 }
+
+
+export type CashoutRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'processing'
+  | 'transferred'
+  | 'completed'
+  | 'rejected'
+  | 'cancelled';
+
+export interface CashoutRequest {
+  id: string; // uuid
+  wallet_id: string; // uuid
+
+  request_number: string;
+
+  amount: number; // numeric(10,2)
+
+  status: CashoutRequestStatus;
+
+  request_date: string; // timestamp with time zone (ISO string)
+
+  approved_at: string | null;
+  approved_by: string | null; // uuid (users.auth_id)
+
+  transferred_at: string | null;
+  completed_at: string | null;
+
+  rejected_at: string | null;
+  rejection_reason: string | null;
+
+  transaction_reference: string | null;
+
+  admin_notes: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
