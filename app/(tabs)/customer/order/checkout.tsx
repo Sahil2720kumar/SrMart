@@ -1,13 +1,15 @@
 import CartItemComp from "@/components/CartItem"
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
+import { DeliveryFeeBreakdown } from "@/components/Deliveryfeebreakdown"
 import { FullPageError } from "@/components/ErrorComp"
 import useCartStore from "@/store/cartStore"
 import useWishlistStore from "@/store/wishlistStore"
 import useDiscountStore from "@/store/useDiscountStore"
+import { useDeliveryFees } from "@/hooks/usedeliveryfees"
 import Feather from "@expo/vector-icons/Feather"
 import { BlurView } from "expo-blur"
 import { router, Stack } from "expo-router"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator } from "react-native"
 import { useCustomerAddresses } from "@/hooks/queries"
 
@@ -21,11 +23,32 @@ export default function CheckoutScreen() {
   } = useDiscountStore()
 
   const [showAddressSheet, setShowAddressSheet] = useState(false)
-  const [selectedAddress, setSelectedAddress] = useState(addresses[0])
+  const [selectedAddress, setSelectedAddress] = useState(addresses.find(addr => addr.is_default) || addresses[0])
+
+  // Update selected address when addresses load
+  useEffect(() => {
+    if (addresses.length > 0 && !selectedAddress) {
+      setSelectedAddress(addresses.find(addr => addr.is_default) || addresses[0])
+    }
+  }, [addresses])
+
+  // Use the delivery fees hook
+  const {
+    vendorDeliveryFees,
+    totalDeliveryFee,
+    originalDeliveryFee,
+    vendorCount,
+    isCalculating: isCalculatingDelivery,
+    isFreeDelivery,
+  } = useDeliveryFees({
+    subtotal:totalPrice,
+    selectedAddress,
+    hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
+    freeDeliveryMinimum:499
+  })
 
   const itemTotal = totalPrice
-  const deliveryFee = itemTotal > 500 ? 0 : 30
-  const grandTotal = Math.max(itemTotal + deliveryFee - discountAmount, 0)
+  const grandTotal = Math.max(itemTotal + totalDeliveryFee - discountAmount, 0)
 
   const handleProceedToPayment = useCallback(() => {
     router.navigate("/(tabs)/customer/order/payment")
@@ -119,30 +142,35 @@ export default function CheckoutScreen() {
           <Text className="text-base font-bold text-gray-900 mb-4">Order Summary</Text>
 
           <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-gray-600">Item Total</Text>
-            <Text className="text-gray-900 font-semibold">₹{itemTotal.toFixed(2)}</Text>
+            <Text className="text-sm text-gray-600">Item Total</Text>
+            <Text className="text-sm font-semibold text-gray-900">₹{itemTotal.toFixed(2)}</Text>
           </View>
 
           {activeDiscount && (
             <View className="flex-row justify-between items-center mb-3">
               <View className="flex-row items-center">
-                <Text className="text-green-600">Discount</Text>
+                <Text className="text-sm text-green-600">Discount</Text>
                 <View className="ml-2 bg-green-100 px-2 py-0.5 rounded">
                   <Text className="text-green-700 text-xs font-semibold">{activeDiscount.code}</Text>
                 </View>
               </View>
-              <Text className="text-green-600 font-semibold">-₹{discountAmount.toFixed(2)}</Text>
+              <Text className="text-sm font-semibold text-green-600">-₹{discountAmount.toFixed(2)}</Text>
             </View>
           )}
 
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-gray-600">Delivery</Text>
-            <Text className={`font-semibold ${deliveryFee === 0 ? "text-green-500" : "text-gray-900"}`}>
-              {deliveryFee === 0 ? "Free" : `₹${deliveryFee.toFixed(2)}`}
-            </Text>
-          </View>
+          {/* Delivery Fee Breakdown Component */}
+          <DeliveryFeeBreakdown
+            vendorDeliveryFees={vendorDeliveryFees}
+            totalDeliveryFee={totalDeliveryFee}
+            originalDeliveryFee={originalDeliveryFee}
+            vendorCount={vendorCount}
+            isCalculating={isCalculatingDelivery}
+            isFreeDelivery={isFreeDelivery}
+            showBreakdown={true}
+            className="mb-4"
+          />
 
-          {deliveryFee === 0 && (
+          {totalDeliveryFee === 0 && (
             <View className="mb-4 bg-green-50 rounded-lg p-2">
               <View className="flex-row items-center">
                 <Feather name="gift" size={14} color="#16a34a" />
@@ -187,12 +215,25 @@ export default function CheckoutScreen() {
       <View className="px-4 py-4 bg-white border-t border-gray-100">
         <TouchableOpacity
           onPress={handleProceedToPayment}
+          disabled={isCalculatingDelivery}
           className="flex-row items-center bg-green-500 rounded-full px-6 py-4 justify-center"
+          style={{ opacity: isCalculatingDelivery ? 0.6 : 1 }}
         >
-          <Text className="text-white font-semibold text-base mr-3">
-            Proceed to Payment • ₹{grandTotal.toFixed(2)}
-          </Text>
-          <Feather name="arrow-right" size={20} color="white" />
+          {isCalculatingDelivery ? (
+            <>
+              <ActivityIndicator color="white" size="small" className="mr-3" />
+              <Text className="text-white font-semibold text-base">
+                Calculating delivery...
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text className="text-white font-semibold text-base mr-3">
+                Proceed to Payment • ₹{grandTotal.toFixed(2)}
+              </Text>
+              <Feather name="arrow-right" size={20} color="white" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 

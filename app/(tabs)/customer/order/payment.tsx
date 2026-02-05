@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { useSegments, router } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Modal, Alert, ActivityIndicator } from "react-native";
 import { supabase } from "@/lib/supabase";
 import useDiscountStore from "@/store/useDiscountStore";
@@ -8,6 +8,8 @@ import { PaymentMethod } from "@/types/enums.types";
 import { useAuthStore } from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
 import { useCustomerAddresses, useCustomerProfile } from "@/hooks/queries";
+import { useDeliveryFees } from "@/hooks/usedeliveryfees";
+import { DeliveryFeeBreakdown } from "@/components/Deliveryfeebreakdown";
 
 // Order structure that matches your SQL function
 interface CreateOrderInput {
@@ -24,6 +26,7 @@ interface CreateOrderInput {
   coupon_discount: number;
   total_amount: number;
   special_instructions?: string;
+  distance_km: number;
   items: Array<{
     product_id: string;
     qty: number;
@@ -50,11 +53,25 @@ export default function PaymentScreen() {
   const { data: customerData, isLoading: isLoadingCustomer } = useCustomerProfile();
   const selectedAddress = addresses?.find((address) => address.is_default);
 
+  // Use the delivery fees hook
+  const {
+    vendorDeliveryFees,
+    totalDeliveryFee,
+    originalDeliveryFee,
+    vendorCount,
+    isCalculating: isCalculatingDelivery,
+    isFreeDelivery,
+  } = useDeliveryFees({
+    subtotal:totalPrice,
+    selectedAddress,
+    hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
+    freeDeliveryMinimum:499
+  });
+
   // Constants
-  const DELIVERY_FEE_PER_VENDOR = 30;
   const TAX_RATE = 0; // Tax is 0 for now
 
-  // Group cart items by vendor and calculate totals
+  // Prepare order data with calculated delivery fees
   const prepareOrderData = () => {
     // Group items by vendor
     const vendorMap = new Map<string, Array<{
@@ -73,7 +90,7 @@ export default function PaymentScreen() {
       vendorMap.get(vendorId)!.push(item);
     });
 
-    // Create orders array
+    // Create orders array with delivery fees
     const orders: CreateOrderInput[] = [];
     let groupSubtotal = 0;
     let groupDeliveryFee = 0;
@@ -87,11 +104,14 @@ export default function PaymentScreen() {
         orderSubtotal += price * item.quantity;
       });
 
-      const orderDeliveryFee = DELIVERY_FEE_PER_VENDOR;
+      // Get delivery fee and distance for this vendor
+      const vendorDeliveryInfo = vendorDeliveryFees.find(v => v.vendorId === vendorId);
+      const orderDeliveryFee = vendorDeliveryInfo?.deliveryFee || 30; // Default to 30 if not found
+      const orderDistance = vendorDeliveryInfo?.distance || 5; // Default to 5km if not found
+      
       const orderTax = orderSubtotal * TAX_RATE;
-      const orderTotal = orderSubtotal + orderDeliveryFee + orderTax;
 
-      // Generate unique order number (you can improve this)
+      // Generate unique order number
       const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       orders.push({
@@ -106,8 +126,9 @@ export default function PaymentScreen() {
         tax_percentage: TAX_RATE * 100,
         discount: 0,
         coupon_discount: 0, // Applied at group level
-        total_amount: orderTotal,
+        total_amount: 0, // SQL function will calculate this
         special_instructions: "",
+        distance_km: orderDistance,
         items: items.map((item) => ({
           product_id: item.productId,
           qty: item.quantity,
@@ -157,6 +178,11 @@ export default function PaymentScreen() {
       return;
     }
 
+    if (isCalculatingDelivery) {
+      Alert.alert("Please wait", "Calculating delivery fees...");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -201,7 +227,7 @@ export default function PaymentScreen() {
           // Order group totals
           p_subtotal: groupSubtotal,
           p_tax: groupTax,
-          p_delivery_fee: groupDeliveryFee,
+          // p_delivery_fee: groupDeliveryFee,
           p_discount: groupDiscount,
           
           // Orders array (one per vendor)
@@ -278,13 +304,6 @@ export default function PaymentScreen() {
     ? totalPrice - discountAmount
     : totalPrice;
 
-  // Calculate number of vendors (for delivery fee display)
-  const vendorCount = new Set(
-    cartItems.map((item) => item.product?.vendor_id).filter(Boolean)
-  ).size;
-
-  const totalDeliveryFee = vendorCount * DELIVERY_FEE_PER_VENDOR;
-
   if (isLoadingAddresses || isLoadingCustomer) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
@@ -325,14 +344,16 @@ export default function PaymentScreen() {
             </View>
           )}
           
-          <View className="flex-row justify-between mb-2">
-            <Text className="text-sm text-gray-600">
-              Delivery Fee ({vendorCount} {vendorCount === 1 ? 'vendor' : 'vendors'})
-            </Text>
-            <Text className="text-sm font-semibold text-gray-900">
-              ₹{totalDeliveryFee.toFixed(2)}
-            </Text>
-          </View>
+          {/* Delivery Fee Breakdown Component */}
+          <DeliveryFeeBreakdown
+            vendorDeliveryFees={vendorDeliveryFees}
+            totalDeliveryFee={totalDeliveryFee}
+            originalDeliveryFee={originalDeliveryFee}
+            vendorCount={vendorCount}
+            isCalculating={isCalculatingDelivery}
+            isFreeDelivery={isFreeDelivery}
+            showBreakdown={true}
+          />
           
           <View className="border-t border-gray-200 my-2" />
           
@@ -347,13 +368,13 @@ export default function PaymentScreen() {
         {/* COD Option */}
         <TouchableOpacity
           onPress={() => setSelectedPayment("cod")}
-          disabled={isProcessing}
+          disabled={isProcessing || isCalculatingDelivery}
           className="flex-row items-center rounded-2xl p-5 mb-4"
           style={{
             backgroundColor: selectedPayment === "cod" ? "#f0fdf4" : "#f9fafb",
             borderWidth: selectedPayment === "cod" ? 2 : 0,
             borderColor: selectedPayment === "cod" ? "#22c55e" : "transparent",
-            opacity: isProcessing ? 0.6 : 1,
+            opacity: (isProcessing || isCalculatingDelivery) ? 0.6 : 1,
           }}
         >
           <View className="w-12 h-12 bg-white rounded-full items-center justify-center mr-4">
@@ -397,14 +418,14 @@ export default function PaymentScreen() {
         {/* Pay Online Option */}
         <TouchableOpacity
           onPress={() => setSelectedPayment("online")}
-          disabled={isProcessing}
+          disabled={isProcessing || isCalculatingDelivery}
           className="flex-row items-center rounded-2xl p-5 mb-4"
           style={{
             backgroundColor:
               selectedPayment === "online" ? "#f0fdf4" : "#f9fafb",
             borderWidth: selectedPayment === "online" ? 2 : 0,
             borderColor: selectedPayment === "online" ? "#22c55e" : "transparent",
-            opacity: isProcessing ? 0.6 : 1,
+            opacity: (isProcessing || isCalculatingDelivery) ? 0.6 : 1,
           }}
         >
           <View className="w-12 h-12 bg-white rounded-full items-center justify-center mr-4">
@@ -462,11 +483,11 @@ export default function PaymentScreen() {
       <View className="px-4 py-4 bg-white border-t border-gray-100">
         <TouchableOpacity
           onPress={handlePlaceOrder}
-          disabled={!selectedPayment || isProcessing}
+          disabled={!selectedPayment || isProcessing || isCalculatingDelivery}
           className="rounded-2xl py-4 items-center justify-center flex-row"
           style={{
             backgroundColor:
-              selectedPayment && !isProcessing ? "#22c55e" : "#d1d5db",
+              (selectedPayment && !isProcessing && !isCalculatingDelivery) ? "#22c55e" : "#d1d5db",
           }}
           activeOpacity={0.8}
         >
@@ -475,6 +496,13 @@ export default function PaymentScreen() {
               <ActivityIndicator color="white" size="small" className="mr-2" />
               <Text className="text-white font-bold text-base">
                 Processing...
+              </Text>
+            </>
+          ) : isCalculatingDelivery ? (
+            <>
+              <ActivityIndicator color="white" size="small" className="mr-2" />
+              <Text className="text-white font-bold text-base">
+                Calculating delivery...
               </Text>
             </>
           ) : (

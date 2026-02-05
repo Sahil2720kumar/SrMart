@@ -21,7 +21,6 @@ export default function OrderDetailsScreen() {
   const { data: order, isLoading, error } = useOrderDetail(orderId);
   const { data: timeline } = useOrderTimeline(orderId);
 
-  // console.log(timeline);
 
   const cancelOrderMutation = useCancelOrder();
   const reorderMutation = useReorder();
@@ -399,7 +398,7 @@ export default function OrderDetailsScreen() {
           <View className="flex-row justify-between items-center mb-2">
             <Text className="text-sm text-gray-600">Delivery Fee</Text>
             <Text className="text-sm font-semibold text-gray-900">
-              {order.delivery_fee === 0 ? (
+              {order?.is_free_delivery ? (
                 <Text className="text-green-600">Free</Text>
               ) : (
                 `₹${order.delivery_fee.toFixed(2)}`

@@ -12,6 +12,7 @@ export interface ActiveDiscount {
   minOrderAmount: number;
   applicableTo?: 'all' | 'category' | 'product';
   applicableId?: string;
+  includes_free_delivery:boolean
 }
 
 interface DiscountState {
@@ -26,7 +27,8 @@ interface DiscountState {
     maxDiscount?: number,
     minOrderAmount?: number,
     applicableTo?: 'all' | 'category' | 'product' | 'vendor',
-    applicableId?: string
+    applicableId?: string,
+    includes_free_delivery?:boolean
   ) => void;
   
   removeDiscount: () => void;
@@ -70,7 +72,8 @@ const useDiscountStore = create<DiscountState>()(
         maxDiscount,
         minOrderAmount = 0,
         applicableTo = 'all',
-        applicableId
+        applicableId,
+        includes_free_delivery=false
       ) => {
         const discount = calculateDiscountAmount(type, value, orderAmount, maxDiscount);
         
@@ -83,6 +86,7 @@ const useDiscountStore = create<DiscountState>()(
             minOrderAmount,
             applicableTo,
             applicableId,
+            includes_free_delivery
           },
           discountAmount: discount,
         });

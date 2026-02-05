@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { Stack, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useCartStore from '@/store/cartStore';
 import useDiscountStore from '@/store/useDiscountStore';
 import {
@@ -11,19 +11,40 @@ import {
 } from '@/hooks/queries/orders';
 import { useFilteredCoupons, getCouponSuggestions } from '@/hooks/queries/Usefilteredcoupons';
 import { Coupon } from '@/types/offers.types';
+import { useCustomerAddresses } from '@/hooks/queries';
+import { useDeliveryFees } from '@/hooks/usedeliveryfees';
 
 export default function DiscountCouponScreen() {
   const [couponCode, setCouponCode] = useState('');
   const [error, setError] = useState('');
-
+  const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
+  const [selectedAddress, setSelectedAddress] = useState(addresses.find(addr => addr.is_default) || addresses[0])
   const cartItems = useCartStore((s) => s.cartItems);
   const totalPrice = useCartStore((s) => s.totalPrice);
+
+  useEffect(() => {
+    if (addresses.length > 0 && !selectedAddress) {
+      setSelectedAddress(addresses.find(addr => addr.is_default) || addresses[0])
+    }
+  }, [addresses])
+
   const {
     discountAmount,
     activeDiscount,
     applyDiscount,
     removeDiscount,
   } = useDiscountStore();
+
+
+
+  const {
+    vendorDeliveryFees,
+    totalDeliveryFee,
+    vendorCount,
+    isCalculating: isCalculatingDelivery,
+  } = useDeliveryFees({
+    selectedAddress,
+  })
 
   const { data: coupons, isLoading } = useActiveCoupons();
   const validateCoupon = useValidateCoupon();
@@ -55,7 +76,8 @@ export default function DiscountCouponScreen() {
         coupon.max_discount_amount,
         coupon.min_order_amount,
         coupon.applicable_to,
-        coupon.applicable_id
+        coupon.applicable_id,
+        coupon.includes_free_delivery
       );
 
       setError('');
@@ -99,13 +121,32 @@ export default function DiscountCouponScreen() {
   };
 
   const getDiscountLabel = (coupon: Coupon) => {
+    // Free delivery + discount
+    if (coupon.includes_free_delivery && coupon.discount_value > 0) {
+      if (coupon.discount_type === 'percentage') {
+        return `FREE DELIVERY + ${coupon.discount_value}% OFF`;
+      }
+      return `FREE DELIVERY + ₹${coupon.discount_value} OFF`;
+    }
+  
+    // Percentage discount
     if (coupon.discount_type === 'percentage') {
       return `${coupon.discount_value}% OFF`;
-    } else if (coupon.discount_type === 'flat') {
+    }
+  
+    // Flat discount
+    if (coupon.discount_type === 'flat' && coupon.discount_value > 0) {
       return `₹${coupon.discount_value} OFF`;
     }
+  
+    // Only free delivery
+    if (coupon.includes_free_delivery) {
+      return 'FREE DELIVERY';
+    }
+  
     return 'FREE SHIPPING';
   };
+  
 
   const renderCouponCard = (
     coupon: Coupon,
@@ -123,20 +164,20 @@ export default function DiscountCouponScreen() {
       <View
         key={coupon.id}
         className={`border rounded-2xl overflow-hidden ${isSelected
-            ? 'border-green-500 bg-green-50'
-            : isEligible
-              ? 'border-gray-200 bg-white'
-              : 'border-gray-200 bg-gray-50 opacity-75'
+          ? 'border-green-500 bg-green-50'
+          : isEligible
+            ? 'border-gray-200 bg-white'
+            : 'border-gray-200 bg-gray-50 opacity-75'
           }`}
       >
         {/* Coupon Header */}
         <View className="flex-row items-start p-4">
           <View
             className={`w-14 h-14 rounded-xl items-center justify-center ${coupon.discount_type === 'percentage'
-                ? isEligible ? 'bg-purple-100' : 'bg-gray-100'
-                : coupon.discount_type === 'flat'
-                  ? isEligible ? 'bg-blue-100' : 'bg-gray-100'
-                  : isEligible ? 'bg-orange-100' : 'bg-gray-100'
+              ? isEligible ? 'bg-purple-100' : 'bg-gray-100'
+              : coupon.discount_type === 'flat'
+                ? isEligible ? 'bg-blue-100' : 'bg-gray-100'
+                : isEligible ? 'bg-orange-100' : 'bg-gray-100'
               }`}
           >
             <Feather
@@ -165,7 +206,7 @@ export default function DiscountCouponScreen() {
               <Text className="text-base font-bold text-gray-900 flex-1">
                 {getDiscountLabel(coupon)}
               </Text>
-              {remainingUses && remainingUses < 10 && (
+              {remainingUses !== null && remainingUses < 10 && (
                 <View className="bg-orange-100 px-2 py-0.5 rounded-full">
                   <Text className="text-orange-700 text-xs font-semibold">
                     {remainingUses} left
@@ -183,22 +224,22 @@ export default function DiscountCouponScreen() {
             <View className="flex-row items-center mt-2 flex-wrap gap-2">
               <View
                 className={`px-2.5 py-1 rounded-md ${isEligible
-                    ? coupon.discount_type === 'percentage'
-                      ? 'bg-purple-100'
-                      : coupon.discount_type === 'flat'
-                        ? 'bg-blue-100'
-                        : 'bg-orange-100'
-                    : 'bg-gray-200'
+                  ? coupon.discount_type === 'percentage'
+                    ? 'bg-purple-100'
+                    : coupon.discount_type === 'flat'
+                      ? 'bg-blue-100'
+                      : 'bg-orange-100'
+                  : 'bg-gray-200'
                   }`}
               >
                 <Text
                   className={`text-xs font-bold ${isEligible
-                      ? coupon.discount_type === 'percentage'
-                        ? 'text-purple-700'
-                        : coupon.discount_type === 'flat'
-                          ? 'text-blue-700'
-                          : 'text-orange-700'
-                      : 'text-gray-700'
+                    ? coupon.discount_type === 'percentage'
+                      ? 'text-purple-700'
+                      : coupon.discount_type === 'flat'
+                        ? 'text-blue-700'
+                        : 'text-orange-700'
+                    : 'text-gray-700'
                     }`}
                 >
                   {coupon.code}
@@ -219,14 +260,20 @@ export default function DiscountCouponScreen() {
         {isEligible ? (
           <View
             className={`flex-row items-center justify-between px-4 py-3 border-t ${isSelected
-                ? 'border-green-200 bg-green-100'
-                : 'border-gray-100 bg-gray-50'
+              ? 'border-green-200 bg-green-100'
+              : 'border-gray-100 bg-gray-50'
               }`}
           >
             <View className="flex-row items-center">
               <Text className="text-sm text-gray-600">You save: </Text>
               <Text className="text-base font-bold text-green-600">
-                ₹{discount.toFixed(2)}
+                <Text className="text-base font-bold text-green-600">
+                  ₹{
+                    discount > 1
+                      ? discount.toFixed(2)
+                      : (totalDeliveryFee + discount).toFixed(2)
+                  }
+                </Text>
               </Text>
             </View>
 
@@ -347,8 +394,8 @@ export default function DiscountCouponScreen() {
               onPress={handleManualApply}
               disabled={couponCode.length === 0 || validateCoupon.isPending}
               className={`px-6 py-3.5 rounded-xl ${couponCode.length > 0 && !validateCoupon.isPending
-                  ? 'bg-green-500'
-                  : 'bg-gray-200'
+                ? 'bg-green-500'
+                : 'bg-gray-200'
                 }`}
             >
               {validateCoupon.isPending ? (

@@ -1,14 +1,14 @@
 import CartItemComp from "@/components/CartItem"
 import OfferProductCard from "@/components/OfferProductCard"
-import ProductCard from "@/components/ProductCard"
+import { DeliveryFeeBreakdown } from "@/components/Deliveryfeebreakdown"
 import useCartStore from "@/store/cartStore"
 import useWishlistStore from "@/store/wishlistStore"
 import useDiscountStore from "@/store/useDiscountStore"
+import { useDeliveryFees } from "@/hooks/usedeliveryfees"
 import Feather from "@expo/vector-icons/Feather"
-import { router, Stack, useFocusEffect, useSegments } from "expo-router"
-import { useMemo, useCallback, useRef, useState } from "react"
+import { router, Stack } from "expo-router"
+import { useCallback, useState, useEffect } from "react"
 import { View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator } from "react-native"
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
 import { useCustomerAddresses, useProducts } from "@/hooks/queries"
@@ -25,13 +25,37 @@ export default function CartScreen() {
     removeDiscount,
   } = useDiscountStore()
 
-  const bottomSheetRef = useRef<BottomSheet>(null);
   const [showAddressSheet, setShowAddressSheet] = useState(false)
-  const [selectedAddress, setSelectedAddress] = useState(addresses[0])
+  const [selectedAddress, setSelectedAddress] = useState(addresses.find(addr => addr.is_default) || addresses[0])
+
+  // Update selected address when addresses load
+  useEffect(() => {
+    if (addresses.length > 0 && !selectedAddress) {
+      setSelectedAddress(addresses.find(addr => addr.is_default) || addresses[0])
+    }
+  }, [addresses])
+
+  // Use the delivery fees hook
+  const {
+    vendorDeliveryFees,
+    totalDeliveryFee,
+    originalDeliveryFee,
+    vendorCount,
+    isCalculating: isCalculatingDelivery,
+    isFreeDelivery,
+    
+  } = useDeliveryFees({
+    subtotal:totalPrice,
+    selectedAddress,
+    hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
+    freeDeliveryMinimum:499
+  })
+ 
+  // console.log(activeDiscount);
+  
 
   const itemTotal = totalPrice
-  const deliveryFee = itemTotal > 50 ? 0 : 5
-  const grandTotal = Math.max(itemTotal + deliveryFee - discountAmount, 0)
+  const grandTotal = Math.max(itemTotal + totalDeliveryFee - discountAmount, 0)
 
   const handlePlaceOrder = useCallback(() => {
     router.navigate("/(tabs)/customer/order/checkout")
@@ -87,8 +111,8 @@ export default function CartScreen() {
         <TouchableOpacity
           onPress={handleNavigateToCoupon}
           className={`mx-4 mb-4 flex-row items-center rounded-2xl p-4 ${activeDiscount
-              ? 'bg-green-50 border-2 border-green-500'
-              : 'bg-white border border-green-500'
+            ? 'bg-green-50 border-2 border-green-500'
+            : 'bg-white border border-green-500'
             }`}
         >
           <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${activeDiscount ? 'bg-green-500' : 'bg-green-100'
@@ -129,28 +153,33 @@ export default function CartScreen() {
         {/* Price Breakdown */}
         <View className="px-4 mb-4">
           <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-gray-600">Item Total</Text>
-            <Text className="text-gray-900 font-semibold">₹{itemTotal.toFixed(2)}</Text>
+            <Text className="text-sm text-gray-600">Item Total</Text>
+            <Text className="text-sm font-semibold text-gray-900">₹{itemTotal.toFixed(2)}</Text>
           </View>
 
           {activeDiscount && (
             <View className="flex-row justify-between items-center mb-3">
               <View className="flex-row items-center">
-                <Text className="text-green-600">Discount</Text>
+                <Text className="text-sm text-green-600">Discount</Text>
                 <View className="ml-2 bg-green-100 px-2 py-0.5 rounded">
                   <Text className="text-green-700 text-xs font-semibold">{activeDiscount.code}</Text>
                 </View>
               </View>
-              <Text className="text-green-600 font-semibold">-₹{discountAmount.toFixed(2)}</Text>
+              <Text className="text-sm font-semibold text-green-600">-₹{discountAmount.toFixed(2)}</Text>
             </View>
           )}
 
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-gray-600">Delivery</Text>
-            <Text className={`font-semibold ${deliveryFee === 0 ? "text-green-500" : "text-gray-900"}`}>
-              {deliveryFee === 0 ? "Free" : `₹${deliveryFee.toFixed(2)}`}
-            </Text>
-          </View>
+          {/* Delivery Fee Breakdown Component */}
+          <DeliveryFeeBreakdown
+            vendorDeliveryFees={vendorDeliveryFees}
+            totalDeliveryFee={totalDeliveryFee}
+            originalDeliveryFee={originalDeliveryFee}
+            vendorCount={vendorCount}
+            isCalculating={isCalculatingDelivery}
+            isFreeDelivery={isFreeDelivery}
+            showBreakdown={true}
+            className="mb-3"
+          />
 
           <View className="h-px bg-gray-200 mb-4" />
 
@@ -194,12 +223,25 @@ export default function CartScreen() {
       <View className="px-4 py-4 bg-white border-t border-gray-100">
         <TouchableOpacity
           onPress={handlePlaceOrder}
+          disabled={isCalculatingDelivery}
           className="flex-row items-center bg-green-500 rounded-full px-6 py-4 justify-center"
+          style={{ opacity: isCalculatingDelivery ? 0.6 : 1 }}
         >
-          <Text className="text-white font-semibold text-base mr-3">
-            Place Order • ₹{grandTotal.toFixed(2)}
-          </Text>
-          <Feather name="arrow-right" size={20} color="white" />
+          {isCalculatingDelivery ? (
+            <>
+              <ActivityIndicator color="white" size="small" className="mr-3" />
+              <Text className="text-white font-semibold text-base">
+                Calculating delivery...
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text className="text-white font-semibold text-base mr-3">
+                Place Order • ₹{grandTotal.toFixed(2)}
+              </Text>
+              <Feather name="arrow-right" size={20} color="white" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 

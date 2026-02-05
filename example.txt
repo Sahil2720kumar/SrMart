@@ -1,2 +1,255 @@
 //TODO
 when coupon is used add to coupon usage table, So that a customer once  applied a particular coupon, does not allow customer to reapplied  coupon
+
+
+-- ============================================================================
+-- FUNCTION: Create Order Group with Orders + Coupon Validation
+-- ============================================================================
+CREATE OR REPLACE FUNCTION create_order_group_with_orders(
+  p_customer_id UUID,
+  p_payment_method VARCHAR,
+  p_coupon_code VARCHAR,  -- ✅ Changed: Accept coupon CODE, not amount
+
+  -- Order group totals (will be recalculated)
+  p_subtotal NUMERIC(12,2),
+  p_tax NUMERIC(12,2),
+  p_delivery_fee NUMERIC(12,2),
+  p_discount NUMERIC(12,2),
+
+  -- Orders array
+  p_orders JSONB
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_order_group_id UUID;
+  v_order JSONB;
+  v_item JSONB;
+  v_order_id UUID;
+
+  -- Coupon variables
+  v_coupon_id UUID;
+  v_coupon_discount NUMERIC(12,2) := 0;
+  v_final_total NUMERIC(12,2);
+
+  -- Item pricing
+  v_price NUMERIC(10,2);
+  v_discount_price NUMERIC(10,2);
+  v_item_total NUMERIC(10,2);
+
+  -- Commission
+  v_commission_rate NUMERIC(5,2);
+  v_commission_amount NUMERIC(10,2);
+
+  -- Product snapshot
+  v_product_name TEXT;
+  v_product_image TEXT;
+BEGIN
+  -- =====================================================
+  -- 1️⃣ VALIDATE & CALCULATE COUPON DISCOUNT
+  -- =====================================================
+  IF p_coupon_code IS NOT NULL AND p_coupon_code <> '' THEN
+    -- Call the coupon validation function
+    SELECT 
+      id,
+      calculate_coupon_discount(p_coupon_code, p_subtotal)
+    INTO 
+      v_coupon_id,
+      v_coupon_discount
+    FROM coupons
+    WHERE code = p_coupon_code
+      AND is_active = TRUE
+      AND NOW() BETWEEN start_date AND end_date
+      AND p_subtotal >= min_order_amount
+    LIMIT 1;
+
+    -- If coupon not found, raise error
+    IF v_coupon_id IS NULL THEN
+      RAISE EXCEPTION 'Invalid or expired coupon code: %', p_coupon_code;
+    END IF;
+  END IF;
+
+  -- Calculate final total
+  v_final_total := p_subtotal + p_tax + p_delivery_fee - p_discount - v_coupon_discount;
+
+  -- Ensure total doesn't go negative
+  IF v_final_total < 0 THEN
+    v_final_total := 0;
+  END IF;
+
+  -- =====================================================
+  -- 2️⃣ CREATE ORDER GROUP
+  -- =====================================================
+  INSERT INTO order_groups (
+    customer_id,
+    payment_method,
+    payment_status,
+    coupon_id,           -- ✅ Store coupon reference
+    subtotal,
+    tax,
+    delivery_fee,
+    discount,
+    coupon_discount,     -- ✅ Calculated discount
+    total_amount         -- ✅ Calculated total
+  )
+  VALUES (
+    p_customer_id,
+    p_payment_method,
+    'pending',
+    v_coupon_id,         -- ✅ Store which coupon was used
+    p_subtotal,
+    p_tax,
+    p_delivery_fee,
+    p_discount,
+    v_coupon_discount,   -- ✅ Server-calculated
+    v_final_total        -- ✅ Server-calculated
+  )
+  RETURNING id INTO v_order_group_id;
+
+  -- =====================================================
+  -- 3️⃣ INCREMENT COUPON USAGE COUNT
+  -- =====================================================
+  IF v_coupon_id IS NOT NULL THEN
+    UPDATE coupons
+    SET usage_count = usage_count + 1
+    WHERE id = v_coupon_id;
+  END IF;
+
+  -- =====================================================
+  -- 4️⃣ LOOP THROUGH ORDERS (one per vendor)
+  -- =====================================================
+  FOR v_order IN
+    SELECT * FROM jsonb_array_elements(p_orders)
+  LOOP
+    INSERT INTO orders (
+      order_group_id,
+      customer_id,
+      vendor_id,
+      delivery_address_id,
+      coupon_id,           -- ✅ Link to coupon
+
+      order_number,
+      status,
+
+      item_count,
+      subtotal,
+      delivery_fee,
+      tax,
+      tax_percentage,
+      discount,
+      coupon_discount,     -- ✅ Store coupon discount per order
+      total_amount,
+
+      payment_method,
+      payment_status,
+
+      special_instructions
+    )
+    VALUES (
+      v_order_group_id,
+      p_customer_id,
+      (v_order->>'vendor_id')::UUID,
+      (v_order->>'delivery_address_id')::UUID,
+      v_coupon_id,         -- ✅ Link to coupon
+
+      v_order->>'order_number',
+      'pending',
+
+      (v_order->>'item_count')::INT,
+      (v_order->>'subtotal')::NUMERIC,
+      COALESCE((v_order->>'delivery_fee')::NUMERIC, 0),
+      COALESCE((v_order->>'tax')::NUMERIC, 0),
+      COALESCE((v_order->>'tax_percentage')::NUMERIC, 0),
+      COALESCE((v_order->>'discount')::NUMERIC, 0),
+      COALESCE((v_order->>'coupon_discount')::NUMERIC, 0),  -- ✅ From frontend per order
+      (v_order->>'total_amount')::NUMERIC,
+
+      p_payment_method,
+      'pending',
+
+      v_order->>'special_instructions'
+    )
+    RETURNING id INTO v_order_id;
+
+    -- =====================================================
+    -- 5️⃣ INSERT ORDER ITEMS + COMMISSION
+    -- =====================================================
+    FOR v_item IN
+      SELECT * FROM jsonb_array_elements(v_order->'items')
+    LOOP
+      -- Get product snapshot
+      SELECT
+        price,
+        discount_price,
+        name,
+        image
+      INTO
+        v_price,
+        v_discount_price,
+        v_product_name,
+        v_product_image
+      FROM products
+      WHERE id = (v_item->>'product_id')::UUID
+        AND is_available = TRUE;
+
+      IF v_price IS NULL THEN
+        RAISE EXCEPTION 'Product not found or unavailable: %', v_item->>'product_id';
+      END IF;
+
+      -- Calculate effective price
+      IF v_discount_price IS NOT NULL AND v_discount_price > 0 THEN
+        v_item_total := v_discount_price * (v_item->>'qty')::INT;
+      ELSE
+        v_item_total := v_price * (v_item->>'qty')::INT;
+      END IF;
+
+      -- Calculate commission
+      SELECT calculate_product_commission((v_item->>'product_id')::UUID)
+      INTO v_commission_rate;
+
+      v_commission_amount := (v_item_total * v_commission_rate) / 100;
+
+      -- Insert order item
+      INSERT INTO order_items (
+        order_id,
+        product_id,
+        vendor_id,
+
+        product_name,
+        product_image,
+
+        quantity,
+        unit_price,
+        discount_price,
+        total_price,
+
+        commission_rate,
+        commission_amount
+      )
+      VALUES (
+        v_order_id,
+        (v_item->>'product_id')::UUID,
+        (v_order->>'vendor_id')::UUID,
+
+        v_product_name,
+        v_product_image,
+
+        (v_item->>'qty')::INT,
+        v_price,
+        v_discount_price,
+        v_item_total,
+
+        v_commission_rate,
+        v_commission_amount
+      );
+    END LOOP;
+  END LOOP;
+
+  -- =====================================================
+  -- 6️⃣ RETURN ORDER GROUP ID
+  -- =====================================================
+  RETURN v_order_group_id;
+END;
+$$;

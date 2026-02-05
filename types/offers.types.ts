@@ -107,6 +107,7 @@ export interface Coupon {
   created_by?: string;
   created_at: string;
   updated_at: string;
+  includes_free_delivery:boolean;
 }
 
 
