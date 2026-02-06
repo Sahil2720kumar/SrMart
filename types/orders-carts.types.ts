@@ -14,7 +14,7 @@ export type OrderStatus =
 
 export type PaymentMethod = 'cod' | 'upi' | 'card' | 'netbanking' | 'wallet';
 
-export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+export type PaymentStatus =  'pending' | 'paid' | 'failed' | 'refunded';
 
 export type CancelledBy = 'customer' | 'vendor' | 'admin' | 'system';
 

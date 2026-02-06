@@ -252,7 +252,7 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger> */}
 
-        <TabTrigger name="orders" href="/customer/order/orders" asChild>
+        <TabTrigger name="orders" href="/customer/order/order-groups/" asChild>
           <Pressable className="flex-1">
             <TabButton label="Orders" focused={pathname.startsWith("/customer/order")}>
               <OrdersIcon focused={pathname.startsWith("/customer/order")} />

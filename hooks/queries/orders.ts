@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
 import { Coupon, CouponUsage } from '@/types/offers.types';
-import { Order, OrderFilters, OrderStatus } from '@/types/orders-carts.types';
+import { Order, OrderFilters, OrderStatus, PaymentStatus } from '@/types/orders-carts.types';
 
 // ==========================================
 // ORDER HOOKS
@@ -34,6 +34,232 @@ export const orderQueryKeys = {
     detail: (id: string) => [...orderQueryKeys.orderGroups.details(), id] as const,
   },
 } as const;
+
+
+export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus }) {
+  const session = useAuthStore((state) => state.session);
+  const customerId = session?.user?.id;
+
+  return useQuery({
+    queryKey: [...orderQueryKeys.orderGroups.byCustomer(customerId!), filters],
+    queryFn: async () => {
+      if (!customerId) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('order_groups')
+        .select(`
+          id,
+          customer_id,
+          razorpay_order_id,
+          razorpay_payment_id,
+          payment_method,
+          payment_status,
+          total_amount,
+          created_at,
+          updated_at,
+          customers!inner(
+            user_id,
+            first_name,
+            last_name,
+            profile_image
+          ),
+          orders(
+            id,
+            order_number,
+            status,
+            total_amount,
+            item_count,
+            vendors(
+              user_id,
+              store_name,
+              store_image,
+              rating
+            )
+          )
+        `)
+        .eq('customer_id', customerId);
+
+      // Apply payment status filter
+      if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
+        query = query.eq('payment_status', filters.paymentStatus);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!customerId,
+    staleTime: 1000 * 30, // 30 seconds
+  });
+}
+
+// ============================================================================
+// NEW QUERY: Get Order Group Detail
+// ============================================================================
+export function useOrderGroupDetailFullInfo(orderGroupId: string) {
+  return useQuery({
+    queryKey: orderQueryKeys.orderGroups.detail(orderGroupId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_groups')
+        .select(`
+          *,
+          customers!inner(
+            user_id,
+            first_name,
+            last_name,
+            profile_image,
+            email,
+            phone
+          ),
+          orders(
+            id,
+            order_number,
+            status,
+            payment_status,
+            payment_method,
+            item_count,
+            subtotal,
+            delivery_fee,
+            tax,
+            discount,
+            coupon_discount,
+            total_amount,
+            created_at,
+            vendors!inner(
+              user_id,
+              store_name,
+              store_image,
+              store_banner,
+              rating,
+              review_count
+            ),
+            order_items(
+              id,
+              product_id,
+              product_name,
+              product_image,
+              quantity,
+              unit_price,
+              discount_price,
+              total_price
+            )
+          )
+        `)
+        .eq('id', orderGroupId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderGroupId,
+  });
+}
+
+// ============================================================================
+// NEW QUERY: Get Orders by Group ID
+// ============================================================================
+export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
+  const session = useAuthStore((state) => state.session);
+  const customerId = session?.user?.id;
+
+  return useQuery({
+    queryKey: [...orderQueryKeys.orders.lists(), 'group', groupId, filters],
+    queryFn: async () => {
+      if (!customerId) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          status,
+          payment_status,
+          payment_method,
+          item_count,
+          subtotal,
+          delivery_fee,
+          tax,
+          tax_percentage,
+          discount,
+          coupon_discount,
+          total_amount,
+          special_instructions,
+          cancellation_reason,
+          cancelled_by,
+          created_at,
+          updated_at,
+          confirmed_at,
+          picked_up_at,
+          delivered_at,
+          cancelled_at,
+          vendors!inner(
+            user_id,
+            store_name,
+            store_image,
+            store_banner,
+            rating,
+            review_count
+          ),
+          customer_addresses!inner(
+            id,
+            label,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            pincode
+          ),
+          delivery_boys(
+            user_id,
+            first_name,
+            last_name,
+            profile_photo,
+            rating
+          ),
+          order_items(
+            id,
+            product_id,
+            product_name,
+            product_image,
+            quantity,
+            unit_price,
+            discount_price,
+            total_price
+          )
+        `)
+        .eq('order_group_id', groupId)
+        .eq('customer_id', customerId);
+
+      // Apply filters
+      if (filters?.status) {
+        if (filters.status === 'active') {
+          query = query.not('status', 'in', '(delivered,cancelled,refunded)');
+        } else if (filters.status === 'completed') {
+          query = query.eq('status', 'delivered');
+        } else if (filters.status !== 'all') {
+          query = query.eq('status', filters.status);
+        }
+      }
+
+      if (filters?.startDate) {
+        query = query.gte('created_at', filters.startDate);
+      }
+
+      if (filters?.endDate) {
+        query = query.lte('created_at', filters.endDate);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as Order[];
+    },
+    enabled: !!customerId && !!groupId,
+    staleTime: 1000 * 30, // 30 seconds
+  });
+}
 
 // ============================================================================
 // QUERY: Get Customer Orders

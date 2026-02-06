@@ -31,9 +31,9 @@ export default function SearchLayout() {
         }}
       />
       <Stack.Screen
-        name="[orderId]"
+        name="orders"
         options={{
-          headerShown: true,
+          headerShown: false,
           title: 'My Orders',
           headerBackTitle: 'Back',
           // Optional: customize header
@@ -42,9 +42,14 @@ export default function SearchLayout() {
           },
           headerTitleAlign: 'center',
           headerTintColor: '#000',
+          headerLeft(props) {
+            return (
+              <Feather onPress={() => router.push("/(tabs)/customer")} name="chevron-left" size={24} color="black" />
+            )
+          },
         }}
       />
- 
+
     </Stack>
   );
 }

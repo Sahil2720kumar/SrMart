@@ -17,7 +17,6 @@ import { blurhash } from '@/types/categories-products.types';
 export default function OrderDetailsScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { session } = useAuthStore();
-
   const { data: order, isLoading, error } = useOrderDetail(orderId);
   const { data: timeline } = useOrderTimeline(orderId);
 
