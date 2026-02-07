@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,96 +15,114 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuthStore } from '@/store/authStore';
+import { File } from 'expo-file-system';
+import {
+  useDeliveryBoyBankDetails,
+  useAddDeliveryBoyBankDetails,
+  useUpdateDeliveryBoyBankDetails,
+  useDeleteDeliveryBoyBankDetails,
+  useKycBankPassbook,
+  useUploadBankProof,
+  useValidateIFSC,
+  BankDetailsInput,
+} from '@/hooks/queries/useDeliveryBoy';
+import { BankAccountType, BankVerificationStatus } from '@/types/payments-wallets.types';
 
-type BankStatus = 'not_added' | 'pending' | 'approved' | 'rejected';
-type AccountType = 'savings' | 'current';
-
-interface BankData {
-  holderName: string;
-  bankName: string;
-  accountNumber: string;
-  ifscCode: string;
-  accountType: AccountType;
-  branchName: string;
-  upiId: string;
-  proofImage: string | null;
-  status: BankStatus;
-  rejectionReason?: string;
-}
-
-export default function BankDetailsScreen() {
+export default function DeliveryBoyBankDetailsScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const session = useAuthStore((state) => state.session);
+  const userId = session?.user?.id;
+  const userType = 'delivery_boy'; // Delivery boy user type
+
+  // Queries
+  const { data: bankDetails, isLoading: isBankLoading } = useDeliveryBoyBankDetails(userId || '');
+  const { data: kycPassbook, isLoading: isPassbookLoading } = useKycBankPassbook(userId || '');
+
+  // console.log('bankDetails',bankDetails?.proof_image);
+  // console.log("kyc ",kycPassbook.document_url);
+   
+  // Mutations
+  const addBankMutation = useAddDeliveryBoyBankDetails();
+  const updateBankMutation = useUpdateDeliveryBoyBankDetails();
+  const deleteBankMutation = useDeleteDeliveryBoyBankDetails();
+  const uploadProofMutation = useUploadBankProof();
+
+  // State
   const [showAccountTypeDropdown, setShowAccountTypeDropdown] = useState(false);
   const [uploadModal, setUploadModal] = useState(false);
   const [showAccountNumber, setShowAccountNumber] = useState(false);
-
-  // Example: Existing bank (change to null for "no bank" state)
-  const [bank, setBank] = useState<BankData | null>({
-    holderName: 'Rajesh Kumar',
-    bankName: 'State Bank of India',
-    accountNumber: '1234567890123456',
-    ifscCode: 'SBIN0001234',
-    accountType: 'savings',
-    branchName: 'MG Road Branch',
-    upiId: 'rajesh@paytm',
-    proofImage: 'https://via.placeholder.com/400x300',
-    status: 'rejected',
-    rejectionReason:
-      'Account holder name does not match KYC records. Please ensure the name matches your Aadhaar card.',
+  const [formData, setFormData] = useState<BankDetailsInput>({
+    account_holder_name: '',
+    bank_name: '',
+    account_number: '',
+    ifsc_code: '',
+    account_type: 'savings',
+    branch: '',
+    upi_id: '',
+    proof_image: '',
   });
 
-  const [formData, setFormData] = useState<
-    Omit<BankData, 'status' | 'rejectionReason'>
-  >(
-    bank || {
-      holderName: '',
-      bankName: '',
-      accountNumber: '',
-      ifscCode: '',
-      accountType: 'savings',
-      branchName: '',
-      upiId: '',
-      proofImage: null,
+  const validateIFSC = useValidateIFSC();
+
+  // Initialize form data when bank details are loaded
+  useEffect(() => {
+    if (bankDetails) {
+      setFormData({
+        account_holder_name: bankDetails.account_holder_name,
+        bank_name: bankDetails.bank_name,
+        account_number: bankDetails.account_number,
+        ifsc_code: bankDetails.ifsc_code,
+        account_type: bankDetails.account_type || 'savings',
+        branch: bankDetails.branch || '',
+        upi_id: bankDetails.upi_id || '',
+        proof_image: bankDetails.proof_image || kycPassbook?.document_url || '',
+      });
+    } else if (kycPassbook?.document_url) {
+      // If no bank details but passbook exists, set the image
+      setFormData((prev) => ({
+        ...prev,
+        proof_image: kycPassbook.document_url,
+      }));
     }
-  );
+  }, [bankDetails, kycPassbook]);
 
   const accountTypes = [
     { value: 'savings', label: 'Savings Account' },
     { value: 'current', label: 'Current Account' },
   ];
 
-  const getStatusBadge = (status: BankStatus) => {
+  const getStatusBadge = (status: BankVerificationStatus) => {
     const badges = {
       not_added: {
         bg: 'bg-gray-100',
         text: 'text-gray-800',
         label: 'Not Added',
-        icon: <Feather name='clock' size={24} color="#6b7280" />,
+        icon: <Feather name="clock" size={24} color="#6b7280" />,
       },
       pending: {
         bg: 'bg-yellow-100',
         text: 'text-yellow-800',
         label: 'Pending',
-        icon: <Feather name='clock' size={24} color="#ca8a04" />,
+        icon: <Feather name="clock" size={24} color="#ca8a04" />,
       },
       approved: {
         bg: 'bg-green-100',
         text: 'text-green-800',
         label: 'Approved',
-        icon: <Feather name='check-circle' size={24} color="#16a34a" />,
+        icon: <Feather name="check-circle" size={24} color="#16a34a" />,
       },
       rejected: {
         bg: 'bg-red-100',
         text: 'text-red-800',
         label: 'Rejected',
-        icon: <Feather name='alert-circle' size={24} color="#dc2626" />,
+        icon: <Feather name="alert-circle" size={24} color="#dc2626" />,
       },
     };
     return badges[status];
   };
 
-  const getStatusMessage = (status: BankStatus) => {
+  const getStatusMessage = (status: BankVerificationStatus) => {
     const messages = {
       not_added: 'Add your bank details to receive payouts.',
       pending: 'Bank details are under admin verification.',
@@ -139,8 +157,7 @@ export default function BankDetailsScreen() {
           quality: 0.8,
         });
       } else {
-        const permission =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
           Alert.alert('Permission needed', 'Gallery permission is required');
           return;
@@ -153,68 +170,110 @@ export default function BankDetailsScreen() {
         });
       }
 
-      if (!result.canceled) {
-        setFormData({ ...formData, proofImage: result.assets[0].uri });
-        setUploadModal(false);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
-    }
-  };
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        // Read file as base64
+        const localFile = new File(imageUri);
+        const base64 = await localFile.base64();
 
-  const validateIFSC = (code: string) => {
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-    return ifscRegex.test(code);
+        // Upload to storage - will replace existing KYC document if exists
+        uploadProofMutation.mutate(
+          {
+            imageUri,
+            base64,
+            userId: userId || '',
+            userType: userType, // Pass delivery_boy user type
+          },
+          {
+            onSuccess: (data) => {
+              setFormData({ ...formData, proof_image: data.documentUrl });
+              setUploadModal(false);
+              Alert.alert(
+                'Success',
+                data.isUpdate
+                  ? 'Bank proof updated successfully'
+                  : 'Bank proof uploaded successfully'
+              );
+            },
+            onError: (error: any) => {
+              Alert.alert('Upload Failed', error.message);
+            },
+          }
+        );
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload image');
+    }
   };
 
   const handleSave = async () => {
     // Validation
     if (
-      !formData.holderName ||
-      !formData.bankName ||
-      !formData.accountNumber ||
-      !formData.ifscCode
+      !formData.account_holder_name ||
+      !formData.bank_name ||
+      !formData.account_number ||
+      !formData.ifsc_code
     ) {
       Alert.alert('Validation Error', 'Please fill all required fields');
       return;
     }
 
-    if (!validateIFSC(formData.ifscCode)) {
+    if (!validateIFSC(formData.ifsc_code)) {
       Alert.alert('Validation Error', 'Invalid IFSC code format');
       return;
     }
 
-    if (formData.accountNumber.length < 8 || formData.accountNumber.length > 18) {
-      Alert.alert(
-        'Validation Error',
-        'Account number must be between 8 and 18 digits'
-      );
+    if (formData.account_number.length < 8 || formData.account_number.length > 18) {
+      Alert.alert('Validation Error', 'Account number must be between 8 and 18 digits');
       return;
     }
 
-    if (!formData.proofImage) {
+    if (!formData.proof_image) {
       Alert.alert('Validation Error', 'Please upload bank proof document');
       return;
     }
 
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setBank({
-        ...formData,
-        status: 'pending',
-      });
-      setLoading(false);
-      Alert.alert(
-        'Success',
-        bank
-          ? 'Bank details updated successfully'
-          : 'Bank account added successfully'
+    // Add or Update
+    if (bankDetails) {
+      // Update existing
+      updateBankMutation.mutate(
+        {
+          id: bankDetails.id,
+          delivery_boy_id: userId || '',
+          bankDetails: formData,
+        },
+        {
+          onSuccess: () => {
+            Alert.alert('Success', 'Bank details updated successfully');
+          },
+          onError: (error: any) => {
+            Alert.alert('Update Failed', error.message);
+          },
+        }
       );
-    }, 1500);
+    } else {
+      // Add new
+      addBankMutation.mutate(
+        {
+          delivery_boy_id: userId || '',
+          bankDetails: formData,
+        },
+        {
+          onSuccess: () => {
+            Alert.alert('Success', 'Bank account added successfully');
+          },
+          onError: (error: any) => {
+            Alert.alert('Add Failed', error.message);
+          },
+        }
+      );
+    }
   };
 
   const handleDelete = () => {
+    if (!bankDetails) return;
+
     Alert.alert(
       'Confirm Delete',
       'Removing your bank account will disable payouts until a new account is verified. Are you sure?',
@@ -224,31 +283,55 @@ export default function BankDetailsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setBank(null);
-            setFormData({
-              holderName: '',
-              bankName: '',
-              accountNumber: '',
-              ifscCode: '',
-              accountType: 'savings',
-              branchName: '',
-              upiId: '',
-              proofImage: null,
-            });
+            deleteBankMutation.mutate(
+              {
+                id: bankDetails.id,
+                delivery_boy_id: userId || '',
+              },
+              {
+                onSuccess: () => {
+                  setFormData({
+                    account_holder_name: '',
+                    bank_name: '',
+                    account_number: '',
+                    ifsc_code: '',
+                    account_type: 'savings',
+                    branch: '',
+                    upi_id: '',
+                    proof_image: '',
+                  });
+                  Alert.alert('Success', 'Bank account removed successfully');
+                },
+                onError: (error: any) => {
+                  Alert.alert('Delete Failed', error.message);
+                },
+              }
+            );
           },
         },
       ]
     );
   };
 
-  const currentStatus = bank?.status || 'not_added';
+  const currentStatus = bankDetails?.status || 'not_added';
   const isFormValid =
-    formData.holderName &&
-    formData.bankName &&
-    formData.accountNumber &&
-    formData.ifscCode &&
-    validateIFSC(formData.ifscCode) &&
-    formData.proofImage;
+    formData.account_holder_name &&
+    formData.bank_name &&
+    formData.account_number &&
+    formData.ifsc_code &&
+    validateIFSC(formData.ifsc_code) &&
+    formData.proof_image;
+
+  const isSaving =
+    addBankMutation.isPending || updateBankMutation.isPending || uploadProofMutation.isPending;
+
+  if (isBankLoading || isPassbookLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#4f46e5] items-center justify-center">
+        <ActivityIndicator size="large" color="#ffffff" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">
@@ -256,7 +339,7 @@ export default function BankDetailsScreen() {
       <View className="bg-[#4f46e5] px-4 pt-4 pb-6">
         <View className="flex-row items-center gap-3">
           <TouchableOpacity onPress={() => router.back()}>
-            <Feather name='arrow-left' size={24} color="#ffffff" />
+            <Feather name="arrow-left" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text className="text-white text-2xl font-bold">Bank Details</Text>
         </View>
@@ -267,9 +350,7 @@ export default function BankDetailsScreen() {
         {/* Bank Verification Status Card */}
         <View className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <View className="flex-row items-start gap-3">
-            <View
-              className={`p-3 rounded-xl ${getStatusBadge(currentStatus).bg}`}
-            >
+            <View className={`p-3 rounded-xl ${getStatusBadge(currentStatus).bg}`}>
               {getStatusBadge(currentStatus).icon}
             </View>
             <View className="flex-1">
@@ -284,11 +365,7 @@ export default function BankDetailsScreen() {
                   getStatusBadge(currentStatus).bg
                 }`}
               >
-                <Text
-                  className={`text-xs font-medium ${
-                    getStatusBadge(currentStatus).text
-                  }`}
-                >
+                <Text className={`text-xs font-medium ${getStatusBadge(currentStatus).text}`}>
                   {getStatusBadge(currentStatus).label}
                 </Text>
               </View>
@@ -297,26 +374,22 @@ export default function BankDetailsScreen() {
         </View>
 
         {/* Rejection Reason */}
-        {bank?.status === 'rejected' && bank.rejectionReason && (
+        {bankDetails?.status === 'rejected' && bankDetails.rejection_reason && (
           <View className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
             <View className="flex-row items-start gap-3">
-              <Feather name='alert-circle' size={20} color="#dc2626" />
+              <Feather name="alert-circle" size={20} color="#dc2626" />
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-red-900 mb-1">
-                  Admin Feedback
-                </Text>
-                <Text className="text-sm text-red-800">
-                  {bank.rejectionReason}
-                </Text>
+                <Text className="text-sm font-semibold text-red-900 mb-1">Admin Feedback</Text>
+                <Text className="text-sm text-red-800">{bankDetails.rejection_reason}</Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* Bank Account Form */}
-        <View className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      {/* Bank Account Form */}
+      <View className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <Text className="font-bold text-gray-900 text-lg mb-4">
-            {bank ? 'Update Bank Account' : 'Add Bank Account'}
+            {bankDetails ? 'Update Bank Account' : 'Add Bank Account'}
           </Text>
 
           {/* Account Holder Name */}
@@ -327,14 +400,10 @@ export default function BankDetailsScreen() {
             <TextInput
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="As per bank records"
-              value={formData.holderName}
-              onChangeText={(text) =>
-                setFormData({ ...formData, holderName: text })
-              }
+              value={formData.account_holder_name}
+              onChangeText={(text) => setFormData({ ...formData, account_holder_name: text })}
             />
-            <Text className="text-xs text-gray-500 mt-1">
-              Must match your KYC documents
-            </Text>
+            <Text className="text-xs text-gray-500 mt-1">Must match your KYC documents</Text>
           </View>
 
           {/* Bank Name */}
@@ -345,10 +414,8 @@ export default function BankDetailsScreen() {
             <TextInput
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., State Bank of India"
-              value={formData.bankName}
-              onChangeText={(text) =>
-                setFormData({ ...formData, bankName: text })
-              }
+              value={formData.bank_name}
+              onChangeText={(text) => setFormData({ ...formData, bank_name: text })}
             />
           </View>
 
@@ -363,13 +430,13 @@ export default function BankDetailsScreen() {
                 placeholder="Enter account number"
                 value={
                   showAccountNumber
-                    ? formData.accountNumber
-                    : maskAccountNumber(formData.accountNumber)
+                    ? formData.account_number
+                    : maskAccountNumber(formData.account_number)
                 }
                 onChangeText={(text) =>
                   setFormData({
                     ...formData,
-                    accountNumber: text.replace(/[^0-9]/g, ''),
+                    account_number: text.replace(/[^0-9]/g, ''),
                   })
                 }
                 keyboardType="numeric"
@@ -381,9 +448,9 @@ export default function BankDetailsScreen() {
                 onPress={() => setShowAccountNumber(!showAccountNumber)}
               >
                 {showAccountNumber ? (
-                  <Feather name='eye-off' size={20} color="#6b7280" />
+                  <Feather name="eye-off" size={20} color="#6b7280" />
                 ) : (
-                  <Feather name='eye' size={20} color="#6b7280" />
+                  <Feather name="eye" size={20} color="#6b7280" />
                 )}
               </TouchableOpacity>
             </View>
@@ -397,17 +464,13 @@ export default function BankDetailsScreen() {
             <TextInput
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., SBIN0001234"
-              value={formData.ifscCode}
-              onChangeText={(text) =>
-                setFormData({ ...formData, ifscCode: text.toUpperCase() })
-              }
+              value={formData.ifsc_code}
+              onChangeText={(text) => setFormData({ ...formData, ifsc_code: text.toUpperCase() })}
               autoCapitalize="characters"
               maxLength={11}
             />
-            {formData.ifscCode && !validateIFSC(formData.ifscCode) && (
-              <Text className="text-xs text-red-600 mt-1">
-                Invalid IFSC code format
-              </Text>
+            {formData.ifsc_code && !validateIFSC(formData.ifsc_code) && (
+              <Text className="text-xs text-red-600 mt-1">Invalid IFSC code format</Text>
             )}
           </View>
 
@@ -418,17 +481,12 @@ export default function BankDetailsScreen() {
             </Text>
             <TouchableOpacity
               className="border border-gray-300 rounded-xl px-4 py-3 flex-row items-center justify-between"
-              onPress={() =>
-                setShowAccountTypeDropdown(!showAccountTypeDropdown)
-              }
+              onPress={() => setShowAccountTypeDropdown(!showAccountTypeDropdown)}
             >
               <Text className="text-gray-900">
-                {
-                  accountTypes.find((a) => a.value === formData.accountType)
-                    ?.label
-                }
+                {accountTypes.find((a) => a.value === formData.account_type)?.label}
               </Text>
-              <Feather name='chevron-down' size={20} color="#6b7280" />
+              <Feather name="chevron-down" size={20} color="#6b7280" />
             </TouchableOpacity>
 
             {showAccountTypeDropdown && (
@@ -440,7 +498,7 @@ export default function BankDetailsScreen() {
                     onPress={() => {
                       setFormData({
                         ...formData,
-                        accountType: type.value as AccountType,
+                        account_type: type.value as BankAccountType,
                       });
                       setShowAccountTypeDropdown(false);
                     }}
@@ -460,10 +518,8 @@ export default function BankDetailsScreen() {
             <TextInput
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., MG Road Branch"
-              value={formData.branchName}
-              onChangeText={(text) =>
-                setFormData({ ...formData, branchName: text })
-              }
+              value={formData.branch}
+              onChangeText={(text) => setFormData({ ...formData, branch: text })}
             />
           </View>
 
@@ -475,10 +531,8 @@ export default function BankDetailsScreen() {
             <TextInput
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., yourname@paytm"
-              value={formData.upiId}
-              onChangeText={(text) =>
-                setFormData({ ...formData, upiId: text.toLowerCase() })
-              }
+              value={formData.upi_id}
+              onChangeText={(text) => setFormData({ ...formData, upi_id: text.toLowerCase() })}
               autoCapitalize="none"
               keyboardType="email-address"
             />
@@ -494,33 +548,53 @@ export default function BankDetailsScreen() {
             Upload cancelled cheque or bank passbook front page.
           </Text>
 
-          {formData.proofImage ? (
+          {/* Show info if using KYC passbook */}
+          {kycPassbook?.document_url && formData.proof_image === kycPassbook.document_url && (
+            <View className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3 flex-row items-center gap-2">
+              <Feather name="info" size={16} color="#3b82f6" />
+              <Text className="text-xs text-blue-800 flex-1">
+                Using bank passbook from KYC documents
+              </Text>
+            </View>
+          )}
+
+          {formData.proof_image ? (
             <View>
               <Image
-                source={{ uri: formData.proofImage }}
+                source={{ uri: formData.proof_image }}
                 className="w-full h-48 rounded-xl mb-3"
                 resizeMode="cover"
               />
               <TouchableOpacity
                 className="bg-indigo-50 py-3 rounded-xl flex-row items-center justify-center gap-2"
                 onPress={() => setUploadModal(true)}
+                disabled={uploadProofMutation.isPending}
               >
-                <Feather name='upload' size={18} color="#4f46e5" />
-                <Text className="text-[#4f46e5] font-semibold">
-                  Replace Image
-                </Text>
+                {uploadProofMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#4f46e5" />
+                ) : (
+                  <>
+                    <Feather name="upload" size={18} color="#4f46e5" />
+                    <Text className="text-[#4f46e5] font-semibold">Replace Image</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
               className="border-2 border-dashed border-gray-300 rounded-xl py-8 flex items-center justify-center gap-2"
               onPress={() => setUploadModal(true)}
+              disabled={uploadProofMutation.isPending}
             >
-              <Feather name='upload' size={32} color="#6b7280" />
-              <Text className="text-gray-600 font-medium">
-                Upload Bank Proof
-              </Text>
-              <Text className="text-sm text-gray-500">Max size: 5MB</Text>
+              {uploadProofMutation.isPending ? (
+                <ActivityIndicator size="large" color="#6b7280" />
+              ) : (
+                <>
+                  <Feather name="upload" size={32} color="#6b7280" />
+                  <Text className="text-gray-600 font-medium">Upload Bank Proof</Text>
+                  <Text className="text-sm text-gray-500">Max size: 5MB</Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -529,32 +603,37 @@ export default function BankDetailsScreen() {
         <View className="mb-6">
           <TouchableOpacity
             className={`py-4 rounded-xl flex-row items-center justify-center gap-2 ${
-              isFormValid && !loading ? 'bg-[#4f46e5]' : 'bg-gray-300'
+              isFormValid && !isSaving ? 'bg-[#4f46e5]' : 'bg-gray-300'
             }`}
             onPress={handleSave}
-            disabled={!isFormValid || loading}
+            disabled={!isFormValid || isSaving}
           >
-            {loading ? (
+            {isSaving ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
               <>
-                <Feather name='check-circle' size={20} color="#ffffff" />
+                <Feather name="check-circle" size={20} color="#ffffff" />
                 <Text className="text-white font-bold text-base">
-                  {bank ? 'Save Changes' : 'Add Bank Account'}
+                  {bankDetails ? 'Save Changes' : 'Add Bank Account'}
                 </Text>
               </>
             )}
           </TouchableOpacity>
 
-          {bank && (
+          {bankDetails && (
             <TouchableOpacity
               className="mt-3 py-4 rounded-xl border-2 border-red-500 flex-row items-center justify-center gap-2"
               onPress={handleDelete}
+              disabled={deleteBankMutation.isPending}
             >
-              <Feather name='trash-2' size={20} color="#dc2626" />
-              <Text className="text-red-600 font-semibold text-base">
-                Remove Bank Account
-              </Text>
+              {deleteBankMutation.isPending ? (
+                <ActivityIndicator color="#dc2626" />
+              ) : (
+                <>
+                  <Feather name="trash-2" size={20} color="#dc2626" />
+                  <Text className="text-red-600 font-semibold text-base">Remove Bank Account</Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -562,14 +641,12 @@ export default function BankDetailsScreen() {
         {/* Info Banner */}
         <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
           <View className="flex-row gap-3">
-            <Feather name='alert-circle' size={20} color="#3b82f6" />
+            <Feather name="alert-circle" size={20} color="#3b82f6" />
             <View className="flex-1">
-              <Text className="text-sm text-blue-900 font-medium mb-1">
-                Important
-              </Text>
+              <Text className="text-sm text-blue-900 font-medium mb-1">Important</Text>
               <Text className="text-sm text-blue-800">
-                Bank verification takes 24-48 hours. Withdrawals will be enabled
-                only after verification is complete.
+                Bank verification takes 24-48 hours. Withdrawals will be enabled only after
+                verification is complete.
               </Text>
             </View>
           </View>
@@ -583,17 +660,12 @@ export default function BankDetailsScreen() {
         animationType="slide"
         onRequestClose={() => setUploadModal(false)}
       >
-        <Pressable
-          className="flex-1 bg-black/50 justify-end"
-          onPress={() => setUploadModal(false)}
-        >
+        <Pressable className="flex-1 bg-black/50 justify-end" onPress={() => setUploadModal(false)}>
           <Pressable className="bg-white rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900">
-                Upload Bank Proof
-              </Text>
+              <Text className="text-xl font-bold text-gray-900">Upload Bank Proof</Text>
               <TouchableOpacity onPress={() => setUploadModal(false)}>
-                <Feather name='x' size={24} color="#6b7280" />
+                <Feather name="x" size={24} color="#6b7280" />
               </TouchableOpacity>
             </View>
 
@@ -605,20 +677,16 @@ export default function BankDetailsScreen() {
               className="bg-[#4f46e5] py-4 rounded-xl flex-row items-center justify-center gap-3 mb-3"
               onPress={() => handleImagePicker('camera')}
             >
-              <Feather name='camera' size={24} color="#ffffff" />
-              <Text className="text-white font-semibold text-base">
-                Take Photo
-              </Text>
+              <Feather name="camera" size={24} color="#ffffff" />
+              <Text className="text-white font-semibold text-base">Take Photo</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               className="bg-indigo-100 py-4 rounded-xl flex-row items-center justify-center gap-3 mb-3"
               onPress={() => handleImagePicker('gallery')}
             >
-              <Feather name='image' size={24} color="#4f46e5" />
-              <Text className="text-[#4f46e5] font-semibold text-base">
-                Choose from Gallery
-              </Text>
+              <Feather name="image" size={24} color="#4f46e5" />
+              <Text className="text-[#4f46e5] font-semibold text-base">Choose from Gallery</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

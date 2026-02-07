@@ -7,11 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type KycStatus = 'pending' | 'completed' | 'rejected';
 
-export interface KycStep {
-  id: number;
-  title: string;
-  status: KycStatus;
-}
+
 
 export interface DeliveryPartner {
   id: string;
@@ -50,7 +46,6 @@ interface DeliveryState {
 
   // Verification
   adminVerificationStatus: VerificationStatus | null;
-  kycSteps: KycStep[];
   isKycCompleted: boolean;
 
   // Availability
@@ -62,7 +57,6 @@ interface DeliveryState {
   // Actions
   setPartner: (partner: DeliveryPartner) => void;
   setAdminVerificationStatus: (status: VerificationStatus) => void;
-  setKycSteps: (steps: KycStep[]) => void;
   toggleOnline: () => void;
   assignOrder: (orderId: string) => void;
   clearOrder: () => void;
@@ -85,11 +79,7 @@ export const useDeliveryStore = create<DeliveryState>()(
       setPartner: (partner) => set({ partner }),
       setAdminVerificationStatus: (status) =>
         set({ adminVerificationStatus: status }),
-      setKycSteps: (steps) =>
-        set({
-          kycSteps: steps,
-          isKycCompleted: steps.every((step) => step.status === 'completed'),
-        }),
+    
       toggleOnline: () => {
         console.log("Called");
 
@@ -113,22 +103,10 @@ export const useDeliveryStore = create<DeliveryState>()(
       partialize: (state) => ({
         partner: state.partner,
         adminVerificationStatus: state.adminVerificationStatus,
-        kycSteps: state.kycSteps,
         isKycCompleted: state.isKycCompleted,
         isOnline: state.isOnline,
         activeOrderId: state.activeOrderId,
       }),
-      merge: (persistedState: any, currentState) => {
-        if (!persistedState) return currentState;
-        const kycSteps = persistedState.kycSteps ?? [];
-        return {
-          ...currentState,
-          ...persistedState,
-          isKycCompleted: kycSteps.every(
-            (step: KycStep) => step.status === 'completed'
-          ),
-        };
-      },
     }
   )
 );

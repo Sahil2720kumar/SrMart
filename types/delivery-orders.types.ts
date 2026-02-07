@@ -64,6 +64,7 @@ export interface DeliveryOrder {
   id: string;
   order_number: string;
   status: OrderStatus;
+  delivery_boy_id:string
   customer: {
     name: string;
     address: string;

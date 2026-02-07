@@ -1,4 +1,5 @@
 import DeliveryOTPVerificationModal from '@/components/DeliveryOTPVerificationModal';
+import DeliveryConfirmationModal from '@/components/Deliveryconfirmationmodal';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -23,22 +24,31 @@ import {
   useAcceptDeliveryOrder,
   useMarkOrderPickedUp,
   useCompleteDelivery,
-
 } from '@/hooks/queries/useDeliveryOrders';
 import { DeliveryOrder } from '@/types/delivery-orders.types';
 
 /* ---------------- MAIN COMPONENT ---------------- */
 const DeliveryOrderScreen = () => {
+  
   const router = useRouter();
   const store = useDeliveryStore();
   const { partner, isKycCompleted, adminVerificationStatus } = store;
   const isVerified = adminVerificationStatus === 'approved' && isKycCompleted;
 
   const [activeTab, setActiveTab] = useState<'available' | 'active' | 'completed'>('available');
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  
+  // OTP Modal State
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [selectedOrderForOtp, setSelectedOrderForOtp] = useState<DeliveryOrder | null>(null);
   const [otpInput, setOtpInput] = useState('');
+
+  // Accept Order Confirmation Modal State
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [selectedOrderForAccept, setSelectedOrderForAccept] = useState<DeliveryOrder | null>(null);
+
+  // Pickup Confirmation Modal State
+  const [showPickupModal, setShowPickupModal] = useState(false);
+  const [selectedOrderForPickup, setSelectedOrderForPickup] = useState<DeliveryOrder | null>(null);
 
   // Queries
   const { 
@@ -47,6 +57,8 @@ const DeliveryOrderScreen = () => {
     refetch: refetchAvailable,
     isRefetching: refetchingAvailable,
   } = useAvailableDeliveryOrders();
+
+
   
   const { 
     data: activeOrders = [], 
@@ -75,30 +87,48 @@ const DeliveryOrderScreen = () => {
     else refetchCompleted();
   };
 
-  const handleAcceptOrder = async (order: DeliveryOrder) => {
+  // Accept Order Flow
+  const handleAcceptOrderPress = (order: DeliveryOrder) => {
+    setSelectedOrderForAccept(order);
+    setShowAcceptModal(true);
+  };
+
+  const handleConfirmAcceptOrder = async () => {
+    if (!selectedOrderForAccept) return;
+
     try {
-      await acceptOrderMutation.mutateAsync(order.id);
-      Alert.alert('Success', 'Order accepted successfully!');
+      await acceptOrderMutation.mutateAsync(selectedOrderForAccept.id);
+      setShowAcceptModal(false);
+      setSelectedOrderForAccept(null);
+      Alert.alert('Success', 'Order accepted successfully! 🎉');
       setActiveTab('active');
     } catch (error: any) {
+      setShowAcceptModal(false);
       Alert.alert('Error', error.message || 'Failed to accept order');
     }
   };
 
-  const handleToggleItemCollection = (orderId: string, vendorId: string, itemId: string) => {
-    // This is client-side UI state only
-    // The actual pickup is marked when "Mark Vendor Collected" is pressed
+  // Mark Picked Up Flow
+  const handleMarkPickedUpPress = (order: DeliveryOrder) => {
+    setSelectedOrderForPickup(order);
+    setShowPickupModal(true);
   };
 
-  const handleMarkVendorCollected = async (order: DeliveryOrder) => {
+  const handleConfirmMarkPickedUp = async () => {
+    if (!selectedOrderForPickup) return;
+
     try {
-      await markPickedUpMutation.mutateAsync(order.id);
-      Alert.alert('Success', 'Order marked as picked up!');
+      await markPickedUpMutation.mutateAsync(selectedOrderForPickup.id);
+      setShowPickupModal(false);
+      setSelectedOrderForPickup(null);
+      Alert.alert('Success', 'Order marked as picked up! 📦');
     } catch (error: any) {
+      setShowPickupModal(false);
       Alert.alert('Error', error.message || 'Failed to mark order as picked up');
     }
   };
 
+  // Complete Delivery Flow
   const handleStartDelivery = (order: DeliveryOrder) => {
     setSelectedOrderForOtp(order);
     setShowOtpModal(true);
@@ -124,6 +154,8 @@ const DeliveryOrderScreen = () => {
         [{ text: 'OK', onPress: () => setActiveTab('completed') }]
       );
     } catch (error: any) {
+      console.log(error);
+      
       Alert.alert('Error', error.message || 'Invalid OTP. Please try again.');
     }
   };
@@ -259,7 +291,7 @@ const DeliveryOrderScreen = () => {
             getOrdersForTab().map((order, idx) => (
               <TouchableOpacity
                 key={order.id}
-                onPress={() => router.push(`/delivery/orders/${order.id}`)}
+                onPress={() => router.push(`/delivery/order/${order.id}`)}
                 activeOpacity={0.9}
               >
                 <View className="bg-white rounded-3xl p-5 mb-4 shadow-lg">
@@ -329,7 +361,7 @@ const DeliveryOrderScreen = () => {
                     <View className="flex-1">
                       <Text className="text-xs text-green-700 font-bold mb-1">DELIVER TO</Text>
                       <Text className="font-bold text-gray-900">{order.customer.name}</Text>
-                      <Text className="text-xs text-gray-600 mb-1 numberOfLines={2}">{order.customer.address}</Text>
+                      <Text className="text-xs text-gray-600 mb-1" numberOfLines={2}>{order.customer.address}</Text>
                       <Text className="text-xs text-gray-500">📞 {order.customer.phone}</Text>
                     </View>
                   </View>
@@ -353,19 +385,12 @@ const DeliveryOrderScreen = () => {
                   {/* Action Buttons */}
                   {activeTab === 'available' && (
                     <TouchableOpacity
-                      onPress={() => handleAcceptOrder(order)}
-                      disabled={acceptOrderMutation.isPending}
+                      onPress={() => handleAcceptOrderPress(order)}
                       className="bg-indigo-600 py-3 rounded-xl shadow-md flex-row items-center justify-center"
                       activeOpacity={0.8}
                     >
-                      {acceptOrderMutation.isPending ? (
-                        <ActivityIndicator color="white" />
-                      ) : (
-                        <>
-                          <Feather name="check-circle" size={18} color="white" />
-                          <Text className="text-white font-bold ml-2">Accept Order</Text>
-                        </>
-                      )}
+                      <Feather name="check-circle" size={18} color="white" />
+                      <Text className="text-white font-bold ml-2">Accept Order</Text>
                     </TouchableOpacity>
                   )}
 
@@ -382,19 +407,12 @@ const DeliveryOrderScreen = () => {
                       
                       {order.status === 'ready_for_pickup' ? (
                         <TouchableOpacity
-                          onPress={() => handleMarkVendorCollected(order)}
-                          disabled={markPickedUpMutation.isPending}
+                          onPress={() => handleMarkPickedUpPress(order)}
                           className="flex-1 bg-orange-500 py-3 rounded-xl shadow-md flex-row items-center justify-center"
                           activeOpacity={0.8}
                         >
-                          {markPickedUpMutation.isPending ? (
-                            <ActivityIndicator color="white" />
-                          ) : (
-                            <>
-                              <Feather name="package" size={18} color="white" />
-                              <Text className="text-white font-bold ml-2">Picked Up</Text>
-                            </>
-                          )}
+                          <Feather name="package" size={18} color="white" />
+                          <Text className="text-white font-bold ml-2">Picked Up</Text>
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
@@ -423,13 +441,48 @@ const DeliveryOrderScreen = () => {
         </ScrollView>
       )}
 
-      {showOtpModal && (
+      {/* Blur Background for Modals */}
+      {(showOtpModal || showAcceptModal || showPickupModal) && (
         <BlurView
           intensity={10}
           experimentalBlurMethod='dimezisBlurView'
           style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
         />
       )}
+
+      {/* Accept Order Confirmation Modal */}
+      <DeliveryConfirmationModal
+        visible={showAcceptModal}
+        onClose={() => {
+          setShowAcceptModal(false);
+          setSelectedOrderForAccept(null);
+        }}
+        onConfirm={handleConfirmAcceptOrder}
+        title="Accept Order?"
+        message={`Are you sure you want to accept order ${selectedOrderForAccept?.order_number}? You'll need to pick up items from ${selectedOrderForAccept?.vendors.length} vendor(s) and deliver to the customer.`}
+        confirmText="Accept"
+        cancelText="Cancel"
+        isLoading={acceptOrderMutation.isPending}
+        icon="check-circle"
+        iconColor="#6366f1"
+      />
+
+      {/* Mark Picked Up Confirmation Modal */}
+      <DeliveryConfirmationModal
+        visible={showPickupModal}
+        onClose={() => {
+          setShowPickupModal(false);
+          setSelectedOrderForPickup(null);
+        }}
+        onConfirm={handleConfirmMarkPickedUp}
+        title="Mark as Picked Up?"
+        message={`Confirm that you have collected all items from ${selectedOrderForPickup?.vendors[0]?.name}. This will change the order status to "Out for Delivery".`}
+        confirmText="Confirm Pickup"
+        cancelText="Cancel"
+        isLoading={markPickedUpMutation.isPending}
+        icon="package"
+        iconColor="#f97316"
+      />
 
       {/* OTP Verification Modal */}
       <DeliveryOTPVerificationModal
@@ -439,7 +492,7 @@ const DeliveryOrderScreen = () => {
         otpInput={otpInput}
         setOtpInput={setOtpInput}
         handleVerifyOtp={handleVerifyOtp}
-      />
+      /> 
     </SafeAreaView>
   );
 };

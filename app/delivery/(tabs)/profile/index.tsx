@@ -261,7 +261,7 @@ const ProfileScreen = () => {
           </View>
 
           {/* Vehicle Details */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             onPress={() => router.push('/delivery/profile/vehicle')}
             className="bg-white rounded-3xl p-5 mb-4 shadow-lg flex-row items-center justify-between"
             activeOpacity={0.8}
@@ -278,7 +278,7 @@ const ProfileScreen = () => {
               </View>
             </View>
             <Feather name="chevron-right" size={24} color="#9ca3af" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* Bank & Payout Details */}
           <TouchableOpacity

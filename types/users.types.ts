@@ -1,5 +1,5 @@
-import { KycDocumentStatus } from "./documents-kyc.types";
-import { Gender, UserRole, VehicleType } from "./enums.types";
+import { KycDocumentStatus } from './documents-kyc.types';
+import { Gender, UserRole, VehicleType } from './enums.types';
 
 export interface User {
   id?: string;
@@ -9,9 +9,9 @@ export interface User {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  auth_id?:string
+  auth_id?: string;
 }
-  
+
 export interface Customer {
   id?: string;
   user_id: string;
@@ -54,7 +54,7 @@ export interface Vendor {
 }
 
 export interface DeliveryBoy {
-  id? : string;
+  id?: string;
   user_id: string;
   first_name: string;
   last_name: string;
@@ -74,10 +74,9 @@ export interface DeliveryBoy {
   updated_at: string;
 }
 
-
 export interface CustomerAddress {
-  id: string;                 // uuid
-  customer_id: string;        // uuid (FK → customers.user_id)
+  id: string; // uuid
+  customer_id: string; // uuid (FK → customers.user_id)
 
   label: string | null;
 
@@ -88,15 +87,14 @@ export interface CustomerAddress {
   state: string;
   pincode: string;
 
-  latitude: number | null;    // numeric(10,8)
-  longitude: number | null;   // numeric(11,8)
+  latitude: number | null; // numeric(10,8)
+  longitude: number | null; // numeric(11,8)
 
   is_default: boolean | null;
 
-  created_at: string;         // timestamptz (ISO string)
-  updated_at: string;         // timestamptz (ISO string)
+  created_at: string; // timestamptz (ISO string)
+  updated_at: string; // timestamptz (ISO string)
 }
-
 
 export interface CustomerAddressInsert {
   id?: string;
@@ -148,3 +146,57 @@ export interface CustomerAddressWithCustomer extends CustomerAddress {
   } | null;
 }
 
+export type VehicleType = 'bike' | 'scooter' | 'bicycle' | 'car' | 'van';
+
+export type FuelType = 'petrol' | 'diesel' | 'electric' | 'cng';
+
+export type VehicleStatus = 'pending' | 'approved' | 'rejected';
+
+export interface DeliveryVehicle {
+  id: string;
+
+  delivery_boy_id: string;
+
+  vehicle_type: VehicleType | null;
+  vehicle_number: string;
+
+  vehicle_brand: string | null;
+  vehicle_model: string | null;
+  vehicle_color: string | null;
+
+  fuel_type: FuelType | null;
+
+  rc_number: string | null;
+  rc_image: string | null;
+
+  insurance_number: string | null;
+  insurance_expiry: string | null; // date → string (ISO)
+
+  status: VehicleStatus;
+
+  rejection_reason: string | null;
+
+  verified_at: string | null;
+  verified_by: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export type DeliveryVehicleInsert = Omit<DeliveryVehicle, 'id' | 'created_at' | 'updated_at'>;
+
+export type DeliveryVehicleUpdate = Partial<DeliveryVehicleInsert>;
+
+export interface DeliveryVehicleWithRelations extends DeliveryVehicle {
+  delivery_boys?: {
+    user_id: string;
+    first_name: string;
+    last_name: string;
+    profile_photo: string | null;
+  };
+
+  verified_user?: {
+    auth_id: string;
+    full_name: string | null;
+  };
+}
