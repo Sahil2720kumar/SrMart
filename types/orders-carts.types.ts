@@ -31,49 +31,87 @@ export interface OrderFilters {
 
 export interface OrderGroup {
   id: string;
-  customer_id: string; // references customers.user_id
-  razorpay_order_id?: string;
-  razorpay_payment_id?: string;
-  payment_method?: PaymentMethod;
+  customer_id: string;
+
+  razorpay_order_id: string | null;
+  razorpay_payment_id: string | null;
+
+  payment_method: string | null;
   payment_status: PaymentStatus;
-  total_amount: number;
+
+  subtotal: number;
+
+  tax: number | null;
+  delivery_fee: number | null;
+  discount: number | null;
+  coupon_discount: number | null;
+
+  total_amount: number | null;
+
+  coupon_id: string | null;
+
+  is_free_delivery: boolean;
+
   created_at: string;
   updated_at: string;
 }
 
+
 export interface Order {
   id: string;
-  order_group_id?: string;
-  customer_id?: string; // references customers.user_id
-  vendor_id?: string; // references vendors.user_id
-  delivery_boy_id?: string; // references delivery_boys.user_id
-  delivery_address_id?: string;
-  coupon_id?: string;
+
+  customer_id: string;
+  vendor_id: string;
+  delivery_boy_id: string | null;
+  delivery_address_id: string;
+
+  coupon_id: string | null;
+  order_group_id: string | null;
+
   order_number: string;
+
   status: OrderStatus;
+
   item_count: number;
+
   subtotal: number;
   delivery_fee: number;
   tax: number;
   tax_percentage: number;
+
   discount: number;
   coupon_discount: number;
+
   total_amount: number;
+
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
-  payment_id?: string;
-  special_instructions?: string;
-  cancellation_reason?: string;
-  cancelled_by?: CancelledBy;
+  payment_id: string | null;
+
+  special_instructions: string | null;
+  cancellation_reason: string | null;
+  cancelled_by: CancelledBy | null;
+
   created_at: string;
   updated_at: string;
-  confirmed_at?: string;
-  picked_up_at?: string;
-  delivered_at?: string;
-  cancelled_at?: string;
-  vendors:Vendor
-  order_items:OrderItem[]
+
+  confirmed_at: string | null;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+
+  vendor_accepted_at: string | null;
+
+  is_free_delivery: boolean;
+  delivery_fee_paid_by_customer: number;
+
+  total_commission: number;
+  platform_net_revenue: number;
+  vendor_payout: number;
+
+  delivery_otp: string | null;
 }
+
 
 export interface OrderItem {
   id: string;

@@ -1,4 +1,4 @@
-// app/(tabs)/vendor/orders/[orderId].tsx
+// app/(tabs)/vendor/orders/[orderId].tsx (CORRECTED VERSION)
 import React, { useState } from 'react';
 import {
   View,
@@ -27,7 +27,6 @@ import { Image } from 'expo-image';
 import { blurhash } from '@/types/categories-products.types';
 import SelectDeliveryPartnerBottomSheet from '@/components/SelectDeliveryPartnerBottomSheet ';
 import RejectOrderModal from '@/components/RejectOrderModal';
-
 
 const statusConfig = {
   pending: { label: 'Pending', color: 'bg-gray-500' },
@@ -82,7 +81,7 @@ export default function VendorOrderDetailScreen() {
   };
 
   const handleRejectOrder = () => {
-    setShowRejectModal(true)
+    setShowRejectModal(true);
   };
 
   const handleConfirmReject = (reason: string) => {
@@ -211,12 +210,20 @@ export default function VendorOrderDetailScreen() {
   const actions = getActionButtons(order.status);
   const totalItems = order.order_items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
-  // Calculate vendor payout (total - commission)
+  // Calculate vendor-specific amounts
   const totalCommission = order.order_items?.reduce(
     (sum, item) => sum + (item.commission_amount || 0),
     0
   ) || 0;
-  const vendorPayout = order.total_amount - totalCommission;
+
+  // Vendor receives: Item subtotal - vendor's product discount - platform commission
+  // Vendor does NOT pay for coupon discount or delivery fee
+  const itemsTotal = order.order_items?.reduce(
+    (sum, item) => sum + item.total_price,
+    0
+  ) || 0;
+  
+  const vendorPayout = itemsTotal - totalCommission;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -253,17 +260,25 @@ export default function VendorOrderDetailScreen() {
           <View className="flex-row justify-between items-center py-2 border-b border-gray-100">
             <Text className="text-gray-600 text-sm">Payment Method</Text>
             <Text
-              className={`font-semibold text-sm ${order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'
-                }`}
+              className={`font-semibold text-sm ${
+                order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'
+              }`}
             >
               {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Paid Online'}
             </Text>
           </View>
 
-          <View className="flex-row justify-between items-center pt-3">
-            <Text className="text-gray-600 text-sm font-semibold">Total Amount</Text>
-            <Text className="text-2xl font-bold text-green-600">
+          <View className="flex-row justify-between items-center py-2 border-b border-gray-100">
+            <Text className="text-gray-600 text-sm">Customer Pays</Text>
+            <Text className="text-base font-bold text-gray-900">
               ₹{order.total_amount.toFixed(2)}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between items-center pt-3">
+            <Text className="text-green-700 text-sm font-semibold">You Receive</Text>
+            <Text className="text-2xl font-bold text-green-600">
+              ₹{vendorPayout.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -339,8 +354,9 @@ export default function VendorOrderDetailScreen() {
           {order.order_items?.map((item, index) => (
             <View
               key={item.id}
-              className={`flex-row items-center py-3 ${index !== order.order_items!.length - 1 ? 'border-b border-gray-100' : ''
-                }`}
+              className={`flex-row items-center py-3 ${
+                index !== order.order_items!.length - 1 ? 'border-b border-gray-100' : ''
+              }`}
             >
               {/* Product Image */}
               <View className="w-14 h-14 bg-gray-100 rounded-xl mr-3 overflow-hidden">
@@ -367,12 +383,24 @@ export default function VendorOrderDetailScreen() {
                 <Text className="text-gray-600 text-xs mt-1">
                   ₹{item.discount_price || item.unit_price} × {item.quantity}
                 </Text>
+                {item.commission_rate && (
+                  <Text className="text-orange-600 text-xs mt-0.5">
+                    Commission: {item.commission_rate}%
+                  </Text>
+                )}
               </View>
 
               {/* Total */}
-              <Text className="text-gray-900 font-bold text-sm">
-                ₹{item.total_price.toFixed(2)}
-              </Text>
+              <View className="items-end">
+                <Text className="text-gray-900 font-bold text-sm">
+                  ₹{item.total_price.toFixed(2)}
+                </Text>
+                {item.commission_amount && item.commission_amount > 0 && (
+                  <Text className="text-orange-600 text-xs mt-0.5">
+                    -₹{item.commission_amount.toFixed(2)}
+                  </Text>
+                )}
+              </View>
             </View>
           ))}
         </View>
@@ -410,65 +438,65 @@ export default function VendorOrderDetailScreen() {
           </View>
         )}
 
-        {/* Payment Breakdown */}
+        {/* Vendor Earnings Breakdown */}
         <View className="bg-white mx-4 mt-4 mb-6 rounded-2xl p-4 border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-3">
-            PAYMENT BREAKDOWN
+            YOUR EARNINGS
           </Text>
 
           <View className="space-y-2 pb-3 border-b border-gray-100">
             <View className="flex-row justify-between py-1">
-              <Text className="text-gray-600 text-sm">Subtotal</Text>
+              <Text className="text-gray-600 text-sm">Items Total</Text>
               <Text className="text-gray-900 font-semibold text-sm">
-                ₹{order.subtotal.toFixed(2)}
+                ₹{itemsTotal.toFixed(2)}
               </Text>
             </View>
 
             {order.discount > 0 && (
               <View className="flex-row justify-between py-1">
-                <Text className="text-gray-600 text-sm">Discount</Text>
-                <Text className="text-green-600 font-semibold text-sm">
+                <View className="flex-row items-center gap-1">
+                  <Text className="text-gray-600 text-sm">Your Product Discount</Text>
+                  <Feather name="info" size={12} color="#9ca3af" />
+                </View>
+                <Text className="text-orange-600 font-semibold text-sm">
                   -₹{order.discount.toFixed(2)}
                 </Text>
               </View>
             )}
 
-            {order.coupon_discount > 0 && (
-              <View className="flex-row justify-between py-1">
-                <Text className="text-gray-600 text-sm">Coupon Discount</Text>
-                <Text className="text-green-600 font-semibold text-sm">
-                  -₹{order.coupon_discount.toFixed(2)}
-                </Text>
+            <View className="flex-row justify-between py-1">
+              <View className="flex-row items-center gap-1">
+                <Text className="text-gray-600 text-sm">Platform Commission</Text>
+                <Feather name="info" size={12} color="#9ca3af" />
               </View>
-            )}
-
-            <View className="flex-row justify-between py-1">
-              <Text className="text-gray-600 text-sm">Delivery Fee</Text>
-              <Text className="text-gray-900 font-semibold text-sm">
-                ₹{order.delivery_fee.toFixed(2)}
-              </Text>
-            </View>
-
-            <View className="flex-row justify-between py-1">
-              <Text className="text-gray-600 text-sm">Platform Commission</Text>
               <Text className="text-red-600 font-semibold text-sm">
                 -₹{totalCommission.toFixed(2)}
               </Text>
             </View>
           </View>
 
-          <View className="flex-row justify-between py-3 border-b border-gray-100">
-            <Text className="text-gray-900 font-semibold">Total Amount</Text>
-            <Text className="text-green-600 font-bold text-lg">
-              ₹{order.total_amount.toFixed(2)}
-            </Text>
-          </View>
-
-          <View className="flex-row justify-between pt-3 bg-green-50 -mx-4 -mb-4 px-4 py-3 rounded-b-2xl">
-            <Text className="text-green-700 font-semibold text-sm">Your Payout</Text>
-            <Text className="text-green-700 font-bold text-base">
+          <View className="flex-row justify-between pt-3 bg-green-50 -mx-4 -mb-4 px-4 py-4 rounded-b-2xl">
+            <Text className="text-green-700 font-bold text-base">Your Payout</Text>
+            <Text className="text-green-700 font-bold text-xl">
               ₹{vendorPayout.toFixed(2)}
             </Text>
+          </View>
+        </View>
+
+        {/* Info Card - What's not included */}
+        <View className="bg-blue-50 mx-4 mb-6 rounded-2xl p-4 border border-blue-200">
+          <View className="flex-row items-start gap-3">
+            <Feather name="info" size={18} color="#3b82f6" />
+            <View className="flex-1">
+              <Text className="text-blue-900 font-semibold text-sm mb-2">
+                Note on Customer's Total
+              </Text>
+              <Text className="text-blue-700 text-xs leading-5">
+                Customer paid ₹{order.total_amount.toFixed(2)}, which includes delivery fees (₹
+                {order.delivery_fee.toFixed(2)}) and platform coupons (₹
+                {order.coupon_discount.toFixed(2)}) that are not deducted from your earnings.
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -496,8 +524,8 @@ export default function VendorOrderDetailScreen() {
         </View>
       )}
 
-      {/* Delivery Partner Bottom Sheet */}
-      {showDeliverySheet || showRejectModal && (
+      {/* Modals */}
+      {(showDeliverySheet || showRejectModal) && (
         <BlurView
           intensity={10}
           experimentalBlurMethod="dimezisBlurView"
@@ -505,7 +533,6 @@ export default function VendorOrderDetailScreen() {
         />
       )}
 
-      {/* Reject Order Modal */}
       <RejectOrderModal
         visible={showRejectModal}
         onClose={() => setShowRejectModal(false)}

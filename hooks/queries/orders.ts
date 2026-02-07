@@ -703,25 +703,67 @@ export function useCancelOrder() {
 }
 
 // ============================================================================
-// MUTATION: Vendor Accept Order
+// Response Types for RPC Functions
+// ============================================================================
+
+interface VendorAcceptOrderResponse {
+  success: boolean;
+  order_id: string;
+  status: string;
+  vendor_payout: number;
+  total_commission: number;
+  items_total: number;
+}
+
+interface VendorRejectOrderResponse {
+  success: boolean;
+  order_id: string;
+  status: string;
+  reason: string;
+}
+
+interface MarkOrderReadyResponse {
+  success: boolean;
+  order_id: string;
+  status: string;
+}
+
+interface AssignDeliveryPartnerResponse {
+  success: boolean;
+  order_id: string;
+  delivery_boy_id: string;
+  delivery_boy_name: string;
+}
+
+// ============================================================================
+// MUTATION: Vendor Accept Order (UPDATED)
 // ============================================================================
 export function useVendorAcceptOrder() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async (orderId: string) => {
+    mutationFn: async (orderId: string): Promise<VendorAcceptOrderResponse> => {
       const vendorId = session?.user?.id;
       if (!vendorId) throw new Error('User not authenticated');
 
-      const { error } = await supabase.rpc('vendor_accept_order', {
+      const { data, error } = await supabase.rpc('vendor_accept_order', {
         p_order_id: orderId,
         p_vendor_id: vendorId,
       });
 
       if (error) throw error;
+      
+      return data as VendorAcceptOrderResponse;
     },
-    onSuccess: (_, orderId) => {
+    onSuccess: (data, orderId) => {
+      console.log('Order accepted successfully:', {
+        orderId: data.order_id,
+        vendorPayout: data.vendor_payout,
+        commission: data.total_commission,
+      });
+
+      // Invalidate queries to refresh the UI
       queryClient.invalidateQueries({ 
         queryKey: orderQueryKeys.orders.all 
       });
@@ -729,11 +771,14 @@ export function useVendorAcceptOrder() {
         queryKey: orderQueryKeys.orders.detail(orderId),
       });
     },
+    onError: (error: any) => {
+      console.error('Failed to accept order:', error.message);
+    },
   });
 }
 
 // ============================================================================
-// MUTATION: Vendor Reject Order
+// MUTATION: Vendor Reject Order (UPDATED)
 // ============================================================================
 export function useVendorRejectOrder() {
   const queryClient = useQueryClient();
@@ -746,20 +791,31 @@ export function useVendorRejectOrder() {
     }: {
       orderId: string;
       reason: string;
-    }) => {
+    }): Promise<VendorRejectOrderResponse> => {
       const vendorId = session?.user?.id;
       if (!vendorId) throw new Error('User not authenticated');
 
-      const { error } = await supabase.rpc('vendor_reject_order', {
+      if (!reason || reason.trim().length === 0) {
+        throw new Error('Rejection reason is required');
+      }
+
+      const { data, error } = await supabase.rpc('vendor_reject_order', {
         p_order_id: orderId,
         p_vendor_id: vendorId,
-        p_rejection_reason: reason,
+        p_rejection_reason: reason.trim(),
       });
-      console.log(error);
 
       if (error) throw error;
+      
+      return data as VendorRejectOrderResponse;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      console.log('Order rejected successfully:', {
+        orderId: data.order_id,
+        reason: data.reason,
+      });
+
+      // Invalidate queries
       queryClient.invalidateQueries({ 
         queryKey: orderQueryKeys.orders.all 
       });
@@ -767,6 +823,141 @@ export function useVendorRejectOrder() {
         queryKey: orderQueryKeys.orders.detail(variables.orderId),
       });
     },
+    onError: (error: any) => {
+      console.error('Failed to reject order:', error.message);
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Mark Order Ready (NEW)
+// ============================================================================
+export function useMarkOrderReady() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async (orderId: string): Promise<MarkOrderReadyResponse> => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase.rpc('mark_order_ready', {
+        p_order_id: orderId,
+        p_vendor_id: vendorId,
+      });
+
+      if (error) throw error;
+      
+      return data as MarkOrderReadyResponse;
+    },
+    onSuccess: (data, orderId) => {
+      console.log('Order marked as ready:', {
+        orderId: data.order_id,
+        status: data.status,
+      });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(orderId),
+      });
+    },
+    onError: (error: any) => {
+      console.error('Failed to mark order as ready:', error.message);
+    },
+  });
+}
+
+// ============================================================================
+// MUTATION: Assign Delivery Partner (NEW)
+// ============================================================================
+export function useAssignDeliveryPartner() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      deliveryBoyId,
+    }: {
+      orderId: string;
+      deliveryBoyId: string;
+    }): Promise<AssignDeliveryPartnerResponse> => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase.rpc('assign_delivery_partner', {
+        p_order_id: orderId,
+        p_vendor_id: vendorId,
+        p_delivery_boy_id: deliveryBoyId,
+      });
+
+      if (error) throw error;
+      
+      return data as AssignDeliveryPartnerResponse;
+    },
+    onSuccess: (data, variables) => {
+      console.log('Delivery partner assigned:', {
+        orderId: data.order_id,
+        deliveryBoyId: data.delivery_boy_id,
+        deliveryBoyName: data.delivery_boy_name,
+      });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ 
+        queryKey: orderQueryKeys.orders.all 
+      });
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(variables.orderId),
+      });
+    },
+    onError: (error: any) => {
+      console.error('Failed to assign delivery partner:', error.message);
+    },
+  });
+}
+
+// ============================================================================
+// QUERY: Get Available Delivery Partners (NEW)
+// ============================================================================
+export function useAvailableDeliveryPartners(location?: {
+  latitude: number;
+  longitude: number;
+}) {
+  return useQuery({
+    queryKey: ['delivery-partners', 'available', location],
+    queryFn: async () => {
+      let query = supabase
+        .from('delivery_boys')
+        .select(`
+          user_id,
+          first_name,
+          last_name,
+          profile_photo,
+          vehicle_type,
+          vehicle_number,
+          rating,
+          review_count,
+          is_available,
+          current_latitude,
+          current_longitude
+        `)
+        .eq('is_available', true)
+        .eq('is_verified', true);
+
+      // If location provided, you could add distance filtering here
+      // This would require a PostGIS extension or custom function
+
+      const { data, error } = await query
+        .order('rating', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!location, // Only run if location is provided
   });
 }
 
@@ -888,61 +1079,6 @@ export function useRateOrder() {
 }
 
 
-// ============================================================================
-// QUERY: Get Available Delivery Partners
-// ============================================================================
-export function useAvailableDeliveryPartners(
-  vendorLocation?: { latitude: number; longitude: number }
-) {
-  return useQuery({
-    queryKey: ['delivery-partners', 'available', vendorLocation],
-    queryFn: async () => {
-      let query = supabase
-        .from('delivery_boys')
-        .select(`
-          user_id,
-          first_name,
-          last_name,
-          profile_photo,
-          vehicle_type,
-          vehicle_number,
-          license_number,
-          is_available,
-          is_online,
-          current_latitude,
-          current_longitude,
-          rating,
-          review_count,
-          total_deliveries
-        `)
-        .eq('is_available', true)
-        .eq('is_online', true);
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      // Calculate distance if vendor location provided
-      if (vendorLocation && data) {
-        return data.map((partner) => {
-          const distance = calculateDistance(
-            vendorLocation.latitude,
-            vendorLocation.longitude,
-            partner.current_latitude || 0,
-            partner.current_longitude || 0
-          );
-
-          return {
-            ...partner,
-            distance: distance.toFixed(1),
-            estimatedTime: Math.ceil(distance / 0.5) + '-' + (Math.ceil(distance / 0.5) + 2) + ' min',
-          };
-        }).sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-      }
-
-      return data;
-    },
-  });
-}
 
 // Helper function to calculate distance
 function calculateDistance(
@@ -964,69 +1100,7 @@ function calculateDistance(
   return R * c;
 }
 
-// ============================================================================
-// MUTATION: Assign Delivery Partner
-// ============================================================================
-export function useAssignDeliveryPartner() {
-  const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async ({
-      orderId,
-      deliveryBoyId,
-    }: {
-      orderId: string;
-      deliveryBoyId: string;
-    }) => {
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          delivery_boy_id: deliveryBoyId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(variables.orderId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.all,
-      });
-    },
-  });
-}
-
-// ============================================================================
-// MUTATION: Mark Order as Ready
-// ============================================================================
-export function useMarkOrderReady() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (orderId: string) => {
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          status: 'ready_for_pickup',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-    },
-    onSuccess: (_, orderId) => {
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(orderId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.all,
-      });
-    },
-  });
-}
 
 // ============================================================================
 // QUERY: Get Vendor Statistics

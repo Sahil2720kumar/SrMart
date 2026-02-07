@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase'; // adjust path if needed
+import { useAuthStore } from '@/store/authStore';
+import { useProfileStore } from '@/store/profileStore';
 
 export default function DeliveryLoginScreen() {
   const router = useRouter();
@@ -21,6 +23,8 @@ export default function DeliveryLoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const {setSession}=useAuthStore()
+  const {setUser,setDeliveryBoyProfile}=useProfileStore()
 
   const isValidEmail = /^\S+@\S+\.\S+$/.test(email);
   const canLogin = isValidEmail && password.length >= 6;
@@ -72,8 +76,14 @@ export default function DeliveryLoginScreen() {
       if (deliveryError) throw deliveryError;
 
       /* -------- SUCCESS -------- */
-      router.replace('/delivery/home');
 
+      /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
+      setSession(data.session);
+      setUser(userData);
+      setDeliveryBoyProfile(deliveryProfile);
+
+      router.replace('/delivery/home');
+ 
     } catch (err: any) {
       Alert.alert(
         'Login Failed',

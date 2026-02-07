@@ -1,94 +1,115 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  Modal,
-  TextInput,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Order, useDeliveryStore } from '@/store/useDeliveryStore';
+import { useDeliveryStore } from '@/store/useDeliveryStore';
 import DeliveryOTPVerificationModal from '@/components/DeliveryOTPVerificationModal';
-
-/* ---------------- MOCK ORDER DATA ---------------- */
-const mockOrders:Order = [
-  {
-    id: 'ORD-2024-001234',
-    status: 'pickup_in_progress',
-    customer: { 
-      name: 'Rajesh Kumar', 
-      address: 'B-204, Green Valley Apartments, Sector 18, Noida', 
-      phone: '+91 98765 43210',
-      lat: 28.5355,
-      lng: 77.3910
-    },
-    vendors: [
-      { 
-        id: 'V1',
-        name: 'Fresh Grocery Store', 
-        address: 'Shop 12, Sector 21 Market, Noida',
-        items: [
-          { id: 'I1', name: 'Tomatoes', qty: '1 kg', collected: false },
-          { id: 'I2', name: 'Onions', qty: '2 kg', collected: false },
-          { id: 'I3', name: 'Potatoes', qty: '1 kg', collected: false }
-        ],
-        collected: false
-      },
-      { 
-        id: 'V2',
-        name: 'Daily Needs Mart', 
-        address: 'Shop 45, Sector 21 Market, Noida',
-        items: [
-          { id: 'I4', name: 'Milk', qty: '2 L', collected: false },
-          { id: 'I5', name: 'Bread', qty: '2 pcs', collected: false },
-          { id: 'I6', name: 'Eggs', qty: '12 pcs', collected: false }
-        ],
-        collected: false
-      },
-      { 
-        id: 'V3',
-        name: 'Metro Cash & Carry', 
-        address: 'Shop 78, Sector 18 Market, Noida',
-        items: [
-          { id: 'I7', name: 'Rice', qty: '5 kg', collected: false },
-          { id: 'I8', name: 'Dal', qty: '2 kg', collected: false }
-        ],
-        collected: false
-      }
-    ],
-    payout: 125,
-    distance: 5.2,
-    totalItems: 8,
-    deliveryOtp: '8429'
-  }
-]
+import {
+  useDeliveryOrderDetail,
+  useMarkOrderPickedUp,
+  useCompleteDelivery,
+  DeliveryOrder,
+} from '@/hooks/queries/useDeliveryOrders';
 
 /* ---------------- MAIN COMPONENT ---------------- */
 const OrderDetailScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const orderId = params.orderId || 'ORD-2024-001234';
+  const orderId = params.orderId as string;
   
   const store = useDeliveryStore();
   const isVerified = store.adminVerificationStatus === 'approved' && store.isKycCompleted;
 
-  const [order, setOrder] = useState(mockOrders[0]);
-  const [expandedVendor, setExpandedVendor] = useState(null);
+  const [expandedVendor, setExpandedVendor] = useState<string | null>(null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
+  const [localItemStates, setLocalItemStates] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (!order) {
-      Alert.alert('Error', 'Order not found');
+  // Queries
+  const { 
+    data: order, 
+    isLoading, 
+    error,
+    refetch,
+  } = useDeliveryOrderDetail(orderId);
+
+  // Mutations
+  const markPickedUpMutation = useMarkOrderPickedUp();
+  const completeDeliveryMutation = useCompleteDelivery();
+
+  const handleToggleItemCollection = (vendorId: string, itemId: string) => {
+    if (!isVerified) return;
+    
+    const key = `${vendorId}-${itemId}`;
+    setLocalItemStates(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const handleMarkVendorCollected = async () => {
+    if (!isVerified || !order) return;
+
+    try {
+      await markPickedUpMutation.mutateAsync(order.id);
+      Alert.alert('Success', 'Order marked as picked up!');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to mark order as picked up');
     }
-  }, [order]);
+  };
 
-  if (!order) {
+  const handleNavigateToCustomer = () => {
+    if (!order) return;
+    const { lat, lng } = order.customer;
+    if (lat && lng) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      Linking.openURL(url);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!isVerified || !order) return;
+
+    try {
+      await completeDeliveryMutation.mutateAsync({
+        orderId: order.id,
+        otp: otpInput,
+      });
+      
+      setShowOtpModal(false);
+      setOtpInput('');
+      
+      Alert.alert(
+        'Success!', 
+        'Order delivered successfully! Great job! 🎉',
+        [{ text: 'OK', onPress: () => router.push('/delivery/orders') }]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Invalid OTP. Please try again.');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#4f46e5]">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="white" />
+          <Text className="text-white mt-4">Loading order details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !order) {
     return (
       <SafeAreaView className="flex-1 bg-[#4f46e5]">
         <View className="flex-1 items-center justify-center p-6">
@@ -111,93 +132,24 @@ const OrderDetailScreen = () => {
     );
   }
 
-  const handleToggleItemCollection = (vendorId, itemId) => {
-    if (!isVerified) return;
-    
-    setOrder(prev => ({
-      ...prev,
-      vendors: prev.vendors.map(vendor => {
-        if (vendor.id === vendorId) {
-          return {
-            ...vendor,
-            items: vendor.items.map(item =>
-              item.id === itemId ? { ...item, collected: !item.collected } : item
-            )
-          };
-        }
-        return vendor;
-      })
-    }));
-  };
-
-  const handleMarkVendorCollected = (vendorId) => {
-    if (!isVerified) return;
-
-    const vendor = order.vendors.find(v => v.id === vendorId);
-    const allItemsCollected = vendor.items.every(item => item.collected);
-
-    if (!allItemsCollected) {
-      Alert.alert('Incomplete', 'Please collect all items before marking vendor as collected');
-      return;
-    }
-
-    setOrder(prev => {
-      const updatedVendors = prev.vendors.map(v =>
-        v.id === vendorId ? { ...v, collected: true } : v
-      );
-      const allVendorsCollected = updatedVendors.every(v => v.collected);
-      
-      return {
-        ...prev,
-        vendors: updatedVendors,
-        status: allVendorsCollected ? 'out_for_delivery' : 'pickup_in_progress'
-      };
-    });
-
-    Alert.alert('Success', `${vendor.name} marked as collected!`);
-  };
-
-  const handleNavigateToCustomer = () => {
-    const { lat, lng } = order.customer;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    Linking.openURL(url);
-  };
-
-  const handleVerifyOtp = () => {
-    if (!isVerified) return;
-
-    if (otpInput === order.deliveryOtp) {
-      setOrder(prev => ({ ...prev, status: 'completed' }));
-      setShowOtpModal(false);
-      setOtpInput('');
-      Alert.alert(
-        'Success!', 
-        'Order delivered successfully! Great job! 🎉',
-        [{ text: 'OK', onPress: () => router.push('/delivery/orders') }]
-      );
-    } else {
-      Alert.alert('Invalid OTP', 'Please check and try again.');
-    }
-  };
-
   const vendorsCollected = order.vendors.filter(v => v.collected).length;
   const totalVendors = order.vendors.length;
   const allVendorsCollected = vendorsCollected === totalVendors;
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pickup_in_progress': return 'bg-blue-500';
+      case 'ready_for_pickup': return 'bg-yellow-500';
       case 'out_for_delivery': return 'bg-orange-500';
-      case 'completed': return 'bg-green-500';
+      case 'delivered': return 'bg-green-500';
       default: return 'bg-gray-500';
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status: string) => {
     switch (status) {
-      case 'pickup_in_progress': return 'Pickup in Progress';
+      case 'ready_for_pickup': return 'Ready for Pickup';
       case 'out_for_delivery': return 'Out for Delivery';
-      case 'completed': return 'Completed';
+      case 'delivered': return 'Delivered';
       default: return 'Unknown';
     }
   };
@@ -249,7 +201,7 @@ const OrderDetailScreen = () => {
                 <Text className="text-xs text-gray-500 font-bold tracking-wider mb-1">
                   ORDER ID
                 </Text>
-                <Text className="text-xl font-bold text-gray-900">#{order.id}</Text>
+                <Text className="text-xl font-bold text-gray-900">#{order.order_number}</Text>
               </View>
               <View className="bg-green-50 px-4 py-2 rounded-full">
                 <Text className="text-green-600 font-bold text-lg">₹{order.payout}</Text>
@@ -259,7 +211,7 @@ const OrderDetailScreen = () => {
             <View className="flex-row gap-3">
               <View className="flex-1 bg-gray-50 rounded-xl p-3">
                 <Text className="text-xs text-gray-500 mb-1">Distance</Text>
-                <Text className="font-bold text-gray-900">{order.distance} km</Text>
+                <Text className="font-bold text-gray-900">{order.distance.toFixed(1)} km</Text>
               </View>
               <View className="flex-1 bg-gray-50 rounded-xl p-3">
                 <Text className="text-xs text-gray-500 mb-1">Total Items</Text>
@@ -280,7 +232,7 @@ const OrderDetailScreen = () => {
               {/* Pickup */}
               <View className="items-center flex-1">
                 <View className={`w-12 h-12 rounded-full items-center justify-center mb-2 ${
-                  vendorsCollected > 0 ? 'bg-green-500' : 'bg-blue-500'
+                  vendorsCollected > 0 ? 'bg-green-500' : 'bg-yellow-500'
                 }`}>
                   {vendorsCollected === totalVendors ? (
                     <Feather name="check" size={24} color="white" />
@@ -298,10 +250,10 @@ const OrderDetailScreen = () => {
               {/* Delivery */}
               <View className="items-center flex-1">
                 <View className={`w-12 h-12 rounded-full items-center justify-center mb-2 ${
-                  order.status === 'completed' ? 'bg-green-500' : 
+                  order.status === 'delivered' ? 'bg-green-500' : 
                   allVendorsCollected ? 'bg-orange-500' : 'bg-gray-300'
                 }`}>
-                  {order.status === 'completed' ? (
+                  {order.status === 'delivered' ? (
                     <Feather name="check" size={24} color="white" />
                   ) : (
                     <Feather name="map-pin" size={24} color="white" />
@@ -309,17 +261,17 @@ const OrderDetailScreen = () => {
                 </View>
                 <Text className="text-xs font-semibold text-gray-700 text-center">Delivery</Text>
                 <Text className="text-xs text-gray-500">
-                  {order.status === 'completed' ? 'Done' : 'Pending'}
+                  {order.status === 'delivered' ? 'Done' : 'Pending'}
                 </Text>
               </View>
 
               {/* Line */}
-              <View className={`h-1 flex-1 mx-2 ${order.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'}`} />
+              <View className={`h-1 flex-1 mx-2 ${order.status === 'delivered' ? 'bg-green-500' : 'bg-gray-200'}`} />
 
               {/* Completed */}
               <View className="items-center flex-1">
                 <View className={`w-12 h-12 rounded-full items-center justify-center mb-2 ${
-                  order.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
+                  order.status === 'delivered' ? 'bg-green-500' : 'bg-gray-300'
                 }`}>
                   <Feather name="check-circle" size={24} color="white" />
                 </View>
@@ -341,90 +293,107 @@ const OrderDetailScreen = () => {
               </View>
             </View>
 
-            {order.vendors.map((vendor, idx) => (
-              <View key={vendor.id} className="bg-white rounded-3xl p-5 mb-3 shadow-lg">
-                <View className="flex-row items-start justify-between mb-3">
-                  <View className="flex-1">
-                    <View className="flex-row items-center mb-2">
-                      <Feather name="shopping-bag" size={20} color="#4f46e5" />
-                      <Text className="text-lg font-bold text-gray-900 ml-2">
-                        {vendor.name}
+            {order.vendors.map((vendor, idx) => {
+              const isItemCollected = (itemId: string) => {
+                const key = `${vendor.id}-${itemId}`;
+                return localItemStates[key] !== undefined 
+                  ? localItemStates[key] 
+                  : vendor.items.find(i => i.id === itemId)?.collected || false;
+              };
+
+              const allItemsCollected = vendor.items.every(item => isItemCollected(item.id));
+
+              return (
+                <View key={vendor.id} className="bg-white rounded-3xl p-5 mb-3 shadow-lg">
+                  <View className="flex-row items-start justify-between mb-3">
+                    <View className="flex-1">
+                      <View className="flex-row items-center mb-2">
+                        <Feather name="shopping-bag" size={20} color="#4f46e5" />
+                        <Text className="text-lg font-bold text-gray-900 ml-2">
+                          {vendor.name}
+                        </Text>
+                      </View>
+                      <Text className="text-sm text-gray-600 mb-1">{vendor.address}</Text>
+                      <Text className="text-xs text-gray-500">{vendor.items.length} items</Text>
+                    </View>
+                    <View className={`px-3 py-1.5 rounded-full ${
+                      vendor.collected ? 'bg-green-500' : 'bg-yellow-500'
+                    }`}>
+                      <Text className="text-white text-xs font-bold">
+                        {vendor.collected ? 'Collected' : 'Pending'}
                       </Text>
                     </View>
-                    <Text className="text-sm text-gray-600 mb-1">{vendor.address}</Text>
-                    <Text className="text-xs text-gray-500">{vendor.items.length} items</Text>
                   </View>
-                  <View className={`px-3 py-1.5 rounded-full ${
-                    vendor.collected ? 'bg-green-500' : 'bg-yellow-500'
-                  }`}>
-                    <Text className="text-white text-xs font-bold">
-                      {vendor.collected ? 'Collected' : 'Pending'}
-                    </Text>
-                  </View>
-                </View>
 
-                {/* Expandable Items */}
-                <TouchableOpacity
-                  onPress={() => setExpandedVendor(expandedVendor === vendor.id ? null : vendor.id)}
-                  className="flex-row items-center justify-between py-2 border-t border-gray-100"
-                  activeOpacity={0.8}
-                  disabled={vendor.collected}
-                >
-                  <Text className="text-sm font-semibold text-gray-700">
-                    {vendor.collected ? 'All items collected' : 'View items to collect'}
-                  </Text>
-                  {!vendor.collected && (
-                    <Feather 
-                      name={expandedVendor === vendor.id ? 'chevron-up' : 'chevron-down'} 
-                      size={20} 
-                      color="#6b7280"
-                    />
-                  )}
-                </TouchableOpacity>
-
-                {expandedVendor === vendor.id && !vendor.collected && (
-                  <View className="mt-3 space-y-2">
-                    {vendor.items.map((item) => (
-                      <TouchableOpacity
-                        key={item.id}
-                        onPress={() => handleToggleItemCollection(vendor.id, item.id)}
-                        className="flex-row items-center py-2"
-                        activeOpacity={0.7}
-                        disabled={!isVerified}
-                      >
-                        <View className={`w-6 h-6 rounded items-center justify-center mr-3 ${
-                          item.collected ? 'bg-green-500' : 'bg-gray-200'
-                        }`}>
-                          {item.collected && <Feather name="check" size={16} color="white" />}
-                        </View>
-                        <View className="flex-1">
-                          <Text className={`font-semibold ${
-                            item.collected ? 'text-gray-500 line-through' : 'text-gray-900'
-                          }`}>
-                            {item.name}
-                          </Text>
-                          <Text className="text-xs text-gray-500">{item.qty}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {!vendor.collected && (
+                  {/* Expandable Items */}
                   <TouchableOpacity
-                    onPress={() => handleMarkVendorCollected(vendor.id)}
-                    disabled={!isVerified}
-                    className={`mt-4 py-3 rounded-xl flex-row items-center justify-center gap-2 ${
-                      isVerified ? 'bg-[#4f46e5]' : 'bg-gray-300'
-                    }`}
+                    onPress={() => setExpandedVendor(expandedVendor === vendor.id ? null : vendor.id)}
+                    className="flex-row items-center justify-between py-2 border-t border-gray-100"
                     activeOpacity={0.8}
+                    disabled={vendor.collected}
                   >
-                    <Feather name="check-circle" size={18} color="white" />
-                    <Text className="text-white font-bold">Mark Vendor Collected</Text>
+                    <Text className="text-sm font-semibold text-gray-700">
+                      {vendor.collected ? 'All items collected' : 'View items to collect'}
+                    </Text>
+                    {!vendor.collected && (
+                      <Feather 
+                        name={expandedVendor === vendor.id ? 'chevron-up' : 'chevron-down'} 
+                        size={20} 
+                        color="#6b7280"
+                      />
+                    )}
                   </TouchableOpacity>
-                )}
-              </View>
-            ))}
+
+                  {expandedVendor === vendor.id && !vendor.collected && (
+                    <View className="mt-3 space-y-2">
+                      {vendor.items.map((item) => (
+                        <TouchableOpacity
+                          key={item.id}
+                          onPress={() => handleToggleItemCollection(vendor.id, item.id)}
+                          className="flex-row items-center py-2"
+                          activeOpacity={0.7}
+                          disabled={!isVerified}
+                        >
+                          <View className={`w-6 h-6 rounded items-center justify-center mr-3 ${
+                            isItemCollected(item.id) ? 'bg-green-500' : 'bg-gray-200'
+                          }`}>
+                            {isItemCollected(item.id) && <Feather name="check" size={16} color="white" />}
+                          </View>
+                          <View className="flex-1">
+                            <Text className={`font-semibold ${
+                              isItemCollected(item.id) ? 'text-gray-500 line-through' : 'text-gray-900'
+                            }`}>
+                              {item.name}
+                            </Text>
+                            <Text className="text-xs text-gray-500">{item.qty}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {!vendor.collected && order.status === 'ready_for_pickup' && (
+                    <TouchableOpacity
+                      onPress={handleMarkVendorCollected}
+                      disabled={!isVerified || !allItemsCollected || markPickedUpMutation.isPending}
+                      className={`mt-4 py-3 rounded-xl flex-row items-center justify-center gap-2 ${
+                        isVerified && allItemsCollected ? 'bg-[#4f46e5]' : 'bg-gray-300'
+                      }`}
+                      activeOpacity={0.8}
+                    >
+                      {markPickedUpMutation.isPending ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <>
+                          <Feather name="check-circle" size={18} color="white" />
+                          <Text className="text-white font-bold">Mark as Picked Up</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           {/* Customer Delivery Section */}
@@ -452,7 +421,7 @@ const OrderDetailScreen = () => {
                   </View>
                 </View>
 
-                {order.status !== 'completed' && (
+                {order.status !== 'delivered' && (
                   <View className="flex-row gap-3">
                     <TouchableOpacity
                       onPress={handleNavigateToCustomer}
@@ -464,19 +433,25 @@ const OrderDetailScreen = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => setShowOtpModal(true)}
-                      disabled={!isVerified}
+                      disabled={!isVerified || completeDeliveryMutation.isPending}
                       className={`flex-1 py-3 rounded-xl flex-row items-center justify-center gap-2 ${
                         isVerified ? 'bg-green-500' : 'bg-gray-300'
                       }`}
                       activeOpacity={0.8}
                     >
-                      <Feather name="lock" size={18} color="white" />
-                      <Text className="text-white font-bold">Enter OTP</Text>
+                      {completeDeliveryMutation.isPending ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <>
+                          <Feather name="lock" size={18} color="white" />
+                          <Text className="text-white font-bold">Enter OTP</Text>
+                        </>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )}
 
-                {order.status === 'completed' && (
+                {order.status === 'delivered' && (
                   <View className="bg-green-50 p-4 rounded-xl border border-green-200">
                     <View className="flex-row items-center justify-center">
                       <Feather name="check-circle" size={20} color="#22c55e" />
@@ -493,14 +468,14 @@ const OrderDetailScreen = () => {
       </ScrollView>
 
       {/* OTP Verification Modal */}
-     {/* OTP Verification Modal */}
-     <DeliveryOTPVerificationModal
+      <DeliveryOTPVerificationModal
         showOtpModal={showOtpModal}
         setShowOtpModal={setShowOtpModal}
-        selectedOrderForOtp={mockOrders}
+        selectedOrderForOtp={order}
         otpInput={otpInput}
         setOtpInput={setOtpInput}
-        handleVerifyOtp={handleVerifyOtp} />
+        handleVerifyOtp={handleVerifyOtp}
+      />
     </SafeAreaView>
   );
 };
