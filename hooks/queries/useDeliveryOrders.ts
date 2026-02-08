@@ -251,6 +251,8 @@ export function useAvailableDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
+                lat: vendor.latitude ?? undefined, // ✅ ADD
+                lng: vendor.longitude ?? undefined, // ✅ ADD
                 items: order.order_items!.map((item) => ({
                   id: item.id,
                   name: item.product_name,
@@ -406,6 +408,8 @@ export function useActiveDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
+                lat: vendor.latitude ?? undefined, // ✅ ADD
+                lng: vendor.longitude ?? undefined, // ✅ ADD
                 items: order.order_items!.map((item) => ({
                   id: item.id,
                   name: item.product_name,
@@ -556,6 +560,8 @@ export function useCompletedDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
+                lat: vendor.latitude ?? undefined, // ✅ ADD
+                lng: vendor.longitude ?? undefined, // ✅ ADD
                 items: order.order_items!.map((item) => ({
                   id: item.id,
                   name: item.product_name,
@@ -682,6 +688,8 @@ export function useDeliveryOrderDetail(orderId: string) {
             id: vendor.user_id,
             name: vendor.store_name,
             address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
+            lat: vendor.latitude ?? undefined, // ✅ ADD
+            lng: vendor.longitude ?? undefined, // ✅ ADD
             items: data.order_items!.map((item) => ({
               id: item.id,
               name: item.product_name,
@@ -741,13 +749,12 @@ export function useDeliveryBoyStats() {
 
       // Calculate total earnings using the same logic as calculateDeliveryPayout
       // Delivery boy always gets the full delivery_fee
-      const totalEarnings = data
-        .filter((o) => o.status === 'delivered')
-        .reduce((sum, o) => {
-          const deliveryFee = parseFloat(o.delivery_fee || '0');
-          return sum + deliveryFee;
-        }, 0);
-
+      const { data:wallet, error:walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', deliveryBoyId)
+        .single();
+ 
       // Calculate distance from completed orders
       const { data: completedData, error: distanceError } = await supabase
         .from('orders')
@@ -775,7 +782,7 @@ export function useDeliveryBoyStats() {
         totalOrders,
         activeOrders,
         completedOrders,
-        totalEarnings: Math.round(totalEarnings),
+        totalEarnings: wallet.lifetime_earnings,
         totalDistance: Math.round(totalDistance * 10) / 10,
       };
     },
@@ -800,6 +807,7 @@ export function useAcceptDeliveryOrder() {
         .from('orders')
         .update({
           delivery_boy_id: deliveryBoyId,
+          status: 'ready_for_pickup', // ✅ KEEP SAME
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId)
@@ -815,18 +823,13 @@ export function useAcceptDeliveryOrder() {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) return;
 
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.available(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.active(deliveryBoyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.stats(deliveryBoyId),
-      });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.available() });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.active(deliveryBoyId) });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.stats(deliveryBoyId) });
     },
   });
 }
+
 
 // ==========================================
 // MUTATION: Mark Order as Picked Up - NO CHANGES NEEDED
@@ -840,12 +843,11 @@ export function useMarkOrderPickedUp() {
     mutationFn: async (orderId: string) => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) throw new Error('Delivery boy not authenticated');
-    
 
       const { data, error } = await supabase
         .from('orders')
         .update({
-          status: 'out_for_delivery' as OrderStatus,
+          status: 'out_for_delivery', // ✅ MOVE HERE
           picked_up_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -854,24 +856,19 @@ export function useMarkOrderPickedUp() {
         .select()
         .single();
 
-      console.log('data', data);
-
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (_,orderId) => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) return;
 
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.active(deliveryBoyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.detail(data.id),
-      });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.active(deliveryBoyId) });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.detail(orderId) });
     },
   });
 }
+
 
 // ==========================================
 // MUTATION: Complete Delivery (Verify OTP) - UPDATED

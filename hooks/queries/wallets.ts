@@ -19,11 +19,14 @@ export const walletQueryKeys = {
     all: ['wallet-transactions'] as const,
     byWallet: (walletId: string) => ['wallet-transactions', 'wallet', walletId] as const,
     recent: (walletId: string, limit: number) => ['wallet-transactions', 'wallet', walletId, 'recent', limit] as const,
+    byPeriod: (walletId: string, period: 'today' | 'week' | 'month') => 
+      ['wallet-transactions', 'wallet', walletId, 'period', period] as const,
   },
   cashouts: {
     all: ['cashout-requests'] as const,
     byWallet: (walletId: string) => ['cashout-requests', 'wallet', walletId] as const,
     recent: (walletId: string, limit: number) => ['cashout-requests', 'wallet', walletId, 'recent', limit] as const,
+    pending: (walletId: string) => ['cashout-requests', 'wallet', walletId, 'pending'] as const,
   },
   bankAccounts: {
     vendor: {
@@ -96,7 +99,7 @@ export function useWallet(userId?: string, userType?: WalletUserType) {
       return newWallet as Wallet;
     },
     enabled: !!id,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 }
 
@@ -143,7 +146,53 @@ export function useRecentWalletTransactions(walletId: string, limit: number = 10
       return data as WalletTransaction[];
     },
     enabled: !!walletId,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 60 * 1, // 1 minute
+  });
+}
+
+/**
+ * Get transactions filtered by time period
+ */
+export function useTransactionsByPeriod(
+  walletId: string, 
+  period: 'today' | 'week' | 'month'
+) {
+  return useQuery({
+    queryKey: walletQueryKeys.transactions.byPeriod(walletId, period),
+    queryFn: async () => {
+      const now = new Date();
+      let startDate: Date;
+
+      switch (period) {
+        case 'today':
+          startDate = new Date(now.setHours(0, 0, 0, 0));
+          break;
+        case 'week':
+          const day = now.getDay();
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - day); // Start of week (Sunday)
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+      }
+
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('wallet_id', walletId)
+        .eq('transaction_type', 'credit') // Only earnings
+        .not('order_id', 'is', null) // Only order-related earnings
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as WalletTransaction[];
+    },
+    enabled: !!walletId,
+    staleTime: 1000 * 60 * 1, // 1 minute
   });
 }
 
@@ -190,7 +239,29 @@ export function useRecentCashouts(walletId: string, limit: number = 5) {
       return data as CashoutRequest[];
     },
     enabled: !!walletId,
-    staleTime: 1000 * 60 * 3, // 3 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
+  });
+}
+
+/**
+ * Get pending and approved cashout requests for a wallet
+ */
+export function usePendingCashouts(walletId: string) {
+  return useQuery({
+    queryKey: walletQueryKeys.cashouts.pending(walletId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cashout_requests')
+        .select('*')
+        .eq('wallet_id', walletId)
+        .in('status', ['pending', 'approved'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as CashoutRequest[];
+    },
+    enabled: !!walletId,
+    staleTime: 1000 * 60 * 1, // 1 minute
   });
 }
 
@@ -198,17 +269,12 @@ export function useRecentCashouts(walletId: string, limit: number = 5) {
 // BANK ACCOUNT QUERIES
 // ============================================
 
-
-
-
-
 /**
  * Generic hook to get bank details based on user type
- * Automatically determines whether to fetch vendor or delivery boy bank details
  */
 export function useBankDetails(userType: WalletUserType, userId?: string) {
-  const {session}=useAuthStore()
-  const vendorBank = useVendorBankDetails(session?.user.id || "" );
+  const { session } = useAuthStore();
+  const vendorBank = useVendorBankDetails(session?.user.id || "");
   const deliveryBoyBank = useDeliveryBoyBankDetails(session?.user.id || "");
 
   return userType === 'vendor' ? vendorBank : deliveryBoyBank;
@@ -269,106 +335,193 @@ export interface CreateCashoutRequest {
 }
 
 /**
- * Request a cashout
+ * Request a cashout using the RPC function
+ * CORRECTED: Uses 'request_cashout' RPC
  */
 export function useRequestCashout() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (cashoutData: CreateCashoutRequest) => {
-      // Generate request number (format: CRQ-YYYYMMDD-XXXX)
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-      const randomNum = Math.floor(1000 + Math.random() * 9000);
-      const requestNumber = `CRQ-${dateStr}-${randomNum}`;
-
-      const { data, error } = await supabase
-        .from('cashout_requests')
-        .insert({
-          wallet_id: cashoutData.wallet_id,
-          amount: cashoutData.amount,
-          request_number: requestNumber,
-          status: 'pending',
-          request_date: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Also update the wallet to move balance from available to pending
-      const { error: walletError } = await supabase.rpc('process_cashout_request', {
+      // Call the RPC function - it handles everything atomically
+      const { data: cashoutId, error } = await supabase.rpc('request_cashout', {
         p_wallet_id: cashoutData.wallet_id,
         p_amount: cashoutData.amount,
       });
 
-      if (walletError) throw walletError;
+      if (error) throw error;
 
-      return data as CashoutRequest;
+      // Fetch the created cashout request
+      const { data: cashoutRequest, error: fetchError } = await supabase
+        .from('cashout_requests')
+        .select('*')
+        .eq('id', cashoutId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      return cashoutRequest as CashoutRequest;
     },
     onSuccess: (data) => {
-      // Invalidate wallet to refresh balances
+      // Invalidate all wallet-related queries
       queryClient.invalidateQueries({
         queryKey: walletQueryKeys.all,
       });
-      // Invalidate cashouts
       queryClient.invalidateQueries({
         queryKey: walletQueryKeys.cashouts.byWallet(data.wallet_id),
       });
-      // Invalidate transactions
       queryClient.invalidateQueries({
         queryKey: walletQueryKeys.transactions.byWallet(data.wallet_id),
       });
     },
     onError: (error) => {
       console.error('Error requesting cashout:', error);
+      throw error;
     },
   });
 }
 
 /**
  * Cancel a pending cashout request
+ * CORRECTED: Uses 'cancel_cashout' RPC
  */
 export function useCancelCashout() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (cashoutId: string) => {
-      const { data, error } = await supabase
+      // First get the wallet_id for invalidation
+      const { data: cashout, error: fetchError } = await supabase
         .from('cashout_requests')
-        .update({ status: 'cancelled' })
+        .select('wallet_id')
         .eq('id', cashoutId)
-        .eq('status', 'pending') // Can only cancel pending requests
-        .select()
         .single();
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
 
-      // Call RPC to return balance to available
-      const { error: walletError } = await supabase.rpc('cancel_cashout_request', {
+      // Call RPC to cancel
+      const { error } = await supabase.rpc('cancel_cashout', {
         p_cashout_id: cashoutId,
       });
 
-      if (walletError) throw walletError;
+      if (error) throw error;
 
-      return data as CashoutRequest;
+      // Fetch updated cashout request
+      const { data, error: refetchError } = await supabase
+        .from('cashout_requests')
+        .select('*')
+        .eq('id', cashoutId)
+        .single();
+
+      if (refetchError) throw refetchError;
+
+      return { data: data as CashoutRequest, walletId: cashout.wallet_id };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ data, walletId }) => {
       queryClient.invalidateQueries({ queryKey: walletQueryKeys.all });
       queryClient.invalidateQueries({
-        queryKey: walletQueryKeys.cashouts.byWallet(data.wallet_id),
+        queryKey: walletQueryKeys.cashouts.byWallet(walletId),
       });
       queryClient.invalidateQueries({
-        queryKey: walletQueryKeys.transactions.byWallet(data.wallet_id),
+        queryKey: walletQueryKeys.transactions.byWallet(walletId),
       });
     },
     onError: (error) => {
       console.error('Error cancelling cashout:', error);
+      throw error;
     },
   });
 }
 
+/**
+ * Approve a cashout request (Admin only)
+ */
+export function useApproveCashout() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
 
+  return useMutation({
+    mutationFn: async (cashoutId: string) => {
+      // Get wallet_id for invalidation
+      const { data: cashout, error: fetchError } = await supabase
+        .from('cashout_requests')
+        .select('wallet_id')
+        .eq('id', cashoutId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Call RPC to approve
+      const { error } = await supabase.rpc('approve_cashout', {
+        p_cashout_id: cashoutId,
+        p_approved_by: session?.user?.id,
+      });
+
+      if (error) throw error;
+
+      return { cashoutId, walletId: cashout.wallet_id };
+    },
+    onSuccess: ({ walletId }) => {
+      queryClient.invalidateQueries({ queryKey: walletQueryKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: walletQueryKeys.cashouts.all,
+      });
+    },
+    onError: (error) => {
+      console.error('Error approving cashout:', error);
+      throw error;
+    },
+  });
+}
+
+/**
+ * Complete a cashout request (Admin only)
+ */
+export function useCompleteCashout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      cashoutId,
+      transactionReference,
+    }: {
+      cashoutId: string;
+      transactionReference: string;
+    }) => {
+      // Get wallet_id for invalidation
+      const { data: cashout, error: fetchError } = await supabase
+        .from('cashout_requests')
+        .select('wallet_id')
+        .eq('id', cashoutId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Call RPC to complete
+      const { error } = await supabase.rpc('complete_cashout', {
+        p_cashout_id: cashoutId,
+        p_transaction_reference: transactionReference,
+      });
+
+      if (error) throw error;
+
+      return { cashoutId, walletId: cashout.wallet_id };
+    },
+    onSuccess: ({ walletId }) => {
+      queryClient.invalidateQueries({ queryKey: walletQueryKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: walletQueryKeys.cashouts.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: walletQueryKeys.transactions.all,
+      });
+    },
+    onError: (error) => {
+      console.error('Error completing cashout:', error);
+      throw error;
+    },
+  });
+}
 
 // ============================================
 // HELPER HOOKS
@@ -376,9 +529,6 @@ export function useCancelCashout() {
 
 /**
  * Combined hook to get all wallet-related data
- * @param userId - User ID (defaults to current session user)
- * @param userType - 'vendor' or 'delivery_boy' (required for bank details and wallet creation)
- * @param entityId - vendor_id or delivery_boy_id (required for bank details)
  */
 export function useWalletData(
   userId?: string,
@@ -391,12 +541,14 @@ export function useWalletData(
   const wallet = useWallet(id, userType);
   const transactions = useRecentWalletTransactions(wallet.data?.id!, 10);
   const cashouts = useRecentCashouts(wallet.data?.id!, 5);
+  const pendingCashouts = usePendingCashouts(wallet.data?.id!);
   const bankDetails = useBankDetails(userType || 'delivery_boy', entityId);
 
   return {
     wallet,
     transactions,
     cashouts,
+    pendingCashouts,
     bankDetails,
     isLoading:
       wallet.isLoading ||
@@ -408,5 +560,86 @@ export function useWalletData(
       transactions.isError ||
       cashouts.isError ||
       bankDetails.isError,
+  };
+}
+
+/**
+ * Hook to calculate earnings stats for a specific period
+ */
+export function useEarningsStats(walletId: string, period: 'today' | 'week' | 'month') {
+  const wallet = useQuery({
+    queryKey: walletQueryKeys.byUser(walletId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('id', walletId)
+        .single();
+
+      if (error) throw error;
+      return data as Wallet;
+    },
+    enabled: !!walletId,
+  });
+
+  const transactions = useTransactionsByPeriod(walletId, period);
+
+  // Calculate stats from transactions
+  const stats = {
+    totalEarnings: 0,
+    orders: 0,
+    distance: 0,
+    baseEarnings: 0,
+    incentives: 0,
+    tips: 0,
+  };
+
+  if (transactions.data && transactions.data.length > 0) {
+    transactions.data.forEach((tx) => {
+      const amount = parseFloat(tx.amount);
+      stats.totalEarnings += amount;
+      stats.orders += 1;
+
+      // Extract metadata if available
+      const metadata = tx.metadata as any;
+      if (metadata) {
+        if (metadata.distance_km) {
+          stats.distance += parseFloat(metadata.distance_km);
+        }
+        if (metadata.delivery_fee) {
+          stats.baseEarnings += parseFloat(metadata.delivery_fee);
+        }
+      }
+    });
+  }
+
+  // Use wallet period earnings as primary source
+  if (wallet.data) {
+    const walletEarnings = 
+      period === 'today' ? parseFloat(wallet.data.earnings_today) :
+      period === 'week' ? parseFloat(wallet.data.earnings_this_week) :
+      parseFloat(wallet.data.earnings_this_month);
+    
+    // Use wallet value if it's more than calculated
+    if (walletEarnings > stats.totalEarnings) {
+      stats.totalEarnings = walletEarnings;
+    }
+    
+    // If no transactions but wallet shows earnings, at least show the total
+    if (stats.orders === 0 && walletEarnings > 0) {
+      stats.totalEarnings = walletEarnings;
+      stats.baseEarnings = walletEarnings;
+    }
+  }
+
+  return {
+    ...stats,
+    transactions: transactions.data || [],
+    isLoading: transactions.isLoading || wallet.isLoading,
+    isError: transactions.isError || wallet.isError,
+    refetch: () => {
+      wallet.refetch();
+      transactions.refetch();
+    },
   };
 }

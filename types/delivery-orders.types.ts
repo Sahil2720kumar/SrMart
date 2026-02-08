@@ -78,6 +78,7 @@ export interface DeliveryOrder {
   totalItems: number;
   deliveryOtp: string;
   created_at: string;
+  picked_up_at:string
   pickup_address?: string;
 }
 
@@ -90,6 +91,8 @@ export interface DeliveryOrderVendor {
   address: string;
   items: DeliveryOrderItem[];
   collected: boolean;
+  lat:number,
+  lng:number
 }
 
 /**

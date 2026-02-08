@@ -5,43 +5,148 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useDeliveryStore } from '@/store/useDeliveryStore';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 
+// ==========================================
+// ONLY IMPORT EXISTING HOOKS - NO NEW ONES
+// ==========================================
+import {
+  useDeliveryBoyProfile,
+  useDeliveryBoyKycDocuments,
+  useDeliveryBoyKycSummary,
+  useDeliveryBoyBankDetails,
+  useUpdateDeliveryBoyProfile
+} from '@/hooks/queries/useDeliveryBoy';
+import { useDeliveryBoyStats } from '@/hooks/queries/useDeliveryOrders';
+import { Image } from 'expo-image';
+import { blurhash } from '@/types/categories-products.types';
 
-/* ---------------- MOCK DATA ---------------- */
-const mockProfileData = {
-  vehicle: {
-    type: 'Motorcycle',
-    registrationNumber: 'DL 01 AB 1234',
-    verified: true
-  },
-  bankAccount: {
-    accountNumber: '****1234',
-    ifsc: 'HDFC0001234',
-    verified: true
-  },
-  performance: {
-    totalDeliveries: 1250,
-    rating: 4.8,
-    totalEarnings: 150540
-  }
-};
+// ==========================================
+// KYC DOCUMENT TYPES (matching documents screen)
+// ==========================================
+const KYC_DOCUMENTS = {
+  aadhaar: 'Aadhaar Card',
+  pan: 'PAN Card',
+  driving_license: 'Driving License',
+  bank_passbook: 'Bank Passbook',
+  profile_photo: 'Profile Photo',
+} as const;
 
-/* ---------------- MAIN COMPONENT ---------------- */
+type KycDocumentType = keyof typeof KYC_DOCUMENTS;
+
 const ProfileScreen = () => {
-  const { setSession } = useAuthStore()
-  const { setUser, setDeliveryBoyProfile } = useProfileStore()
+  const { setSession } = useAuthStore();
+  const { setUser, setDeliveryBoyProfile } = useProfileStore();
   const router = useRouter();
-  const store = useDeliveryStore();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // ==========================================
+  // USE EXISTING HOOKS DIRECTLY
+  // ==========================================
+
+  const session = useAuthStore((state) => state.session);
+  const userId = session?.user?.id;
+
+  // Profile data
+  const profile = useDeliveryBoyProfile(userId);
+  const deliveryBoyId = profile.data?.id;
+
+  // KYC data
+  const kycDocuments = useDeliveryBoyKycDocuments(userId || '');
+  const kycSummary = useDeliveryBoyKycSummary(userId || '');
+
+  // Bank data
+  const bankDetails = useDeliveryBoyBankDetails(deliveryBoyId || '');
+
+  // Performance stats
+  const stats = useDeliveryBoyStats();
+
+  // Mutation for updating profile
+  const updateProfile = useUpdateDeliveryBoyProfile();
+
+  // ==========================================
+  // EXTRACT DATA FROM HOOKS
+  // ==========================================
+
+  const name = profile.data
+    ? `${profile.data.first_name || ''} ${profile.data.last_name || ''}`.trim()
+    : 'User';
+
+  const phone = profile.data?.phone || '';
+  const profileId = profile.data?.id || '';
+    
+  const isOnline = profile.data?.is_online || false;
+  const adminStatus = profile.data?.admin_verification_status || 'pending';
+
+  // ==========================================
+  // BUILD KYC STEPS FROM ACTUAL DOCUMENTS
+  // ==========================================
+
+  // Helper to check if document is verified
+  const isDocumentVerified = (docType: KycDocumentType) => {
+    const doc = kycDocuments.data?.find(d => d.document_type === docType);
+    return doc?.status === 'verified' || doc?.status === 'approved';
+  };
+
+  // Build KYC steps based on actual KYC documents
+  const kycSteps = [
+    {
+      id: 'aadhaar',
+      title: KYC_DOCUMENTS.aadhaar,
+      status: isDocumentVerified('aadhaar') ? 'completed' : 'pending'
+    },
+    {
+      id: 'pan',
+      title: KYC_DOCUMENTS.pan,
+      status: isDocumentVerified('pan') ? 'completed' : 'pending'
+    },
+    {
+      id: 'driving_license',
+      title: KYC_DOCUMENTS.driving_license,
+      status: isDocumentVerified('driving_license') ? 'completed' : 'pending'
+    },
+    {
+      id: 'bank_passbook',
+      title: KYC_DOCUMENTS.bank_passbook,
+      status: isDocumentVerified('bank_passbook') ? 'completed' : 'pending'
+    },
+    {
+      id: 'profile_photo',
+      title: KYC_DOCUMENTS.profile_photo,
+      status: isDocumentVerified('profile_photo') ? 'completed' : 'pending'
+    }
+  ];
+
+  const kycProgress = kycSteps.filter(s => s.status === 'completed').length;
+  const totalKycSteps = kycSteps.length;
+  const kycPercentage = (kycProgress / totalKycSteps) * 100;
+
+  // Performance data
+  const performanceData = {
+    totalDeliveries: stats.data?.completedOrders || 0,
+    rating: profile.data?.rating || 0, // This would come from delivery_boys.average_rating
+    totalEarnings: stats.data?.totalEarnings || 0
+  };
+
+  // Bank data for display
+  const bankAccountDisplay = {
+    accountNumber: bankDetails.data?.account_number
+      ? `****${bankDetails.data.account_number.slice(-4)}`
+      : '****1234',
+    ifsc: bankDetails.data?.ifsc_code || 'HDFC0001234',
+    verified: bankDetails.data?.is_verified || false
+  };
+
+  // ==========================================
+  // HANDLERS
+  // ==========================================
 
   const getInitials = (name: string) => {
     return name
@@ -53,7 +158,7 @@ const ProfileScreen = () => {
   };
 
   const getVerificationStatusInfo = () => {
-    switch (store.adminVerificationStatus) {
+    switch (adminStatus) {
       case 'approved':
         return {
           badge: 'bg-green-500',
@@ -85,32 +190,55 @@ const ProfileScreen = () => {
     }
   };
 
-  // const kycProgress = store.kycSteps.filter(s => s.status === 'completed').length;
-  // const totalKycSteps = store.kycSteps.length;
-  const kycProgress = 3
-  const totalKycSteps = 5
-  const kycPercentage = (kycProgress / totalKycSteps) * 100;
-
-  const verificationStatus = getVerificationStatusInfo();
-
-  const handleLogout = async() => {
-    setShowLogoutModal(false);
-    console.log("Logout pressed")
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-    } catch (err) {
-      console.error("Logout error:", err)
-    } finally {
-      // Clear local state no matter what
-      setSession(null)
-      setDeliveryBoyProfile(null)
-      setUser(null)
-      // router.dismissAll()
-      router.replace('/auth/login')
+  const handleToggleOnline = async () => {
+    try {      
+      const data=await updateProfile.mutateAsync({
+        is_online: !isOnline,
+        is_available: !isOnline,
+      });      
+      // Automatically refetches profile
+    } catch (error) {
+      console.error('Error toggling online status:', error);
     }
+  };
+
+  const handleLogout = async () => {
+    setShowLogoutModal(false);
+    console.log("Logout pressed");
+
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      setSession(null);
+      setDeliveryBoyProfile(null);
+      setUser(null);
+      router.replace('/auth/login');
+    }
+  };
+
+  // ==========================================
+  // LOADING STATE
+  // ==========================================
+
+  const isLoading = profile.isLoading || stats.isLoading || kycDocuments.isLoading;
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#4f46e5] items-center justify-center">
+        <ActivityIndicator size="large" color="#ffffff" />
+        <Text className="text-white mt-4">Loading profile...</Text>
+      </SafeAreaView>
+    );
   }
 
+  const verificationStatusInfo = getVerificationStatusInfo();
+
+  // ==========================================
+  // RENDER
+  // ==========================================
 
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">
@@ -128,18 +256,28 @@ const ProfileScreen = () => {
               <View className="flex-row items-center flex-1">
                 {/* Avatar */}
                 <View className="w-16 h-16 bg-indigo-500 rounded-full items-center justify-center mr-4">
-                  <Text className="text-white text-xl font-bold">
-                    {getInitials(store.partner?.name || "test name")}
-                  </Text>
+                  {profile?.data?.profile_photo ? (
+                    <Image
+                      source={{ uri: profile.data.profile_photo }}
+                      placeholder={{ blurhash: blurhash }}
+                      contentFit="cover"
+                      transition={1000}
+                      style={{ width: '100%', height: '100%', borderRadius: 999 }}
+                    />
+                  ) : (
+                    <Text className="text-white text-xl font-bold">
+                      {getInitials(name)}
+                    </Text>
+                  )}
                 </View>
 
                 {/* Info */}
                 <View className="flex-1">
                   <Text className="text-xl font-bold text-gray-900 mb-1">
-                    {store.partner?.name || "test name"}
+                    {name}
                   </Text>
-                  <Text className="text-xs text-gray-500 mb-1">ID: {store.partner?.id || "1234"}</Text>
-                  <Text className="text-sm text-gray-600">{"9876543210"}</Text>
+                  <Text className="text-xs text-gray-500 mb-1">ID: {profileId}</Text>
+                  <Text className="text-sm text-gray-600">{phone}</Text>
                 </View>
               </View>
 
@@ -157,16 +295,17 @@ const ProfileScreen = () => {
             <View className="flex-row items-center justify-between pt-4 border-t border-gray-100">
               <Text className="text-sm font-semibold text-gray-700">Status</Text>
               <TouchableOpacity
-                onPress={store.toggleOnline}
-                className={`px-4 py-2 rounded-full flex-row items-center gap-2 ${store.isOnline ? 'bg-green-500' : 'bg-gray-300'
+                onPress={handleToggleOnline}
+                className={`px-4 py-2 rounded-full flex-row items-center gap-2 ${isOnline ? 'bg-green-500' : 'bg-gray-300'
                   }`}
                 activeOpacity={0.8}
+                disabled={updateProfile.isPending}
               >
-                <View className={`w-2 h-2 rounded-full ${store.isOnline ? 'bg-white' : 'bg-gray-500'
+                <View className={`w-2 h-2 rounded-full ${isOnline ? 'bg-white' : 'bg-gray-500'
                   }`} />
-                <Text className={`font-bold text-sm ${store.isOnline ? 'text-white' : 'text-gray-700'
+                <Text className={`font-bold text-sm ${isOnline ? 'text-white' : 'text-gray-700'
                   }`}>
-                  {store.isOnline ? 'Online' : 'Offline'}
+                  {updateProfile.isPending?"Loading...":isOnline ? 'Online' : 'Offline'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -179,18 +318,19 @@ const ProfileScreen = () => {
             <View className="mb-4">
               <View className="flex-row items-center justify-between mb-2">
                 <Text className="text-sm font-semibold text-gray-700">Admin Approval</Text>
-                <View className={`px-3 py-1.5 rounded-full ${verificationStatus.badge}`}>
+                <View className={`px-3 py-1.5 rounded-full ${verificationStatusInfo.badge}`}>
                   <Text className="text-white text-xs font-bold">
-                    {verificationStatus.text}
+                    {verificationStatusInfo.text}
                   </Text>
                 </View>
               </View>
-              <Text className="text-xs text-gray-500">{verificationStatus.subtext}</Text>
+              <Text className="text-xs text-gray-500">{verificationStatusInfo.subtext}</Text>
 
-              {verificationStatus.showAction && (
+              {verificationStatusInfo.showAction && (
                 <TouchableOpacity
                   className="bg-red-50 border border-red-200 py-3 rounded-xl mt-3"
                   activeOpacity={0.8}
+                  onPress={() => router.push('/delivery/profile/documents')}
                 >
                   <Text className="text-red-600 font-bold text-center">
                     Fix & Resubmit Details
@@ -199,7 +339,7 @@ const ProfileScreen = () => {
               )}
             </View>
 
-            {!store.isKycCompleted && (
+            {!kycSummary.isComplete && (
               <View className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex-row items-start">
                 <Feather name="alert-circle" size={20} color="#ea580c" />
                 <Text className="text-orange-800 text-sm ml-2 flex-1">
@@ -226,9 +366,9 @@ const ProfileScreen = () => {
               />
             </View>
 
-            {/* KYC Steps */}
-            <View className="space-y-3 mb-4">
-              {store.kycSteps.map((step) => (
+            {/* KYC Steps - Using actual document types */}
+            <View className="gap-y-3 mb-4">
+              {kycSteps.map((step) => (
                 <View key={step.id} className="flex-row items-center">
                   <View className={`w-6 h-6 rounded-full items-center justify-center mr-3 ${step.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'
                     }`}>
@@ -246,39 +386,17 @@ const ProfileScreen = () => {
               ))}
             </View>
 
-            {/* //changes */}
-            {store.isKycCompleted && (
-              <TouchableOpacity
-                className="bg-indigo-600 py-3 rounded-xl"
-                activeOpacity={0.8}
-                onPress={() => router.push("/delivery/profile/documents")}
-              >
-                <Text className="text-white font-bold text-center">
-                  Complete Verification
-                </Text>
-              </TouchableOpacity>
-            )}
+            {/* Action Button */}
+            <TouchableOpacity
+              className="bg-indigo-600 py-3 rounded-xl"
+              activeOpacity={0.8}
+              onPress={() => router.push("/delivery/profile/documents")}
+            >
+              <Text className="text-white font-bold text-center">
+                {kycSummary.isComplete ? 'View Documents' : 'Complete Verification'}
+              </Text>
+            </TouchableOpacity>
           </View>
-
-          {/* Vehicle Details */}
-          {/* <TouchableOpacity
-            onPress={() => router.push('/delivery/profile/vehicle')}
-            className="bg-white rounded-3xl p-5 mb-4 shadow-lg flex-row items-center justify-between"
-            activeOpacity={0.8}
-          >
-            <View className="flex-row items-center flex-1">
-              <View className="w-12 h-12 bg-blue-100 rounded-full items-center justify-center mr-4">
-                <Feather name="truck" size={24} color="#3b82f6" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-gray-900 mb-1">Vehicle Details</Text>
-                <Text className="text-sm text-gray-600">
-                  {mockProfileData.vehicle.type} • {mockProfileData.vehicle.registrationNumber}
-                </Text>
-              </View>
-            </View>
-            <Feather name="chevron-right" size={24} color="#9ca3af" />
-          </TouchableOpacity> */}
 
           {/* Bank & Payout Details */}
           <TouchableOpacity
@@ -293,7 +411,7 @@ const ProfileScreen = () => {
               <View className="flex-1">
                 <View className="flex-row items-center mb-1">
                   <Text className="text-lg font-bold text-gray-900 mr-2">Bank Account</Text>
-                  {mockProfileData.bankAccount.verified && (
+                  {bankAccountDisplay.verified && (
                     <View className="bg-green-100 px-2 py-0.5 rounded">
                       <Text className="text-xs font-bold text-green-700">Verified</Text>
                     </View>
@@ -315,7 +433,7 @@ const ProfileScreen = () => {
                 </View>
                 <Text className="text-xs text-gray-500 mb-1 font-semibold">Deliveries</Text>
                 <Text className="text-2xl font-bold text-gray-900">
-                  {mockProfileData.performance.totalDeliveries}
+                  {performanceData.totalDeliveries}
                 </Text>
               </View>
 
@@ -327,7 +445,7 @@ const ProfileScreen = () => {
                 <View className='flex-row gap-2 items-center '>
                   <AntDesign name="star" size={18} color="#6366f1" />
                   <Text className="text-2xl font-bold text-gray-900 ">
-                    {mockProfileData.performance.rating}
+                    {performanceData.rating.toFixed(1)}
                   </Text>
                 </View>
               </View>
@@ -338,7 +456,7 @@ const ProfileScreen = () => {
                 </View>
                 <Text className="text-xs text-gray-500 mb-1 font-semibold">Earned</Text>
                 <Text className="text-xl font-bold text-gray-900">
-                  ₹{(mockProfileData.performance.totalEarnings / 1000).toFixed(0)}k
+                  ₹{performanceData.totalEarnings > 999 ? ((performanceData.totalEarnings / 1000).toFixed(0)) + "k" : performanceData.totalEarnings}
                 </Text>
               </View>
             </View>

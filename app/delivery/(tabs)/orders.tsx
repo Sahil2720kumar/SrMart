@@ -32,7 +32,7 @@ const DeliveryOrderScreen = () => {
   
   const router = useRouter();
   const store = useDeliveryStore();
-  const { partner, isKycCompleted, adminVerificationStatus } = store;
+  const { partner,setPartner, isKycCompleted,setKycCompleted,setAdminVerificationStatus, adminVerificationStatus ,toggleOnline} = store;
   const isVerified = adminVerificationStatus === 'approved' && isKycCompleted;
 
   const [activeTab, setActiveTab] = useState<'available' | 'active' | 'completed'>('available');
@@ -187,7 +187,7 @@ const DeliveryOrderScreen = () => {
 
   const isLoading = loadingAvailable || loadingActive || loadingCompleted;
   const isRefreshing = refetchingAvailable || refetchingActive || refetchingCompleted;
-
+  
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
       <View className="px-4 pt-4 pb-2">

@@ -102,8 +102,7 @@ export default function VendorOrdersScreen() {
     refetch,
   } = useVendorOrders();
 
-  console.log(tabToStatusMap[activeTab]);
-  
+   
 
   const { data: stats } = useVendorOrderStats(vendorId || '');
 

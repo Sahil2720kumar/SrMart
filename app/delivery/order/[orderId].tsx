@@ -241,13 +241,14 @@ const OrderDetailScreen = () => {
       default: return 'Unknown';
     }
   };
-
+  
   // Determine current stage
   const isUnassigned = !order.delivery_boy_id;
-  const isAssigned = !!order.delivery_boy_id && order.status === 'ready_for_pickup';
+  const isAssigned =
+  !!order.delivery_boy_id && !order.picked_up_at;
   const isPickedUp = order.status === 'out_for_delivery';
   const isDelivered = order.status === 'delivered';
-
+   
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
       {/* Header */}
@@ -424,7 +425,6 @@ const OrderDetailScreen = () => {
 
               {order.vendors.map((vendor, idx) => {
                 const allItemsCollected = areAllItemsCollected(vendor.id);
-
                 return (
                   <View key={vendor.id} className="bg-white rounded-3xl p-5 mb-3 shadow-lg">
                     {/* Vendor Header */}

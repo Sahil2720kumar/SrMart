@@ -58,6 +58,7 @@ interface DeliveryState {
   setPartner: (partner: DeliveryPartner) => void;
   setAdminVerificationStatus: (status: VerificationStatus) => void;
   toggleOnline: () => void;
+  setKycCompleted:()=>void;
   assignOrder: (orderId: string) => void;
   clearOrder: () => void;
   resetDeliveryState: () => void;
@@ -91,6 +92,11 @@ export const useDeliveryStore = create<DeliveryState>()(
           return { isOnline: !state.isOnline, }
         });
 
+      },
+      setKycCompleted() {
+        set((state) => {
+          return { isKycCompleted: true, }
+        });
       },
       assignOrder: (orderId) => set({ activeOrderId: orderId }),
       clearOrder: () => set({ activeOrderId: null }),

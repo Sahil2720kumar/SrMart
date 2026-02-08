@@ -75,6 +75,8 @@ export function useUpdateDeliveryBoyProfile() {
           vehicle_type: updates.vehicle_type ? updates.vehicle_type.toLowerCase() : null,
           vehicle_number: updates.vehicle_number,
           license_number: updates.license_number,
+          is_available:updates.is_available,
+          is_online:updates.is_online,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', session?.user?.id)
