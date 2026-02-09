@@ -14,6 +14,8 @@ import { useVendorOrders, useVendorOrderStats } from '@/hooks/queries/orders';
 import { useAuthStore } from '@/store/authStore';
 import VendorOrderCard from '@/components/VendorOrderCard';
 import { OrderFilterStatus } from '@/types/orders-carts.types';
+import { useVendorProfile } from '@/hooks/queries';
+import VerificationGate from '@/components/vendorVerificationComp';
 
 type OrderStatus =
   | 'all'
@@ -84,17 +86,17 @@ export default function VendorOrdersScreen() {
   const vendorId = session?.user?.id;
 
   const tabToStatusMap: Record<
-  typeof activeTab,
-  OrderFilterStatus
-> = {
-  all: 'all',
-  new: 'active',
-  preparing: 'active',
-  ready: 'active',
-  completed: 'completed',
-  cancelled: 'completed',
-};
-  
+    typeof activeTab,
+    OrderFilterStatus
+  > = {
+    all: 'all',
+    new: 'active',
+    preparing: 'active',
+    ready: 'active',
+    completed: 'completed',
+    cancelled: 'completed',
+  };
+  const { data: vendorData } = useVendorProfile(session?.user.id);
   const {
     data: orders,
     isLoading,
@@ -102,27 +104,33 @@ export default function VendorOrdersScreen() {
     refetch,
   } = useVendorOrders();
 
-   
+
 
   const { data: stats } = useVendorOrderStats(vendorId || '');
 
   // console.log(stats);
-  
+  const verificationStatus = useMemo(() => {
+    if (!vendorData) return { isAdminVerified: false, isKycVerified: false };
+    return {
+      isAdminVerified: vendorData.is_verified,
+      isKycVerified: vendorData.kyc_status === 'approved',
+    };
+  }, [vendorData]);
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
-    
+
     if (activeTab === 'all') return orders;
 
     const statusesToFilter = statusConfig[activeTab].dbStatus;
-    
+
     return orders.filter((order) => {
       // console.log(order.status,statusConfig[activeTab].dbStatus);
       return statusesToFilter.includes(order.status)
     });
   }, [orders, activeTab]);
 
-  
+
 
   const statusCounts = useMemo(() => {
     if (!stats) return null;
@@ -150,6 +158,18 @@ export default function VendorOrdersScreen() {
         </TouchableOpacity>
       </SafeAreaView>
     );
+  }
+
+  if (!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) {
+    return (
+      <VerificationGate
+        isAdminVerified={verificationStatus.isAdminVerified}
+        isKycVerified={verificationStatus.isKycVerified}
+        kycStatus={vendorData.kyc_status}
+        storeName={vendorData?.store_name}
+        onKycPress={() => router.push('/vendor/profile/documents')}
+      />
+    )
   }
 
   return (
@@ -183,27 +203,23 @@ export default function VendorOrdersScreen() {
             return (
               <TouchableOpacity
                 onPress={() => setActiveTab(status)}
-                className={`px-4 py-2.5 rounded-full flex-row items-center ${
-                  isActive ? config.badge : 'bg-gray-100 border border-gray-200'
-                }`}
+                className={`px-4 py-2.5 rounded-full flex-row items-center ${isActive ? config.badge : 'bg-gray-100 border border-gray-200'
+                  }`}
               >
                 <Text
-                  className={`font-semibold text-sm ${
-                    isActive ? 'text-white' : 'text-gray-700'
-                  }`}
+                  className={`font-semibold text-sm ${isActive ? 'text-white' : 'text-gray-700'
+                    }`}
                 >
                   {config.label}
                 </Text>
                 {count > 0 && (
                   <View
-                    className={`ml-2 px-2 py-0.5 rounded-full ${
-                      isActive ? 'bg-white bg-opacity-30' : 'bg-gray-200'
-                    }`}
+                    className={`ml-2 px-2 py-0.5 rounded-full ${isActive ? 'bg-white bg-opacity-30' : 'bg-gray-200'
+                      }`}
                   >
                     <Text
-                      className={`text-xs font-bold ${
-                       'text-gray-700'
-                      }`}
+                      className={`text-xs font-bold ${'text-gray-700'
+                        }`}
                     >
                       {count}
                     </Text>

@@ -1,7 +1,7 @@
 import VendorProductCard from '@/components/VendorProductCard';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
-import { useProductsByVendorId } from '@/hooks/queries';
+import { useProductsByVendorId, useVendorProfile } from '@/hooks/queries';
+import VerificationGate from '@/components/vendorVerificationComp';
 
 type FilterType = 'all' | 'in_stock' | 'out_of_stock' | 'low_stock' | 'disabled';
 
@@ -25,6 +26,7 @@ export default function ProductsScreen() {
   const session = useAuthStore((state) => state.session);
   const vendorId = session?.user?.id;
 
+  const { data: vendorData } = useVendorProfile(vendorId);
   // Fetch products from Supabase
   const {
     data: products = [],
@@ -56,7 +58,26 @@ export default function ProductsScreen() {
     disabled: products.filter((p) => !p.stock_status).length,
   };
 
-  
+   // Verification status
+   const verificationStatus = useMemo(() => {
+    if (!vendorData) return { isAdminVerified: false, isKycVerified: false };
+    return {
+      isAdminVerified: vendorData.is_verified,
+      isKycVerified: vendorData.kyc_status === 'approved',
+    };
+  }, [vendorData]);
+
+  if (!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) {
+    return (
+      <VerificationGate
+        isAdminVerified={verificationStatus.isAdminVerified}
+        isKycVerified={verificationStatus.isKycVerified}
+        kycStatus={vendorData.kyc_status}
+        storeName={vendorData?.store_name}
+        onKycPress={() => router.push('/vendor/profile/documents')}
+      />
+    )
+  }
 
   const onRefresh = useCallback(() => {
     refetch();

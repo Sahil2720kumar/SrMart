@@ -1,4 +1,3 @@
-// app/(tabs)/vendor/orders/[orderId].tsx (CORRECTED VERSION)
 import React, { useState } from 'react';
 import {
   View,
@@ -11,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import {
   useOrderDetail,
@@ -54,6 +53,8 @@ export default function VendorOrderDetailScreen() {
       ? { latitude: order.vendors.latitude || 0, longitude: order.vendors.longitude || 0 }
       : undefined
   );
+
+
 
   // Mutations
   const acceptMutation = useVendorAcceptOrder();
@@ -142,10 +143,10 @@ export default function VendorOrderDetailScreen() {
     );
   };
 
-  const handleCallCustomer = () => {
+  const handleCall = (phoneNo:string) => {
     if (order?.customers) {
       // You'll need to add phone to customers table or users table
-      Linking.openURL(`tel:+91XXXXXXXXXX`);
+      Linking.openURL(`tel:+91${phoneNo}`);
     }
   };
 
@@ -222,7 +223,7 @@ export default function VendorOrderDetailScreen() {
     (sum, item) => sum + item.total_price,
     0
   ) || 0;
-  
+
   const vendorPayout = itemsTotal - totalCommission;
 
   return (
@@ -260,9 +261,8 @@ export default function VendorOrderDetailScreen() {
           <View className="flex-row justify-between items-center py-2 border-b border-gray-100">
             <Text className="text-gray-600 text-sm">Payment Method</Text>
             <Text
-              className={`font-semibold text-sm ${
-                order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'
-              }`}
+              className={`font-semibold text-sm ${order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'
+                }`}
             >
               {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Paid Online'}
             </Text>
@@ -310,7 +310,7 @@ export default function VendorOrderDetailScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={handleCallCustomer}
+            onPress={()=>handleCall(order.customers?.users?.phone)}
             className="flex-row items-center gap-3 bg-blue-50 rounded-xl p-3"
           >
             <Feather name="phone" size={18} color="#2563eb" />
@@ -354,9 +354,8 @@ export default function VendorOrderDetailScreen() {
           {order.order_items?.map((item, index) => (
             <View
               key={item.id}
-              className={`flex-row items-center py-3 ${
-                index !== order.order_items!.length - 1 ? 'border-b border-gray-100' : ''
-              }`}
+              className={`flex-row items-center py-3 ${index !== order.order_items!.length - 1 ? 'border-b border-gray-100' : ''
+                }`}
             >
               {/* Product Image */}
               <View className="w-14 h-14 bg-gray-100 rounded-xl mr-3 overflow-hidden">
@@ -406,37 +405,150 @@ export default function VendorOrderDetailScreen() {
         </View>
 
         {/* Delivery Partner Assignment */}
-        {(order.status === 'processing' || order.status === 'ready_for_pickup') && (
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
-            <Text className="text-sm font-semibold text-gray-600 mb-3">
-              DELIVERY PARTNER
-            </Text>
+        {/* {(order.status === 'processing' || order.status === 'ready_for_pickup') && ( */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
+          <Text className="text-sm font-semibold text-gray-600 mb-3">
+            DELIVERY PARTNER
+          </Text>
 
-            {order.delivery_boys ? (
-              <View className="flex-row items-center py-2">
-                <View className="w-12 h-12 bg-green-100 rounded-full items-center justify-center mr-3">
-                  <Text className="text-2xl">🚴</Text>
+          {order.delivery_boys ? (
+            <View className="">
+              <View className="flex-row items-center">
+                {/* Profile Image with Border */}
+                <View className="relative ">
+                  {order.delivery_boys.profile_photo ? (
+                    <View className="w-16 h-16 rounded-2xl border-3 border-green-400 p-0.5 overflow-hidden">
+                      <Image
+                        source={order.delivery_boys.profile_photo}
+                        placeholder={{ blurhash: blurhash }}
+                        contentFit="cover"
+                        transition={1000}
+                        style={{ width: '100%', height: '100%',overflow:"hidden" }}
+                      />
+                    </View>
+                  ) : (
+                    <View className="w-16 h-16 bg-gradient-to-br  rounded-full items-center justify-center border-3 border-green-200">
+                      <Text className="text-black text-2xl font-bold">
+                        {order.delivery_boys.first_name.charAt(0).toUpperCase()}{order.delivery_boys.last_name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  {/* Online Status Indicator */}
+                  {/* <View className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-3 border-white items-center justify-center">
+                    <View className="w-2 h-2 bg-white rounded-full" />
+                  </View> */}
                 </View>
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold text-sm">
-                    {order.delivery_boys.first_name} {order.delivery_boys.last_name}
-                  </Text>
-                  <Text className="text-gray-600 text-xs">Assigned</Text>
+
+                {/* Delivery Boy Info */}
+                <View className="flex-1 ml-4">
+                  <View className="flex-row items-center mb-1.5">
+                    <Text className="text-gray-900 font-bold text-lg">
+                      {order.delivery_boys.first_name} {order.delivery_boys.last_name}
+                    </Text>
+                  </View>
+
+                  {/* Rating */}
+                  {order.delivery_boys.rating && (
+                    <View className="flex-row items-center mb-2">
+                      <Ionicons name="star" size={14} color="#F59E0B" />
+                      <Text className="text-gray-700 text-sm font-semibold ml-1">
+                        {order.delivery_boys.rating.toFixed(1)}
+                      </Text>
+                      <Text className="text-gray-400 text-xs ml-1">
+                        ({order.delivery_boys.review_count || 0} reviews)
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Vehicle Info */}
+                  <View className="flex-row items-center">
+                    <MaterialCommunityIcons name="motorbike" size={14} color="#6B7280" />
+                    <Text className="text-gray-600 text-xs font-medium ml-1.5">
+                      {order.delivery_boys.vehicle_number}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Call Button */}
+                <TouchableOpacity
+                  className="w-12 h-12  rounded-full items-center justify-center "
+                  onPress={()=>handleCall(order.delivery_boys?.users?.phone)}
+                  activeOpacity={0.8}
+                >
+                 <Feather name="phone" size={18} color="#2563eb" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Delivery Status & OTP Section */}
+              <View className="mt-4 pt-4 border-t border-gray-100">
+                <View className="flex-row items-center justify-between">
+                  {/* Status */}
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-8 h-8 bg-green-100 rounded-full items-center justify-center mr-3">
+                      <MaterialCommunityIcons
+                        name={
+                          order.status === 'delivered' ? 'check-circle' :
+                            order.status === 'picked_up' ? 'truck-delivery' :
+                              'clipboard-check'
+                        }
+                        size={16}
+                        color="#10B981"
+                      />
+                    </View>
+                    <View>
+                      <Text className="text-gray-500 text-xs uppercase tracking-wide">
+                        Status
+                      </Text>
+                      <Text className="text-gray-900 font-semibold text-sm mt-0.5">
+                        {order.status === 'delivered' ? 'Delivered ✓' :
+                          order.status === 'picked_up' ? 'On the way' :
+                            'Assigned'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* OTP Display */}
+                  {order.delivery_otp && order.status !== 'delivered' && (
+                    <View className="bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-3 rounded-xl border border-green-200">
+                      <View className="flex-row items-center mb-1">
+                        <Ionicons name="lock-closed" size={12} color="#059669" />
+                        <Text className="text-green-700 text-xs font-semibold ml-1 uppercase tracking-wide">
+                          Delivery OTP
+                        </Text>
+                      </View>
+                      <Text className="text-green-900 font-bold text-xl tracking-widest text-center">
+                        {order.delivery_otp}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            ) : (
-              <TouchableOpacity
-                onPress={() => setShowDeliverySheet(true)}
-                className="bg-green-50 border border-green-200 rounded-xl p-3 flex-row items-center justify-center gap-2"
-              >
-                <Feather name="truck" size={18} color="#059669" />
-                <Text className="text-green-700 font-semibold text-sm">
-                  Assign Delivery Partner
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+
+              {/* Additional Info Row */}
+              {order.delivery_boys.users?.phone && (
+                <View className="mt-3 pt-3 border-t border-gray-100">
+                  <View className="flex-row items-center">
+                    <Ionicons name="call-outline" size={14} color="#6B7280" />
+                    <Text className="text-gray-600 text-sm ml-2 font-medium">
+                      {order.delivery_boys.users.phone}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setShowDeliverySheet(true)}
+              className="bg-green-50 border border-green-200 rounded-xl p-3 flex-row items-center justify-center gap-2"
+            >
+              <Feather name="truck" size={18} color="#059669" />
+              <Text className="text-green-700 font-semibold text-sm">
+                Assign Delivery Partner
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {/* )} */}
 
         {/* Vendor Earnings Breakdown */}
         <View className="bg-white mx-4 mt-4 mb-6 rounded-2xl p-4 border border-gray-100">

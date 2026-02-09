@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 import { Feather } from '@expo/vector-icons'
 import { DeliveryBoy } from "@/types/users.types"
+import { Image } from "expo-image"
+import { blurhash } from "@/types/categories-products.types"
 
 
 
@@ -13,6 +15,7 @@ const SelectDeliveryPartnerBottomSheet = ({
   onSelectPartner,
   onClose,
   onConfirm,
+  isLoading
 }: {
   isVisible: boolean
   partners: DeliveryBoy[]
@@ -20,6 +23,7 @@ const SelectDeliveryPartnerBottomSheet = ({
   onSelectPartner: (partner: DeliveryBoy) => void
   onClose: () => void
   onConfirm: () => void
+  isLoading: boolean
 }) => {
   const bottomSheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => ["85%"], [])
@@ -59,7 +63,7 @@ const SelectDeliveryPartnerBottomSheet = ({
   }
 
   return (
-    <BottomSheet 
+    <BottomSheet
       ref={bottomSheetRef}
       snapPoints={snapPoints}
       enablePanDownToClose={true}
@@ -94,7 +98,7 @@ const SelectDeliveryPartnerBottomSheet = ({
         {/* Partners List */}
         {partners.map((partner) => (
           <TouchableOpacity
-            key={partner.id}
+            key={partner.user_id}
             onPress={() => partner.is_available && onSelectPartner(partner)}
             disabled={!partner.is_available}
             className={`bg-white border rounded-2xl p-4 mb-3 ${partner.is_available
@@ -107,18 +111,22 @@ const SelectDeliveryPartnerBottomSheet = ({
           >
             <View className="flex-row">
               {/* Profile Image/Avatar */}
-              <View className="mr-3">
+              <View className="mr-3 overflow-hidden">
                 {!partner.profile_photo ? (
-                  <View className="w-14 h-14 rounded-full overflow-hidden bg-gray-200">
-                    <View className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 items-center justify-center">
-                      <Feather name="user" size={24} color="#9ca3af" />
-                    </View>
+                  <View className="w-16 h-16 bg-gradient-to-br  rounded-full items-center justify-center border-3 border-green-200">
+                    <Text className="text-black text-2xl font-bold">
+                      {partner.first_name.charAt(0).toUpperCase()}{partner.last_name.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                 ) : (
-                  <View className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 items-center justify-center">
-                    <Text className="text-black text-xl font-bold">
-                      {partner.first_name } {partner.last_name}
-                    </Text>
+                  <View className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-400 to-emerald-600 items-center justify-center">
+                    <Image
+                      source={partner.profile_photo}
+                      placeholder={{ blurhash: blurhash }}
+                      contentFit="cover"
+                      transition={1000}
+                      style={{ width: '100%', height: '100%', overflow: "hidden" }}
+                    />
                   </View>
                 )}
                 {/* {partner.isAvailable && (
@@ -126,14 +134,19 @@ const SelectDeliveryPartnerBottomSheet = ({
                     <View className="w-2 h-2 bg-white rounded-full" />
                   </View>
                 )} */}
+
               </View>
 
               {/* Partner Info */}
               <View className="flex-1">
                 {/* Name and Status */}
                 <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-base font-bold text-gray-900">{partner.name}</Text>
-                  {!partner.isAvailable && (
+                  <View className="flex-row items-center mb-1.5">
+                    <Text className="text-gray-900 font-bold text-lg">
+                      {partner.first_name} {partner.last_name}
+                    </Text>
+                  </View>
+                  {!partner.is_available && (
                     <View className="bg-red-100 rounded-full px-2 py-1">
                       <Text className="text-red-600 text-xs font-medium">Busy</Text>
                     </View>
@@ -146,10 +159,10 @@ const SelectDeliveryPartnerBottomSheet = ({
                     <Text className="text-amber-500 mr-1">⭐</Text>
                     <Text className="text-sm font-semibold text-gray-700">{partner.rating.toFixed(1)}</Text>
                   </View>
-                  <Text className="text-xs text-gray-500">•</Text>
+                  {/* <Text className="text-xs text-gray-500">•</Text>
                   <Text className="text-xs text-gray-500 ml-2">
                     {partner.total_deliveries}+ deliveries
-                  </Text>
+                  </Text> */}
                 </View>
 
                 {/* Vehicle Info */}
@@ -162,7 +175,7 @@ const SelectDeliveryPartnerBottomSheet = ({
                 </View>
 
                 {/* Distance and Time Info */}
-                <View className="flex-row items-center justify-between">
+                {/* <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1 mr-2">
                     <View className="w-7 h-7 rounded-full bg-blue-50 items-center justify-center mr-2">
                       <Feather name="map-pin" size={14} color="#2563eb" />
@@ -194,13 +207,13 @@ const SelectDeliveryPartnerBottomSheet = ({
                       </View>
                     </View>
                   )}
-                </View>
+                </View> */}
 
                 {/* Contact Button */}
                 {partner.is_available && (
                   <TouchableOpacity className="flex-row items-center justify-center bg-blue-50 rounded-lg px-3 py-2 mt-3">
                     <Feather name="phone" size={14} color="#2563eb" />
-                    <Text className="text-blue-600 font-medium text-xs ml-2">{partner?.phone || 98787777777 }</Text>
+                    <Text className="text-blue-600 font-medium text-xs ml-2">+91 {partner?.users?.phone || 1111111111}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -257,7 +270,13 @@ const SelectDeliveryPartnerBottomSheet = ({
             }`}
         >
           <Text className={`font-bold text-base ${selectedPartner ? 'text-white' : 'text-gray-500'}`}>
-            {selectedPartner ? `Assign ${selectedPartner.first_name}` : 'Select a Partner'}
+            {
+              selectedPartner?.first_name
+                ? isLoading
+                  ? 'Assigning...'
+                  : `Assign ${selectedPartner.first_name}`
+                : 'Select a Partner'
+            }
           </Text>
         </TouchableOpacity>
       </BottomSheetScrollView>

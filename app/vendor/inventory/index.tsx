@@ -373,7 +373,7 @@ export default function InventoryScreen() {
                   <View className="flex-1">
                     <Text className="text-lg font-bold text-gray-900">{selectedItem.name}</Text>
                     <Text className="text-sm text-gray-600 mt-1">
-                      Current: {selectedItem.stock_quantity} {selectedItem.unit}
+                      Current: {selectedItem.stock_quantity} ({selectedItem.unit})
                     </Text>
                   </View>
                 </View>

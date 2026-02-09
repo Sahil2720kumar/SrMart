@@ -1,7 +1,7 @@
 import { Entypo, Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
 import { useVendorProfile } from '@/hooks/queries';
 import { useAuthStore } from '@/store/authStore';
 import { router } from 'expo-router';
+import VerificationGate from '@/components/vendorVerificationComp';
 
 export default function VendorEarningsScreen() {
   const session = useAuthStore((state) => state.session);
@@ -49,6 +50,14 @@ export default function VendorEarningsScreen() {
   >('today');
   const [showBankNumber, setShowBankNumber] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const verificationStatus = useMemo(() => {
+    if (!vendorProfile) return { isAdminVerified: false, isKycVerified: false };
+    return {
+      isAdminVerified: vendorProfile.is_verified,
+      isKycVerified: vendorProfile.kyc_status === 'approved',
+    };
+  }, [vendorProfile]);
 
   // Refetch all data
   const handleRefresh = async () => {
@@ -128,17 +137,14 @@ export default function VendorEarningsScreen() {
     const statusText = bankDetails.data.is_verified
       ? 'Verified ✓'
       : bankDetails.data.status === 'rejected'
-      ? `Rejected: ${bankDetails.data.rejection_reason || 'No reason provided'}`
-      : 'Pending Verification';
+        ? `Rejected: ${bankDetails.data.rejection_reason || 'No reason provided'}`
+        : 'Pending Verification';
 
     Alert.alert(
       'Bank Account Details',
-      `Bank: ${bankDetails.data.bank_name}\nAccount Holder: ${bankDetails.data.account_holder_name}\nAccount: ${bankDetails.data.account_number}\nIFSC: ${bankDetails.data.ifsc_code}\n${
-        bankDetails.data.branch ? `Branch: ${bankDetails.data.branch}\n` : ''
-      }${
-        bankDetails.data.account_type ? `Account Type: ${bankDetails.data.account_type}\n` : ''
-      }${
-        bankDetails.data.upi_id ? `UPI: ${bankDetails.data.upi_id}\n` : ''
+      `Bank: ${bankDetails.data.bank_name}\nAccount Holder: ${bankDetails.data.account_holder_name}\nAccount: ${bankDetails.data.account_number}\nIFSC: ${bankDetails.data.ifsc_code}\n${bankDetails.data.branch ? `Branch: ${bankDetails.data.branch}\n` : ''
+      }${bankDetails.data.account_type ? `Account Type: ${bankDetails.data.account_type}\n` : ''
+      }${bankDetails.data.upi_id ? `UPI: ${bankDetails.data.upi_id}\n` : ''
       }\nStatus: ${statusText}`
     );
   };
@@ -265,6 +271,18 @@ export default function VendorEarningsScreen() {
   const recentCashouts = cashouts.data || [];
   const recentTransactions = transactions.data || [];
 
+  if (!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) {
+    return (
+      <VerificationGate
+        isAdminVerified={verificationStatus.isAdminVerified}
+        isKycVerified={verificationStatus.isKycVerified}
+        kycStatus={vendorProfile.kyc_status}
+        storeName={vendorProfile?.store_name}
+        onKycPress={() => router.push('/vendor/profile/documents')}
+      />
+    )
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       {/* Header */}
@@ -365,106 +383,105 @@ export default function VendorEarningsScreen() {
 
           {/* Latest Cashout Request Card */}
           {recentCashouts.length > 0 ? (
-            <View className="bg-gray-50 rounded-xl p-4 mb-3">
-              <View className="flex-row items-center justify-between mb-3">
-                <View>
-                  <Text className="text-gray-900 font-bold text-base">
-                    ₹{recentCashouts[0].amount.toLocaleString()}
-                  </Text>
-                  <Text className="text-gray-500 text-xs mt-1">
-                    {recentCashouts[0].request_number}
-                  </Text>
-                </View>
-                <View className="flex-row items-center gap-2">
-                  <View
-                    className={`px-3 py-1 rounded-full ${
-                      getStatusColor(recentCashouts[0].status).bg
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-semibold ${
-                        getStatusColor(recentCashouts[0].status).text
-                      }`}
-                    >
-                      {getStatusLabel(recentCashouts[0].status)}
+            recentCashouts.map((cashout, idx) => (
+              <View key={cashout.id || idx} className="bg-gray-50 rounded-xl p-4 mb-3">
+                <View className="flex-row items-center justify-between mb-3">
+                  <View>
+                    <Text className="text-gray-900 font-bold text-base">
+                      ₹{cashout.amount.toLocaleString()}
+                    </Text>
+                    <Text className="text-gray-500 text-xs mt-1">
+                      {cashout.request_number}
                     </Text>
                   </View>
-                  {recentCashouts[0].status === 'pending' && (
-                    <TouchableOpacity
-                      onPress={() => handleCancelCashout(recentCashouts[0].id)}
-                      className="bg-red-50 px-2 py-1 rounded-lg"
-                    >
-                      <Text className="text-red-600 text-xs font-semibold">
-                        Cancel
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-
-              {/* Timeline */}
-              <View className="flex-row justify-between items-start">
-                {[
-                  { label: 'Requested', completed: true },
-                  {
-                    label: 'Approved',
-                    completed: ['approved', 'processing', 'transferred', 'completed'].includes(
-                      recentCashouts[0].status
-                    ),
-                  },
-                  {
-                    label: 'Transferred',
-                    completed: ['transferred', 'completed'].includes(
-                      recentCashouts[0].status
-                    ),
-                  },
-                  {
-                    label: 'Completed',
-                    completed: recentCashouts[0].status === 'completed',
-                  },
-                ].map((step, index) => (
-                  <View key={index} className="flex-1 items-center">
+                  <View className="flex-row items-center gap-2">
                     <View
-                      className={`w-8 h-8 rounded-full items-center justify-center mb-2 ${
-                        step.completed ? 'bg-emerald-500' : 'bg-gray-300'
-                      }`}
+                      className={`px-3 py-1 rounded-full ${getStatusColor(cashout.status).bg
+                        }`}
                     >
-                      <Feather
-                        name={step.completed ? 'check' : 'circle'}
-                        size={16}
-                        color="#fff"
-                      />
+                      <Text
+                        className={`text-xs font-semibold ${getStatusColor(cashout.status).text
+                          }`}
+                      >
+                        {getStatusLabel(cashout.status)}
+                      </Text>
                     </View>
-                    <Text className="text-xs text-gray-600 text-center">
-                      {step.label}
+                    {cashout.status === 'pending' && (
+                      <TouchableOpacity
+                        onPress={() => handleCancelCashout(cashout.id)}
+                        className="bg-red-50 px-2 py-1 rounded-lg"
+                      >
+                        <Text className="text-red-600 text-xs font-semibold">
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                {/* Timeline */}
+                <View className="flex-row justify-between items-start">
+                  {[
+                    { label: 'Requested', completed: true },
+                    {
+                      label: 'Approved',
+                      completed: ['approved', 'processing', 'transferred', 'completed'].includes(
+                        cashout.status
+                      ),
+                    },
+                    {
+                      label: 'Transferred',
+                      completed: ['transferred', 'completed'].includes(
+                        cashout.status
+                      ),
+                    },
+                    {
+                      label: 'Completed',
+                      completed: cashout.status === 'completed',
+                    },
+                  ].map((step, index) => (
+                    <View key={index} className="flex-1 items-center">
+                      <View
+                        className={`w-8 h-8 rounded-full items-center justify-center mb-2 ${step.completed ? 'bg-emerald-500' : 'bg-gray-300'
+                          }`}
+                      >
+                        <Feather
+                          name={step.completed ? 'check' : 'circle'}
+                          size={16}
+                          color="#fff"
+                        />
+                      </View>
+                      <Text className="text-xs text-gray-600 text-center">
+                        {step.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Text className="text-xs text-gray-500 mt-3">
+                  Requested on{' '}
+                  {new Date(cashout.request_date).toLocaleDateString(
+                    'en-IN',
+                    {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    }
+                  )}
+                </Text>
+
+                {cashout.status === 'rejected' && cashout.rejection_reason && (
+                  <View className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <Text className="text-red-800 text-xs font-semibold mb-1">
+                      Rejection Reason:
+                    </Text>
+                    <Text className="text-red-700 text-xs">
+                      {cashout.rejection_reason}
                     </Text>
                   </View>
-                ))}
-              </View>
-
-              <Text className="text-xs text-gray-500 mt-3">
-                Requested on{' '}
-                {new Date(recentCashouts[0].request_date).toLocaleDateString(
-                  'en-IN',
-                  {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  }
                 )}
-              </Text>
-
-              {recentCashouts[0].status === 'rejected' && recentCashouts[0].rejection_reason && (
-                <View className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                  <Text className="text-red-800 text-xs font-semibold mb-1">
-                    Rejection Reason:
-                  </Text>
-                  <Text className="text-red-700 text-xs">
-                    {recentCashouts[0].rejection_reason}
-                  </Text>
-                </View>
-              )}
-            </View>
+              </View>
+            ))
           ) : (
             <View className="bg-gray-50 rounded-xl p-6 items-center">
               <Feather name="inbox" size={32} color="#9ca3af" />
@@ -498,18 +515,16 @@ export default function VendorEarningsScreen() {
                 onPress={() =>
                   setActiveEarningsFilter(filter.value as any)
                 }
-                className={`px-4 py-2 rounded-lg ${
-                  activeEarningsFilter === filter.value
+                className={`px-4 py-2 rounded-lg ${activeEarningsFilter === filter.value
                     ? 'bg-emerald-500'
                     : 'bg-gray-100 border border-gray-200'
-                }`}
+                  }`}
               >
                 <Text
-                  className={`text-sm font-semibold ${
-                    activeEarningsFilter === filter.value
+                  className={`text-sm font-semibold ${activeEarningsFilter === filter.value
                       ? 'text-white'
                       : 'text-gray-700'
-                  }`}
+                    }`}
                 >
                   {filter.label}
                 </Text>
@@ -547,28 +562,26 @@ export default function VendorEarningsScreen() {
                     </Text>
                   </View>
                   <View
-                    className={`px-2 py-1 rounded-full ${
-                      bankDetails.data.is_verified
+                    className={`px-2 py-1 rounded-full ${bankDetails.data.is_verified
                         ? 'bg-emerald-100'
                         : bankDetails.data.status === 'rejected'
-                        ? 'bg-red-100'
-                        : 'bg-orange-100'
-                    }`}
+                          ? 'bg-red-100'
+                          : 'bg-orange-100'
+                      }`}
                   >
                     <Text
-                      className={`text-xs font-semibold ${
-                        bankDetails.data.is_verified
+                      className={`text-xs font-semibold ${bankDetails.data.is_verified
                           ? 'text-emerald-700'
                           : bankDetails.data.status === 'rejected'
-                          ? 'text-red-700'
-                          : 'text-orange-700'
-                      }`}
+                            ? 'text-red-700'
+                            : 'text-orange-700'
+                        }`}
                     >
                       {bankDetails.data.is_verified
                         ? 'Verified'
                         : bankDetails.data.status === 'rejected'
-                        ? 'Rejected'
-                        : 'Pending'}
+                          ? 'Rejected'
+                          : 'Pending'}
                     </Text>
                   </View>
                 </View>
@@ -679,11 +692,11 @@ export default function VendorEarningsScreen() {
         {/* Wallet Transaction History */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
           <Text className="text-lg font-bold text-gray-900 mb-3">
-            Transaction History
+            Transaction History (Recent)
           </Text>
 
           {recentTransactions.length > 0 ? (
-            recentTransactions.map((transaction) => (
+            recentTransactions.slice(0, 5).map((transaction) => (
               <View
                 key={transaction.id}
                 className="flex-row items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
@@ -705,11 +718,10 @@ export default function VendorEarningsScreen() {
                   </Text>
                 </View>
                 <Text
-                  className={`text-base font-bold ${
-                    transaction.transaction_type === 'credit'
+                  className={`text-base font-bold ${transaction.transaction_type === 'credit'
                       ? 'text-emerald-600'
                       : 'text-red-600'
-                  }`}
+                    }`}
                 >
                   {transaction.transaction_type === 'credit' ? '+' : '-'}₹
                   {transaction.amount.toLocaleString()}
@@ -827,9 +839,8 @@ export default function VendorEarningsScreen() {
             <TouchableOpacity
               onPress={handleRequestCashout}
               disabled={requestCashout.isPending}
-              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${
-                requestCashout.isPending ? 'opacity-50' : ''
-              }`}
+              className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${requestCashout.isPending ? 'opacity-50' : ''
+                }`}
             >
               {requestCashout.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />

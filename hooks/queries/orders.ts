@@ -464,7 +464,7 @@ export function useVendorOrders(filters?: OrderFilters) {
     refetchInterval: 1000 * 30, // Auto-refetch every 30 seconds for new orders
   });
 }
-
+ 
 // ============================================================================
 // QUERY: Get Order Detail
 // ============================================================================
@@ -476,7 +476,7 @@ export function useOrderDetail(orderId: string) {
         .from('orders')
         .select(`
           *,
-          vendors!inner(
+          vendors(
             user_id,
             store_name,
             store_description,
@@ -489,14 +489,16 @@ export function useOrderDetail(orderId: string) {
             review_count,
             business_hours
           ),
-          customers!inner(
+          customers(
             user_id,
             first_name,
             last_name,
-            profile_image
+            profile_image,
+            users(phone)
           ),
           delivery_boys(
             user_id,
+            users(phone),
             first_name,
             last_name,
             profile_photo,
@@ -931,23 +933,11 @@ export function useAvailableDeliveryPartners(location?: {
     queryFn: async () => {
       let query = supabase
         .from('delivery_boys')
-        .select(`
-          user_id,
-          first_name,
-          last_name,
-          profile_photo,
-          vehicle_type,
-          vehicle_number,
-          rating,
-          review_count,
-          is_available,
-          current_latitude,
-          current_longitude
-        `)
+        .select(`*,users(phone)`)
         .eq('is_available', true)
         .eq('is_verified', true);
 
-      // If location provided, you could add distance filtering here
+      //  If location provided, you could add distance filtering here
       // This would require a PostGIS extension or custom function
 
       const { data, error } = await query

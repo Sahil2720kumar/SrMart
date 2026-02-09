@@ -29,6 +29,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { format, parseISO } from 'date-fns';
 import { CancelCashoutModal, SuccessModal, WithdrawalModal } from '@/components/WalletModals';
+import { useDeliveryBoyBankDetails } from '@/hooks/queries/useDeliveryBoy';
 
 
 
@@ -54,7 +55,7 @@ const EarningsScreen = () => {
     session?.user?.id,
     'delivery_boy'
   );
-
+  const bankDetails = useDeliveryBoyBankDetails(session?.user?.id || '');
   // Fetch earnings stats for selected period
   const {
     totalEarnings,
@@ -119,6 +120,17 @@ const EarningsScreen = () => {
 
   const handleWithdrawalSubmit = async (amount: number) => {
     try {
+
+      if (!bankDetails.data?.is_verified) {
+        Alert.alert(
+          'Bank Account Required',
+          bankDetails.data
+            ? 'Your bank account is pending verification. Please wait for admin approval.'
+            : 'Please add and verify a bank account first.'
+        );
+        return;
+      }
+
       await requestCashoutMutation.mutateAsync({
         wallet_id: wallet!.id,
         amount: amount,

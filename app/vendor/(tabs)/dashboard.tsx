@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,199 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
-} from 'react-native'
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons'
+import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { FullPageError } from '@/components/ErrorComp';
 import QuickInfoBox from '@/components/QuickInfoBox';
 import VendorStatCard from '@/components/VendorStatCard';
 import VendorOrderCard from '@/components/VendorOrderCard';
 import AlertItem from '@/components/AlertItem';
 import QuickActionButton from '@/components/QuickActionButton';
-import { router } from 'expo-router';
 
+// Import queries and mutations
+import { useUpdateVendorProfile, useVendorDetail, useVendorProfile } from '@/hooks/queries';
+import { useVendorOrders, useVendorOrderStats } from '@/hooks/queries/orders';
+import { useVendorInventory } from '@/hooks/queries';
+import { useWalletData } from '@/hooks/queries/wallets';
+import { useAuthStore } from '@/store/authStore';
+import VerificationGate, { VerificationOverlay } from '@/components/vendorVerificationComp';
 
-const { width } = Dimensions.get('window')
+const { width } = Dimensions.get('window');
 
-// Main Dashboard Component
 export default function VendorDashboard() {
-  const [isOpen, setIsOpen] = useState(true)
-  
-  // Verification status - you can fetch this from your backend
-  const [verificationStatus, setVerificationStatus] = useState({
-    isAdminVerified: true,  // Change to false to see unverified state
-    isKycVerified: true,     // Change to false to see unverified state
-  })
+  const { session } = useAuthStore();
+  const userId = session?.user?.id;
+
+  // State
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch vendor details
+  const {
+    data: vendorData,
+    isLoading: vendorLoading,
+    isError: vendorError,
+    error: vendorErrorData,
+    refetch: refetchVendor,
+  } = useVendorDetail(userId || '');
+
+  // Fetch vendor profile for vendor_id
+  const { mutate: updateIsOpen, isPending: isLoadingIsOpen } = useUpdateVendorProfile()
+  const vendorId = vendorData?.user_id;
+
+  // Fetch orders and stats
+  const {
+    data: orders,
+    isLoading: ordersLoading,
+    refetch: refetchOrders,
+  } = useVendorOrders();
+
+  const {
+    data: orderStats,
+    isLoading: statsLoading,
+    refetch: refetchStats,
+  } = useVendorOrderStats(vendorId || '');
+
+  // Fetch inventory
+  const {
+    data: inventoryItems,
+    isLoading: inventoryLoading,
+    refetch: refetchInventory,
+  } = useVendorInventory();
+
+  // Fetch wallet data
+  const {
+    wallet,
+    transactions
+  } = useWalletData(userId, 'vendor', vendorId);
+
+  // Verification status
+  const verificationStatus = useMemo(() => {
+    if (!vendorData) return { isAdminVerified: false, isKycVerified: false };
+    return {
+      isAdminVerified: vendorData.is_verified,
+      isKycVerified: vendorData.kyc_status === 'approved',
+    };
+  }, [vendorData]);
+
+  // Shop open/close status
+  const isOpen = vendorData?.is_open || false;
+
+  console.log('isOpen', isOpen);
+
+  // Active orders (new, preparing, ready)
+  const activeOrders = useMemo(() => {
+    if (!orders) return [];
+    return orders.filter((order) =>
+      ['pending', 'confirmed', 'processing', 'ready_for_pickup', 'picked_up'].includes(
+        order.status
+      )
+    ).slice(0, 4); // Show only first 4
+  }, [orders]);
+
+  // Low stock items
+  const lowStockItems = useMemo(() => {
+    if (!inventoryItems) return [];
+    return inventoryItems
+      .filter((item) => item.stock_status === 'low_stock' || item.stock_status === 'out_of_stock')
+      .slice(0, 3); // Show only first 3
+  }, [inventoryItems]);
+
+  // Get today's earnings
+
+  const lifetimeEarnings = wallet.data?.lifetime_earnings || 0;
+  const todayEarnings = wallet.data?.earnings_today || 0;
+  const weeklyEarnings = wallet.data?.earnings_this_week || 0;
+
+  // Business hours display
+  const getBusinessHoursDisplay = () => {
+    if (!vendorData?.business_hours || Object.keys(vendorData.business_hours).length === 0) {
+      return 'Not set';
+    }
+
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const todayHours = vendorData.business_hours[today];
+
+    if (todayHours && todayHours.open && todayHours.close) {
+      return `${todayHours.open} - ${todayHours.close}`;
+    }
+
+    return 'Closed Today';
+  };
+
+  // Handle shop toggle
+  // const handleToggleShop = async () => {
+  //   Alert.alert(
+  //     isOpen ? 'Close Shop?' : 'Open Shop?',
+  //     `Are you sure you want to ${isOpen ? 'close' : 'open'} your shop?`,
+  //     [
+  //       { text: 'Cancel', style: 'cancel' },
+  //       {
+  //         text: 'Confirm',
+  //         onPress: ()=>updateIsOpen({is_open:!isOpen})
+  //       }, 
+  //     ]
+  //   );
+  // };
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetchVendor(),
+        refetchOrders(),
+        refetchStats(),
+        refetchInventory(),
+        wallet.refetch(),
+      ]);
+    } catch (error) {
+      console.error('[Dashboard] Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Loading state
+  if (vendorLoading || ordersLoading || statsLoading || inventoryLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#10b981" />
+          <Text className="text-gray-600 mt-4">Loading dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (vendorError || !vendorData) {
+    return (
+      <FullPageError
+        code="500"
+        message={vendorErrorData?.message || 'Failed to load dashboard'}
+        onActionPress={() => refetchVendor()}
+      />
+    );
+  }
+
+
+  if (!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) {
+    return (
+      <VerificationGate
+        isAdminVerified={verificationStatus.isAdminVerified}
+        isKycVerified={verificationStatus.isKycVerified}
+        kycStatus={vendorData.kyc_status}
+        storeName={vendorData?.store_name}
+        onKycPress={() => router.push('/vendor/profile/documents')}
+      />
+    )
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -37,9 +207,12 @@ export default function VendorDashboard() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         className="flex-1 bg-gray-50"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* HEADER SECTION */}
-        <View className="bg-white border-b border-emerald-100 shadow-sm  ">
+        <View className="bg-white border-b border-emerald-100 shadow-sm">
           <View className="px-4 py-4">
             {/* Shop Name & Toggle */}
             <View className="flex-row items-center justify-between mb-4">
@@ -48,11 +221,13 @@ export default function VendorDashboard() {
                   <Ionicons name="storefront" size={24} color="white" />
                 </View>
                 <View>
-                  <View className="flex-row items-center gap-2 ">
-                    <Text className="text-2xl font-bold text-gray-900">Green Mart</Text>
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-2xl font-bold text-gray-900">
+                      {vendorData.store_name}
+                    </Text>
                     {verificationStatus.isAdminVerified && (
-                      <View className=" rounded-full p-1 ">
-                       <MaterialIcons  name="verified" size={24} color="#10b981" />
+                      <View className="rounded-full p-1">
+                        <MaterialIcons name="verified" size={24} color="#10b981" />
                       </View>
                     )}
                   </View>
@@ -62,15 +237,21 @@ export default function VendorDashboard() {
 
               {/* Open/Close Toggle */}
               <TouchableOpacity
-                onPress={() => setIsOpen(!isOpen)}
+                onPress={() => updateIsOpen({ is_open: !isOpen })}
                 className={`flex-row items-center gap-2 px-4 py-2 rounded-lg border ${isOpen
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : 'bg-red-50 border-red-200'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-red-50 border-red-200'
                   }`}
               >
-                <View className={`w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                <Text className={`text-sm font-semibold ${isOpen ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {isOpen ? 'Open' : 'Closed'}
+                <View
+                  className={`w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-red-500'
+                    }`}
+                />
+                <Text
+                  className={`text-sm font-semibold ${isOpen ? 'text-emerald-600' : 'text-red-600'
+                    }`}
+                >
+                  {isLoadingIsOpen ? "Loading..." : isOpen ? "Open" : "Closed"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -80,17 +261,12 @@ export default function VendorDashboard() {
               <QuickInfoBox
                 icon={<Ionicons name="time-outline" size={16} color="#059669" />}
                 label="Hours Today"
-                value="9:00 - 22:00"
-              />
-              <QuickInfoBox
-                icon={<MaterialCommunityIcons name="map-marker-radius" size={16} color="#059669" />}
-                label="Delivery"
-                value="5 km"
+                value={getBusinessHoursDisplay()}
               />
               <QuickInfoBox
                 icon={<Ionicons name="star" size={16} color="#f59e0b" />}
                 label="Rating"
-                value="4.8"
+                value={vendorData.rating.toFixed(1)}
               />
             </View>
           </View>
@@ -115,14 +291,25 @@ export default function VendorDashboard() {
                     {!verificationStatus.isAdminVerified && (
                       <View className="flex-row items-center gap-2">
                         <Ionicons name="close-circle" size={16} color="#dc2626" />
-                        <Text className="text-xs text-gray-700">Admin verification pending</Text>
+                        <Text className="text-xs text-gray-700">
+                          Admin verification pending
+                        </Text>
                       </View>
                     )}
                     {!verificationStatus.isKycVerified && (
-                      <View className="flex-row items-center gap-2">
+                      <TouchableOpacity
+                        onPress={() => router.push('/vendor/profile/documents')}
+                        className="flex-row items-center gap-2"
+                      >
                         <Ionicons name="close-circle" size={16} color="#dc2626" />
-                        <Text className="text-xs text-gray-700">KYC verification pending</Text>
-                      </View>
+                        <Text className="text-xs text-blue-600 underline">
+                          {vendorData.kyc_status === 'rejected'
+                            ? 'KYC rejected - resubmit documents →'
+                            : vendorData.kyc_status === 'pending'
+                              ? 'KYC review in progress'
+                              : 'Complete KYC verification →'}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 </View>
@@ -135,21 +322,25 @@ export default function VendorDashboard() {
         <View className="px-4 pt-4">
           <View className="flex-row gap-3">
             {/* Admin Verification */}
-            <View className={`flex-1 rounded-xl p-4 border ${
-              verificationStatus.isAdminVerified 
-                ? 'bg-blue-50 border-blue-200' 
-                : 'bg-gray-50 border-gray-200'
-            }`}>
+            <View
+              className={`flex-1 rounded-xl p-4 border ${verificationStatus.isAdminVerified
+                  ? 'bg-blue-50 border-blue-200'
+                  : 'bg-gray-50 border-gray-200'
+                }`}
+            >
               <View className="flex-row items-center justify-between mb-2">
                 <View className="flex-row items-center gap-2">
-                  <Ionicons 
-                    name="shield-checkmark" 
-                    size={20} 
-                    color={verificationStatus.isAdminVerified ? '#3b82f6' : '#9ca3af'} 
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={20}
+                    color={verificationStatus.isAdminVerified ? '#3b82f6' : '#9ca3af'}
                   />
-                  <Text className={`text-xs font-semibold ${
-                    verificationStatus.isAdminVerified ? 'text-blue-900' : 'text-gray-600'
-                  }`}>
+                  <Text
+                    className={`text-xs font-semibold ${verificationStatus.isAdminVerified
+                        ? 'text-blue-900'
+                        : 'text-gray-600'
+                      }`}
+                  >
                     Admin
                   </Text>
                 </View>
@@ -163,31 +354,36 @@ export default function VendorDashboard() {
                   </View>
                 )}
               </View>
-              <Text className={`text-[10px] ${
-                verificationStatus.isAdminVerified ? 'text-blue-700' : 'text-gray-500'
-              }`}>
-                {verificationStatus.isAdminVerified 
-                  ? 'Your shop is verified' 
+              <Text
+                className={`text-[10px] ${verificationStatus.isAdminVerified ? 'text-blue-700' : 'text-gray-500'
+                  }`}
+              >
+                {verificationStatus.isAdminVerified
+                  ? 'Your shop is verified'
                   : 'Awaiting admin approval'}
               </Text>
             </View>
 
             {/* KYC Verification */}
-            <View className={`flex-1 rounded-xl p-4 border ${
-              verificationStatus.isKycVerified 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-gray-50 border-gray-200'
-            }`}>
+            <View
+              className={`flex-1 rounded-xl p-4 border ${verificationStatus.isKycVerified
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-gray-50 border-gray-200'
+                }`}
+            >
               <View className="flex-row items-center justify-between mb-2">
                 <View className="flex-row items-center gap-2">
-                  <Ionicons 
-                    name="document-text" 
-                    size={20} 
-                    color={verificationStatus.isKycVerified ? '#10b981' : '#9ca3af'} 
+                  <Ionicons
+                    name="document-text"
+                    size={20}
+                    color={verificationStatus.isKycVerified ? '#10b981' : '#9ca3af'}
                   />
-                  <Text className={`text-xs font-semibold ${
-                    verificationStatus.isKycVerified ? 'text-green-900' : 'text-gray-600'
-                  }`}>
+                  <Text
+                    className={`text-xs font-semibold ${verificationStatus.isKycVerified
+                        ? 'text-green-900'
+                        : 'text-gray-600'
+                      }`}
+                  >
                     KYC
                   </Text>
                 </View>
@@ -201,11 +397,12 @@ export default function VendorDashboard() {
                   </View>
                 )}
               </View>
-              <Text className={`text-[10px] ${
-                verificationStatus.isKycVerified ? 'text-green-700' : 'text-gray-500'
-              }`}>
-                {verificationStatus.isKycVerified 
-                  ? 'Documents approved' 
+              <Text
+                className={`text-[10px] ${verificationStatus.isKycVerified ? 'text-green-700' : 'text-gray-500'
+                  }`}
+              >
+                {verificationStatus.isKycVerified
+                  ? 'Documents approved'
                   : 'Submit KYC documents'}
               </Text>
             </View>
@@ -218,28 +415,34 @@ export default function VendorDashboard() {
             <VendorStatCard
               width={width}
               label="Total Orders"
-              value="42"
+              value={orderStats?.total?.toString() || '0'}
               icon={<Ionicons name="receipt-outline" size={28} color="#059669" />}
               bgColor="bg-emerald-50"
             />
             <VendorStatCard
               width={width}
               label="Active Orders"
-              value="8"
+              value={(
+                (orderStats?.new || 0) +
+                (orderStats?.preparing || 0) +
+                (orderStats?.ready || 0)
+              ).toString()}
               icon={<Ionicons name="flash" size={28} color="#f59e0b" />}
               bgColor="bg-amber-50"
             />
             <VendorStatCard
               width={width}
               label="Completed"
-              value="34"
-              icon={<Ionicons name="checkmark-circle-outline" size={28} color="#10b981" />}
+              value={orderStats?.completed?.toString() || '0'}
+              icon={
+                <Ionicons name="checkmark-circle-outline" size={28} color="#10b981" />
+              }
               bgColor="bg-green-50"
             />
             <VendorStatCard
               width={width}
               label="Cancelled"
-              value="2"
+              value={orderStats?.cancelled?.toString() || '0'}
               icon={<Ionicons name="close-circle-outline" size={28} color="#ef4444" />}
               bgColor="bg-red-50"
             />
@@ -253,57 +456,38 @@ export default function VendorDashboard() {
             <View className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-200">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="list" size={20} color="#047857" />
-                <Text className="text-lg font-bold text-gray-900">
-                  Active Orders
-                </Text>
+                <Text className="text-lg font-bold text-gray-900">Active Orders</Text>
                 <View className="bg-emerald-500 rounded-full px-2 py-0.5 ml-2">
-                  <Text className="text-white text-xs font-bold">4</Text>
+                  <Text className="text-white text-xs font-bold">
+                    {activeOrders.length}
+                  </Text>
                 </View>
               </View>
             </View>
 
             {/* Orders List */}
-            {/* <View>
-              <VendorOrderCard
-                orderId="#ORD-2024-001"
-                customerName="Raj Kumar"
-                items="5 items"
-                time="15 mins ago"
-                total="₹450"
-                status="Preparing"
-                priority="high"
-              />
-              <VendorOrderCard
-                orderId="#ORD-2024-002"
-                customerName="Priya Singh"
-                items="3 items"
-                time="8 mins ago"
-                total="₹280"
-                status="Ready for Pickup"
-                priority="high"
-              />
-              <VendorOrderCard
-                orderId="#ORD-2024-003"
-                customerName="Amit Patel"
-                items="7 items"
-                time="2 mins ago"
-                total="₹620"
-                status="Preparing"
-                priority="normal"
-              />
-              <VendorOrderCard
-                orderId="#ORD-2024-004"
-                customerName="Deepa Sharma"
-                items="4 items"
-                time="1 min ago"
-                total="₹380"
-                status="New Order"
-                priority="urgent"
-              />
-            </View> */}
+            {activeOrders.length > 0 ? (
+              <View className='gap-2 p-2'>
+                {activeOrders.map((order) => (
+                  <VendorOrderCard
+                    key={order.id}
+                    order={order as any}
+                    onPress={() => router.push(`/vendor/order/${order.id}`)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View className="py-8 items-center">
+                <Feather name="inbox" size={48} color="#d1d5db" />
+                <Text className="text-gray-600 mt-2">No active orders</Text>
+              </View>
+            )}
 
             {/* Footer */}
-            <TouchableOpacity onPress={()=>router.push("/vendor/(tabs)/orders")} className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
+            <TouchableOpacity
+              onPress={() => router.push('/vendor/(tabs)/orders')}
+              className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2"
+            >
               <Text className="text-emerald-600 font-medium text-sm">
                 View All Orders
               </Text>
@@ -313,97 +497,131 @@ export default function VendorDashboard() {
         </View>
 
         {/* EARNINGS SNAPSHOT */}
-        <View className="px-4 pb-6 ">
-          <LinearGradient
-
-            colors={['#10b981', '#0d9488']}
-            className="rounded-2xl p-6 shadow-lg"
-            style={{ borderRadius: 16 }}
+        <View className="px-4 pb-6">
+          <TouchableOpacity
+            onPress={() => router.push('/vendor/earnings')}
+            activeOpacity={0.9}
           >
-
-            <View className="flex-row items-start justify-between mb-4">
-              <Text className="text-sm font-semibold text-white opacity-90">
-                Today's Earnings
-              </Text>
-              <View className="bg-white/20 rounded-full p-2">
-                <Ionicons name="trending-up" size={20} color="white" />
+            <LinearGradient
+              colors={['#10b981', '#0d9488']}
+              className="rounded-2xl p-6 shadow-lg"
+              style={{ borderRadius: 16 }}
+            >
+              <View className="flex-row items-start justify-between mb-4">
+                <Text className="text-sm font-semibold text-white opacity-90">
+                  {/* Today's */}
+                  Total Earnings
+                </Text>
+                <View className="bg-white/20 rounded-full p-2">
+                  <Ionicons name="trending-up" size={20} color="white" />
+                </View>
               </View>
-            </View>
 
-            <Text className="text-4xl font-bold text-white mb-2">₹8,450</Text>
-            <Text className="text-sm text-white opacity-75 mb-4">
-              42 orders completed
-            </Text>
+              <Text className="text-4xl font-bold text-white mb-2">
+                ₹{lifetimeEarnings.toLocaleString()}
+              </Text>
+              <Text className="text-sm text-white opacity-75 mb-4">
+                {orderStats?.total || 0} orders completed
+              </Text>
 
-            <View className="border-t border-white/20 pt-4 mt-4">
-              <Text className="text-xs text-white opacity-75 mb-1">Weekly Total</Text>
-              <Text className="text-2xl font-bold text-white">₹52,340</Text>
-            </View>
-          </LinearGradient>
+              {/* <View className="border-t border-white/20 pt-4 mt-4">
+                <Text className="text-xs text-white opacity-75 mb-1">
+                  Weekly Total
+                </Text>
+                <Text className="text-2xl font-bold text-white">
+                  ₹{weeklyEarnings.toLocaleString()}
+                </Text>
+              </View> */}
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* LOW STOCK ALERTS */}
-        <View className="px-4 pb-6">
-          <View className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Header */}
-            <View className="bg-red-50 px-6 py-4 border-b border-red-200">
-              <View className="flex-row items-center gap-2">
-                <Ionicons name="alert-circle" size={20} color="#dc2626" />
-                <Text className="text-lg font-bold text-red-900">
-                  Low Stock Alert
-                </Text>
-                <View className="bg-red-500 rounded-full px-2 py-0.5 ml-2">
-                  <Text className="text-white text-xs font-bold">3</Text>
+        {lowStockItems.length > 0 && (
+          <View className="px-4 pb-6">
+            <View className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* Header */}
+              <View className="bg-red-50 px-6 py-4 border-b border-red-200">
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="alert-circle" size={20} color="#dc2626" />
+                  <Text className="text-lg font-bold text-red-900">
+                    Low Stock Alert
+                  </Text>
+                  <View className="bg-red-500 rounded-full px-2 py-0.5 ml-2">
+                    <Text className="text-white text-xs font-bold">
+                      {lowStockItems.length}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* Alerts */}
-            <View className="p-6 gap-3">
-              <AlertItem product="Tomatoes" stock="12 kg" status="Critical" />
-              <AlertItem product="Lettuce" stock="8 heads" status="Warning" />
-              <AlertItem product="Onions" stock="25 kg" status="Warning" />
-            </View>
+              {/* Alerts */}
+              <View className="p-6 gap-3">
+                {lowStockItems.map((item) => (
+                  <AlertItem
+                    key={item.id}
+                    product={item.name}
+                    stock={`${item.stock_quantity} ${item.unit}`}
+                    status={
+                      item.stock_status === 'out_of_stock' ? 'Critical' : 'Warning'
+                    }
+                  />
+                ))}
+              </View>
 
-            {/* Footer */}
-            <TouchableOpacity onPress={()=>router.push("/vendor/inventory")} className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2">
-              <Text className="text-red-600 font-medium text-sm">
-                Manage Inventory
-              </Text>
-              <Feather name="arrow-right" size={14} color="#dc2626" />
-            </TouchableOpacity>
+              {/* Footer */}
+              <TouchableOpacity
+                onPress={() => router.push('/vendor/inventory')}
+                className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex-row items-center justify-center gap-2"
+              >
+                <Text className="text-red-600 font-medium text-sm">
+                  Manage Inventory
+                </Text>
+                <Feather name="arrow-right" size={14} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* QUICK ACTIONS */}
-        <View  className="px-4 pb-10">
+        <View className="px-4 pb-10">
           <View className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <Text className="text-lg font-bold text-gray-900 mb-4">Quick Actions</Text>
 
             <View className="flex-row flex-wrap gap-3 justify-between">
               <QuickActionButton
-                icon={<Ionicons name="add-circle-outline" size={24} color="#059669" />}
+                icon={
+                  <Ionicons name="add-circle-outline" size={24} color="#059669" />
+                }
                 label="Add Product"
-                route='/vendor/product/add'
+                route="/vendor/product/add"
               />
               <QuickActionButton
-                icon={<MaterialCommunityIcons name="package-variant" size={24} color="#059669" />}
+                icon={
+                  <MaterialCommunityIcons
+                    name="package-variant"
+                    size={24}
+                    color="#059669"
+                  />
+                }
                 label="Inventory"
-                route='/vendor/inventory'
+                route="/vendor/inventory"
               />
-              {/* <QuickActionButton
-                icon={<Ionicons name="bar-chart-outline" size={24} color="#059669" />}
-                label="Analytics"
-              /> */}
+              <QuickActionButton
+                icon={<Ionicons name="wallet-outline" size={24} color="#059669" />}
+                label="Earnings"
+                route="/vendor/earnings"
+              />
               <QuickActionButton
                 icon={<Ionicons name="time-outline" size={24} color="#059669" />}
                 label="Shop Hours"
-                route='/vendor/(tabs)/profile/edit'
+                route="/vendor/(tabs)/profile/edit"
               />
             </View>
           </View>
         </View>
       </ScrollView>
+
     </SafeAreaView>
-  )
+  );
 }
