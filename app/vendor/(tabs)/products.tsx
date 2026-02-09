@@ -72,8 +72,8 @@ export default function ProductsScreen() {
       <VerificationGate
         isAdminVerified={verificationStatus.isAdminVerified}
         isKycVerified={verificationStatus.isKycVerified}
-        kycStatus={vendorData.kyc_status}
-        storeName={vendorData?.store_name}
+        kycStatus={vendorData?.kyc_status || 'pending'}
+        storeName={vendorData?.store_name || 'Store Name'}
         onKycPress={() => router.push('/vendor/profile/documents')}
       />
     )

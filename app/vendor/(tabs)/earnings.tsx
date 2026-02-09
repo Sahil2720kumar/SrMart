@@ -276,8 +276,8 @@ export default function VendorEarningsScreen() {
       <VerificationGate
         isAdminVerified={verificationStatus.isAdminVerified}
         isKycVerified={verificationStatus.isKycVerified}
-        kycStatus={vendorProfile.kyc_status}
-        storeName={vendorProfile?.store_name}
+        kycStatus={vendorProfile?.kyc_status || 'pending'}
+        storeName={vendorProfile?.store_name || 'Store Name'}
         onKycPress={() => router.push('/vendor/profile/documents')}
       />
     )

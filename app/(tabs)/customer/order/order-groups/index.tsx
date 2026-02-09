@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react
 import { Stack, router } from 'expo-router';
 import { useCustomerOrderGroups } from '@/hooks/queries/orders';
 import { useAuthStore } from '@/store/authStore';
-import { PaymentStatus } from '@/types/orders-carts.types';
+import { OrderGroupStatus, PaymentStatus } from '@/types/orders-carts.types';
 import Feather from '@expo/vector-icons/Feather';
 
 type TabType = 'all' | 'paid' | 'pending';
@@ -16,21 +16,27 @@ export default function OrderGroupsListScreen() {
     paymentStatus: activeTab === 'all' ? undefined : activeTab,
   });
 
-  const getPaymentStatusColor = (status: PaymentStatus) => {
-    const colors: Record<PaymentStatus, string> = {
+  const getOrderGroupStatusColor = (status: OrderGroupStatus) => {
+    const colors: Record<OrderGroupStatus, string> = {
       pending: 'bg-yellow-100 text-yellow-700',
-      paid: 'bg-green-100 text-green-700',
-      failed: 'bg-red-100 text-red-700',
+      confirmed: 'bg-blue-100 text-blue-700',
+      processing: 'bg-indigo-100 text-indigo-700',
+      partially_delivered: 'bg-orange-100 text-orange-700',
+      delivered: 'bg-green-100 text-green-700',
+      cancelled: 'bg-gray-100 text-gray-700',
       refunded: 'bg-purple-100 text-purple-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
-
-  const getPaymentStatusText = (status: PaymentStatus) => {
-    const labels: Record<PaymentStatus, string> = {
+  
+  const getOrderGroupStatusText = (status: OrderGroupStatus) => {
+    const labels: Record<OrderGroupStatus, string> = {
       pending: 'Pending',
-      paid: 'Paid',
-      failed: 'Failed',
+      confirmed: 'Confirmed',
+      processing: 'Processing',
+      partially_delivered: 'Partially Delivered',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled',
       refunded: 'Refunded',
     };
     return labels[status] || status;
@@ -166,12 +172,12 @@ export default function OrderGroupsListScreen() {
                   </Text>
                 </View>
                 <View
-                  className={`px-3 py-1.5 rounded-full ${getPaymentStatusColor(
-                    item.payment_status
+                  className={`px-3 py-1.5 rounded-full ${getOrderGroupStatusColor(
+                    item.status
                   )}`}
                 >
                   <Text className="text-xs font-semibold">
-                    {getPaymentStatusText(item.payment_status)}
+                    {getOrderGroupStatusText(item.status)}
                   </Text>
                 </View>
               </View>

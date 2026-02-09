@@ -20,6 +20,15 @@ export type CancelledBy = 'customer' | 'vendor' | 'admin' | 'system';
 
 export type OrderFilterStatus = OrderStatus | 'all' | 'active' | 'completed';
 
+export type OrderGroupStatus = 
+  | 'pending'
+  | 'confirmed'
+  | 'processing'
+  | 'partially_delivered'
+  | 'delivered'
+  | 'cancelled'
+  | 'refunded';
+
 export interface OrderFilters {
   status?: OrderFilterStatus;
   startDate?: string;
@@ -32,7 +41,7 @@ export interface OrderFilters {
 export interface OrderGroup {
   id: string;
   customer_id: string;
-
+  status:OrderGroupStatus
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
 

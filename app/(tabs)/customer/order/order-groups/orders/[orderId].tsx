@@ -11,7 +11,8 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { OrderItem, OrderStatus } from '@/types/orders-carts.types';
 import { Image } from 'expo-image';
-import { blurhash } from '@/types/categories-products.types';
+import { blurhash, Product } from '@/types/categories-products.types';
+import useCartStore from '@/store/cartStore';
 
 
 export default function OrderDetailsScreen() {
@@ -19,7 +20,9 @@ export default function OrderDetailsScreen() {
   const { session } = useAuthStore();
   const { data: order, isLoading, error } = useOrderDetail(orderId);
   const { data: timeline } = useOrderTimeline(orderId);
-
+  const {addToCart,updateQuantity}=useCartStore()
+  // console.log(order);
+  // console.log(timeline);
 
   const cancelOrderMutation = useCancelOrder();
   const reorderMutation = useReorder();
@@ -63,9 +66,22 @@ export default function OrderDetailsScreen() {
   //   );
   // };
 
+  type ReorderItem = {
+    product_id: string;
+    quantity: number;
+    products: Product;
+  };
+   
   const handleReorder = () => {
     reorderMutation.mutate(orderId, {
-      onSuccess: () => {
+      onSuccess: (items: ReorderItem[]) => {
+        items.forEach(({ products, quantity }) => {
+          addToCart(products);
+          if (quantity > 1) {
+            updateQuantity(products.id, quantity - 1);
+          }
+        });
+  
         Alert.alert('Success', 'Items added to cart!', [
           {
             text: 'View Cart',
@@ -76,6 +92,7 @@ export default function OrderDetailsScreen() {
       },
     });
   };
+  
 
   const handleCallDeliveryBoy = () => {
     if (order?.delivery_boys) {
@@ -124,6 +141,7 @@ export default function OrderDetailsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
+        
       >
         {/* Order Status Timeline */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3">
@@ -194,8 +212,11 @@ export default function OrderDetailsScreen() {
             <View className="w-14 h-14 bg-gray-200 rounded-full mr-3 overflow-hidden">
               {order.vendors?.store_image ? (
                 <Image
-                  source={{ uri: order.vendors.store_image }}
-                  className="w-full h-full"
+                  source={order.vendors?.store_image}
+                  placeholder={{ blurhash: blurhash }}
+                  contentFit="cover"
+                  transition={1000}
+                  style={{ width: '100%', height: '100%' }}
                 />
               ) : (
                 <View className="w-full h-full items-center justify-center bg-green-100">
@@ -228,11 +249,14 @@ export default function OrderDetailsScreen() {
 
             <View className="flex-row items-center">
               {/* Avatar */}
-              <View className="w-14 h-14 bg-green-100 rounded-full items-center justify-center mr-3">
+              <View className="w-14 h-14 bg-green-100 rounded-full items-center justify-center mr-3 overflow-hidden">
                 {order.delivery_boys.profile_photo ? (
                   <Image
-                    source={{ uri: order.delivery_boys.profile_photo }}
-                    className="w-full h-full rounded-full"
+                    source={order.delivery_boys.profile_photo}
+                    placeholder={{ blurhash: blurhash }}
+                    contentFit="cover"
+                    transition={1000}
+                    style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
                   <Text style={{ fontSize: 24 }}>🚴</Text>

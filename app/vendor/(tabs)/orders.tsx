@@ -144,6 +144,8 @@ export default function VendorOrdersScreen() {
     };
   }, [stats]);
 
+  
+
   if (error) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center px-4">
@@ -165,8 +167,8 @@ export default function VendorOrdersScreen() {
       <VerificationGate
         isAdminVerified={verificationStatus.isAdminVerified}
         isKycVerified={verificationStatus.isKycVerified}
-        kycStatus={vendorData.kyc_status}
-        storeName={vendorData?.store_name}
+        kycStatus={vendorData?.kyc_status || 'pending'}
+        storeName={vendorData?.store_name || 'Store Name'}
         onKycPress={() => router.push('/vendor/profile/documents')}
       />
     )

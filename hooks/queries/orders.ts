@@ -54,6 +54,7 @@ export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus
           razorpay_payment_id,
           payment_method,
           payment_status,
+          status,
           total_amount,
           created_at,
           updated_at,
@@ -587,8 +588,8 @@ export function useOrderTimeline(orderId: string) {
       // Show as "Confirmed" when EITHER confirmed_at OR vendor_accepted_at exists
       timeline.push({
         status: 'Confirmed',
-        completed: !!data.confirmed_at || !!data.vendor_accepted_at,
-        timestamp: data.confirmed_at || data.vendor_accepted_at,
+        completed:  !!data.vendor_accepted_at,
+        timestamp:  data.vendor_accepted_at,
       });
 
       // Step 3: Preparing Order
@@ -1014,11 +1015,11 @@ export function useReorder() {
       // Get order items
       const { data: orderItems, error } = await supabase
         .from('order_items')
-        .select('product_id, quantity')
+        .select('product_id, quantity,products(*)')
         .eq('order_id', orderId);
 
       if (error) throw error;
-
+      
       // Return items to be added to cart
       // (Your cart logic will handle the actual addition)
       return orderItems;

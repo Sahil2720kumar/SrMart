@@ -167,7 +167,7 @@ export default function InventoryScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView  className="flex-1 bg-gray-50">
       {/* Header */}
       <View className="bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex-row items-center justify-between">
         <View className="flex-row items-center">

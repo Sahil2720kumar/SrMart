@@ -43,16 +43,16 @@ export default function CartScreen() {
     vendorCount,
     isCalculating: isCalculatingDelivery,
     isFreeDelivery,
-    
+
   } = useDeliveryFees({
-    subtotal:totalPrice,
+    subtotal: totalPrice,
     selectedAddress,
     hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
-    freeDeliveryMinimum:499
+    freeDeliveryMinimum: 499
   })
- 
+
   // console.log(activeDiscount);
-  
+
 
   const itemTotal = totalPrice
   const grandTotal = Math.max(itemTotal + totalDeliveryFee - discountAmount, 0)
@@ -86,13 +86,49 @@ export default function CartScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
         {/* Cart Items */}
         <View className="mb-4">
-          <FlatList
-            data={cartItems}
-            renderItem={({ item }) => <CartItemComp item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
-            keyExtractor={(item) => item.productId}
-            scrollEnabled={false}
-          />
+          {cartItems.length === 0 ? (
+            /* ---------- EMPTY CART ---------- */
+            <View className="items-center justify-center py-16 px-6 bg-white rounded-2xl border border-gray-100">
+              <Feather name="shopping-cart" size={56} color="#9ca3af" />
+
+              <Text className="text-xl font-bold text-gray-900 mt-4">
+                Your cart is empty
+              </Text>
+
+              <Text className="text-gray-500 text-sm text-center mt-2">
+                Looks like you haven’t added anything yet.
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => router.push('/customer')}
+                activeOpacity={0.8}
+                className="mt-6 bg-green-500 px-6 py-3 rounded-xl"
+              >
+                <Text className="text-white font-semibold text-sm">
+                  Start Shopping
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            /* ---------- CART ITEMS ---------- */
+            <FlatList
+              data={cartItems}
+              renderItem={({ item }) => (
+                <CartItemComp
+                  item={item}
+                  wishlist={wishlist}
+                  cart={cart}
+                  toggleWishlist={toggleWishlist}
+                  updateQuantity={updateQuantity}
+                  addToCart={addToCart}
+                />
+              )}
+              keyExtractor={(item) => item.productId}
+              scrollEnabled={false}
+            />
+          )}
         </View>
+
 
         {/* Before You Checkout */}
         <View className="px-4 mt-6 mb-4">

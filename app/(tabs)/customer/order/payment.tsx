@@ -570,7 +570,7 @@ export default function PaymentScreen() {
               onPress={() => {
                 setShowSuccess(false);
                 router.dismissAll();
-                router.replace("/(tabs)/customer/order/orders/");
+                router.replace("/(tabs)/customer/order/order-groups");
               }}
               className="bg-green-500 rounded-2xl py-4 items-center justify-center mb-3"
               activeOpacity={0.8}

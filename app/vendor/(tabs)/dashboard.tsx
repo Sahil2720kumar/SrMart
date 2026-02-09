@@ -89,7 +89,6 @@ export default function VendorDashboard() {
   // Shop open/close status
   const isOpen = vendorData?.is_open || false;
 
-  console.log('isOpen', isOpen);
 
   // Active orders (new, preparing, ready)
   const activeOrders = useMemo(() => {
@@ -193,8 +192,8 @@ export default function VendorDashboard() {
       <VerificationGate
         isAdminVerified={verificationStatus.isAdminVerified}
         isKycVerified={verificationStatus.isKycVerified}
-        kycStatus={vendorData.kyc_status}
-        storeName={vendorData?.store_name}
+        kycStatus={vendorData?.kyc_status || 'pending'}
+        storeName={vendorData?.store_name || 'Store Name'}
         onKycPress={() => router.push('/vendor/profile/documents')}
       />
     )
