@@ -271,7 +271,7 @@ export default function VendorEarningsScreen() {
   const recentCashouts = cashouts.data || [];
   const recentTransactions = transactions.data || [];
 
-  if (!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) {
+  if (verificationStatus.isAdminVerified || verificationStatus.isKycVerified) {
     return (
       <VerificationGate
         isAdminVerified={verificationStatus.isAdminVerified}

@@ -139,7 +139,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="flex-row flex-wrap items-center justify-center">
+          <View className="flex-row flex-wrap items-center justify-start">
             {categories.map((category) => (
               <CategoryItem key={category.id} item={category} />
             ))}

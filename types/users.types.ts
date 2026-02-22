@@ -146,7 +146,6 @@ export interface CustomerAddressWithCustomer extends CustomerAddress {
   } | null;
 }
 
-export type VehicleType = 'bike' | 'scooter' | 'bicycle' | 'car' | 'van';
 
 export type FuelType = 'petrol' | 'diesel' | 'electric' | 'cng';
 
