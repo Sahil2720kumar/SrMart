@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 import { ActivityIndicator, Text } from 'react-native';
+import Toast from 'react-native-toast-message'
 
 // Run this ONCE in your app to clear old data
 // import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -85,6 +86,7 @@ export default function Layout() {
               }}
             />
           </Stack>
+          <Toast />
         </BottomSheetModalProvider>
       </GestureHandlerRootView >
     </QueryClientProvider>

@@ -8,7 +8,6 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
@@ -25,6 +24,7 @@ import { useAuthStore } from "@/store/authStore"
 import { useCustomerProfile } from "@/hooks/queries"
 import { User } from "@/types/users.types"
 import { useProfileStore } from "@/store/profileStore"
+import Toast from "react-native-toast-message"
 
 
 export default function LoginScreen() {
@@ -116,31 +116,28 @@ export default function LoginScreen() {
       setSession(signInData.session);
       setUser(userData);
       setCustomerProfile(customerData);
+
+      Toast.show({
+        type: "success",
+        text1: "Welcome back! 👋",
+        text2: "Signed in successfully.",
+        position: "top",
+      });
   
       router.replace('/customer');
     } catch (error: any) {
       console.error('Sign in error:', error?.message);
   
-      Alert.alert(
-        'Login Failed',
-        error?.message || 'Invalid email or password'
-      );
+      Toast.show({
+        type: "error",
+        text1: "Login Failed",
+        text2: error?.message || "Invalid email or password.",
+        position: "top",
+      });
     } finally {
       setIsLoading(false);
     }
   };
-  
-
-  // const handleGoogleSignIn = async () => {
-  //   setIsGoogleLoading(true)
-  //   try {
-  //     // await onGoogleSignIn?.()
-  //   } catch (error) {
-  //     console.error("Google sign in error:", error)
-  //   } finally {
-  //     setIsGoogleLoading(false)
-  //   }
-  // }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -165,6 +162,7 @@ export default function LoginScreen() {
                 )
               })}
             </View>
+
             {/* Header Section */}
             <View className="items-center pt-8">
               <View className="absolute top-0 right-0 opacity-30">
@@ -181,36 +179,11 @@ export default function LoginScreen() {
               <Text className="text-gray-500 text-base mt-2 text-center">Fresh groceries, delivered to your door</Text>
             </View>
 
-
             {/* Form Section */}
             <View className="flex-1 justify-center py-8">
-              {/* Google Sign In Button */}
-              {/* <TouchableOpacity
-                onPress={handleGoogleSignIn}
-                disabled={isGoogleLoading}
-                className="flex-row items-center justify-center bg-white py-4 rounded-2xl mb-6 active:opacity-80 shadow-sm border border-gray-300"
-                activeOpacity={0.8}
-              >
-                {isGoogleLoading ? (
-                  <ActivityIndicator color="#000" />
-                ) : (
-                  <>
-                    <GoogleLogo />
-                    <Text className="text-gray-800 text-base font-semibold ml-3">Continue with Google</Text>
-                  </>
-                )}
-              </TouchableOpacity> */}
-
-              {/* Divider */}
-              {/* <View className="flex-row items-center my-6">
-                <View className="flex-1 h-px bg-gray-300" />
-                <Text className="text-gray-500 text-sm mx-4">or sign in with email</Text>
-                <View className="flex-1 h-px bg-gray-300" />
-              </View> */}
-
               {/* Email Input */}
               <View className="mb-4">
-                <Text className="text-gray-500 text-sm font-medium mb-2 ml-1">Phone</Text>
+                <Text className="text-gray-500 text-sm font-medium mb-2 ml-1">Email</Text>
                 <View
                   className={`flex-row items-center bg-white rounded-2xl px-4 border ${errors.email ? "border-red-400" : "border-gray-300"
                     }`}

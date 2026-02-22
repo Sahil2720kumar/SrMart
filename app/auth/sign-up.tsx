@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
-  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Redirect, Stack } from "expo-router"
@@ -31,6 +30,7 @@ import { UserRole } from "@/types/enums.types"
 import { useAuthStore } from "@/store/authStore"
 import { useProfileStore } from "@/store/profileStore"
 import { useFetchUser } from "@/hooks/queries"
+import Toast from "react-native-toast-message"
 
 
 export default function SignUpScreen() {
@@ -125,7 +125,12 @@ export default function SignUpScreen() {
   
       // If email confirmation is required
       if (!signupData.session) {
-        Alert.alert('Check Email', 'Please confirm your email to continue');
+        Toast.show({
+          type: "info",
+          text1: "Check Your Email",
+          text2: "Please confirm your email to continue.",
+          position: "top",
+        });
         return;
       }
   
@@ -170,15 +175,24 @@ export default function SignUpScreen() {
       /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
       setSession(signupData.session);
       setUser(userData);
+
+      Toast.show({
+        type: "success",
+        text1: "Account Created!",
+        text2: "Welcome to SrMart 🎉",
+        position: "top",
+      });
   
       router.replace(`/${userData.role}` as any);
     } catch (error: any) {
       console.error('Signup error:', error?.message);
   
-      Alert.alert(
-        'Signup Failed',
-        error?.message || 'Something went wrong. Please try again.'
-      );
+      Toast.show({
+        type: "error",
+        text1: "Signup Failed",
+        text2: error?.message || "Something went wrong. Please try again.",
+        position: "top",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -194,17 +208,6 @@ export default function SignUpScreen() {
     setShowPhoneModal(false)
     handleEmailSignUp()
   }
-
-  // const handleGoogleSignUp = async () => {
-  //   setIsGoogleLoading(true)
-  //   try {
-  //     // await onGoogleSignUp?.()
-  //   } catch (error) {
-  //     console.error("Google sign up error:", error)
-  //   } finally {
-  //     setIsGoogleLoading(false)
-  //   }
-  // }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -239,30 +242,6 @@ export default function SignUpScreen() {
               <Text className="text-black text-sm mt-1 text-center">Start saving on fresh groceries today</Text>
             </View>
 
-            {/* Google Sign Up Button */}
-            {/* <TouchableOpacity
-              onPress={handleGoogleSignUp}
-              disabled={isGoogleLoading}
-              className="flex-row items-center justify-center bg-white py-4 rounded-2xl mb-5 active:opacity-80 shadow-sm border border-gray-300"
-              activeOpacity={0.8}
-            >
-              {isGoogleLoading ? (
-                <ActivityIndicator color="#16a34a" />
-              ) : (
-                <>
-                  <GoogleLogo />
-                  <Text className="text-gray-800 text-base font-semibold ml-3">Continue with Google</Text>
-                </>
-              )}
-            </TouchableOpacity> */}
-
-            {/* Divider */}
-            {/* <View className="flex-row items-center my-4">
-              <View className="flex-1 h-px bg-emerald-800" />
-              <Text className="text-emerald-400 text-sm mx-4">or</Text>
-              <View className="flex-1 h-px bg-emerald-800" />
-            </View> */}
-
             {/* Name Input */}
             <View className="mb-3">
               <Text className="text-black text-sm font-medium mb-2 ml-1">Full Name</Text>
@@ -290,7 +269,7 @@ export default function SignUpScreen() {
             <View className="mb-3">
               <Text className="text-black text-sm font-medium mb-2 ml-1">Phone No.</Text>
               <View
-                className={`flex-row items-center bg-white rounded-2xl px-4 border ${errors.name ? "border-red-400" : "border-gray-300"
+                className={`flex-row items-center bg-white rounded-2xl px-4 border ${errors.phone ? "border-red-400" : "border-gray-300"
                   }`}
               >
                 <PhoneIcon />
@@ -303,7 +282,7 @@ export default function SignUpScreen() {
                   maxLength={10}
                   onChangeText={(text) => {
                     setPhoneNumber(text)
-                    if (errors.name) setErrors({ ...errors, phone: undefined })
+                    if (errors.phone) setErrors({ ...errors, phone: undefined })
                   }}
                   autoCapitalize="words"
                 />
@@ -460,16 +439,12 @@ export default function SignUpScreen() {
             {/* Modal Description */}
             <View className="text-center mb-4">
               <Text className="text-gray-600 text-sm leading-5 text-center">
-                {/* We will send the authentication code to */}
-              </Text>
-              <Text className="text-gray-600 text-sm leading-5 text-center">
                 the phone number you entered.
               </Text>
               <Text className="text-gray-600 text-sm leading-5 text-center">
                 Do you want continue?
               </Text>
             </View>
-
 
             {/* Phone Number */}
             <View className="mb-4">
@@ -492,13 +467,10 @@ export default function SignUpScreen() {
 
               <TouchableOpacity
                 onPress={handleConfirmPhone}
-
                 className="flex-1 bg-green-500 py-4 rounded-2xl items-center"
                 activeOpacity={0.8}
               >
-
                 <Text className="text-white text-base font-bold">Confirm</Text>
-
               </TouchableOpacity>
             </View>
 

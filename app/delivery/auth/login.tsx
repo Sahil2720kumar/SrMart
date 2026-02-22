@@ -8,14 +8,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase'; // adjust path if needed
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
+import Toast from 'react-native-toast-message';
 
 export default function DeliveryLoginScreen() {
   const router = useRouter();
@@ -23,8 +23,8 @@ export default function DeliveryLoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const {setSession}=useAuthStore()
-  const {setUser,setDeliveryBoyProfile}=useProfileStore()
+  const { setSession } = useAuthStore();
+  const { setUser, setDeliveryBoyProfile } = useProfileStore();
 
   const isValidEmail = /^\S+@\S+\.\S+$/.test(email);
   const canLogin = isValidEmail && password.length >= 6;
@@ -39,19 +39,16 @@ export default function DeliveryLoginScreen() {
     setError('');
 
     try {
-      /* -------- AUTH LOGIN -------- */
-      const { data, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
-          password,
-        });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
       if (authError) throw authError;
       if (!data.session) throw new Error('Login failed');
 
       const authUserId = data.user.id;
 
-      /* -------- FETCH USER -------- */
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -60,35 +57,37 @@ export default function DeliveryLoginScreen() {
 
       if (userError) throw userError;
 
-      /* 🚨 ROLE GUARD */
       if (userData.role !== 'delivery_boy') {
         throw new Error('This account is not a delivery partner');
       }
 
-      /* -------- FETCH DELIVERY PROFILE -------- */
-      const { data: deliveryProfile, error: deliveryError } =
-        await supabase
-          .from('delivery_boys')
-          .select('*')
-          .eq('user_id', authUserId)
-          .single();
+      const { data: deliveryProfile, error: deliveryError } = await supabase
+        .from('delivery_boys')
+        .select('*')
+        .eq('user_id', authUserId)
+        .single();
 
       if (deliveryError) throw deliveryError;
 
-      /* -------- SUCCESS -------- */
-
-      /* ---------------- COMMIT STATE (SAFE POINT) ---------------- */
       setSession(data.session);
       setUser(userData);
       setDeliveryBoyProfile(deliveryProfile);
 
+      Toast.show({
+        type: 'success',
+        text1: 'Welcome back! 👋',
+        text2: 'Signed in successfully.',
+        position: 'top',
+      });
+
       router.replace('/delivery/home');
- 
     } catch (err: any) {
-      Alert.alert(
-        'Login Failed',
-        err?.message || 'Invalid email or password'
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Login Failed',
+        text2: err?.message || 'Invalid email or password.',
+        position: 'top',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -96,25 +95,16 @@ export default function DeliveryLoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#4f46e5]">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
+        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }} keyboardShouldPersistTaps="handled">
+
           {/* Header */}
           <View className="items-center mt-12 mb-8">
             <View className="w-20 h-20 bg-white rounded-full items-center justify-center mb-4">
               <Feather name="package" size={40} color="#4f46e5" />
             </View>
-            <Text className="text-white text-3xl font-bold mb-2">
-              Delivery Login
-            </Text>
-            <Text className="text-indigo-200">
-              Sign in to start delivering
-            </Text>
+            <Text className="text-white text-3xl font-bold mb-2">Delivery Login</Text>
+            <Text className="text-indigo-200">Sign in to start delivering</Text>
           </View>
 
           {/* Form */}
@@ -126,10 +116,7 @@ export default function DeliveryLoginScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setError('');
-              }}
+              onChangeText={(text) => { setEmail(text); setError(''); }}
             />
 
             <Text className="text-gray-700 font-semibold mb-2">Password</Text>
@@ -138,10 +125,7 @@ export default function DeliveryLoginScreen() {
               placeholder="Enter password"
               secureTextEntry
               value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setError('');
-              }}
+              onChangeText={(text) => { setPassword(text); setError(''); }}
             />
 
             {error ? (
@@ -152,37 +136,22 @@ export default function DeliveryLoginScreen() {
             ) : null}
 
             <TouchableOpacity
-              className={`rounded-xl py-4 items-center ${
-                canLogin && !isLoading
-                  ? 'bg-[#4f46e5]'
-                  : 'bg-gray-300'
-              }`}
+              className={`rounded-xl py-4 items-center ${canLogin && !isLoading ? 'bg-[#4f46e5]' : 'bg-gray-300'}`}
               disabled={!canLogin || isLoading}
               onPress={handleLogin}
             >
-              {isLoading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-bold text-base">
-                  Login
-                </Text>
-              )}
+              {isLoading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-base">Login</Text>}
             </TouchableOpacity>
           </View>
 
           {/* Footer */}
           <View className="items-center mt-8">
-            <Text className="text-indigo-200 mb-2">
-              New delivery partner?
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/delivery/auth/signup')}
-            >
-              <Text className="text-white font-bold underline">
-                Create account
-              </Text>
+            <Text className="text-indigo-200 mb-2">New delivery partner?</Text>
+            <TouchableOpacity onPress={() => router.push('/delivery/auth/signup')}>
+              <Text className="text-white font-bold underline">Create account</Text>
             </TouchableOpacity>
           </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
