@@ -246,7 +246,7 @@ export default function LoginScreen() {
                 activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#000" />
+                  <ActivityIndicator color="#fff" />
                 ) : (
                   <Text className="text-white text-base font-bold">Sign In</Text>
                 )}

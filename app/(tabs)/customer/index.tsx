@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, FlatList, StatusBar, ActivityIndicator } from "react-native"
+import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StatusBar, ActivityIndicator } from "react-native"
 
 // Icons
 import { LocationIcon } from "@/assets/svgs/LocationIcon"
@@ -20,6 +20,8 @@ import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
 import { useCategories, useCustomerAddresses, useProducts } from "@/hooks/queries"
 import { FullPageError } from "@/components/ErrorComp"
+import { Image } from "expo-image"
+import { blurhash } from "@/types/categories-products.types"
 
 
 
@@ -44,7 +46,7 @@ export default function HomeScreen() {
     if (!selectedAddress && addresses.length > 0) {
       const defaultAddress =
         addresses.find(a => a.is_default) || addresses[0]
-  
+
       setSelectedAddress(defaultAddress)
     }
   }, [addresses])
@@ -55,8 +57,13 @@ export default function HomeScreen() {
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity onPress={() => router.push(`/customer/category/${item.id}`)} className="items-center w-[80px] mr-2 mb-4">
       <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
-        {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-[50px] h-[50px]" resizeMode="contain" /> */}
-        <SkeletonImage size="small" />
+        {item.image?<Image
+          source={item.image}
+          placeholder={{ blurhash: blurhash }}
+          contentFit="cover"
+          transition={1000}
+          style={{ width: '100%', height: '100%' }}
+        />:<SkeletonImage size="small"/>}
       </View>
       <Text className="text-xs text-gray-700 text-center leading-4">{item.name}</Text>
     </TouchableOpacity>
@@ -77,9 +84,9 @@ export default function HomeScreen() {
     )
   }
 
-  if (isErrorAddresses||isErrorCategories||isErrorProducts) {
-    return(
-      <FullPageError code="500"/>
+  if (isErrorAddresses || isErrorCategories || isErrorProducts) {
+    return (
+      <FullPageError code="500" />
     )
   }
 
