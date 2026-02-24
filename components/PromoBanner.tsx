@@ -11,7 +11,7 @@ import {
 import { Image } from "expo-image"
 import { router } from "expo-router"
 import { blurhash } from "@/types/categories-products.types"
-import type { Offer } from "@/hooks/queries/useOffers"
+import { Offer } from "@/types/offers.types"
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window")
 const BANNER_WIDTH = SCREEN_WIDTH - 32 // px-4 on each side
@@ -44,13 +44,7 @@ export default function PromoBanner({ offers, isLoading }: Props) {
   }, [offers.length])
 
   const handleBannerPress = (offer: Offer) => {
-    if (offer.applicable_to === "category" && offer.applicable_id) {
-      router.push(`/customer/category/${offer.applicable_id}`)
-    } else if (offer.applicable_to === "product" && offer.applicable_id) {
-      router.push(`/customer/product/${offer.applicable_id}`)
-    } else {
-      router.navigate("/(tabs)/customer/offers/1")
-    }
+    router.push(`/customer/offers/${offer.id}`)
   }
 
   // Loading skeleton
