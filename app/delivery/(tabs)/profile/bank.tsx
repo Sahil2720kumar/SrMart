@@ -7,7 +7,6 @@ import {
   TextInput,
   Modal,
   Pressable,
-  Alert,
   Image,
   ActivityIndicator,
 } from 'react-native';
@@ -28,20 +27,18 @@ import {
   BankDetailsInput,
 } from '@/hooks/queries/useDeliveryBoy';
 import { BankAccountType, BankVerificationStatus } from '@/types/payments-wallets.types';
+import Toast from 'react-native-toast-message';
 
 export default function DeliveryBoyBankDetailsScreen() {
   const router = useRouter();
   const session = useAuthStore((state) => state.session);
   const userId = session?.user?.id;
-  const userType = 'delivery_boy'; // Delivery boy user type
+  const userType = 'delivery_boy';
 
   // Queries
   const { data: bankDetails, isLoading: isBankLoading } = useDeliveryBoyBankDetails(userId || '');
   const { data: kycPassbook, isLoading: isPassbookLoading } = useKycBankPassbook(userId || '');
 
-  // console.log('bankDetails',bankDetails?.proof_image);
-  // console.log("kyc ",kycPassbook.document_url);
-   
   // Mutations
   const addBankMutation = useAddDeliveryBoyBankDetails();
   const updateBankMutation = useUpdateDeliveryBoyBankDetails();
@@ -52,6 +49,7 @@ export default function DeliveryBoyBankDetailsScreen() {
   const [showAccountTypeDropdown, setShowAccountTypeDropdown] = useState(false);
   const [uploadModal, setUploadModal] = useState(false);
   const [showAccountNumber, setShowAccountNumber] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<BankDetailsInput>({
     account_holder_name: '',
     bank_name: '',
@@ -79,7 +77,6 @@ export default function DeliveryBoyBankDetailsScreen() {
         proof_image: bankDetails.proof_image || kycPassbook?.document_url || '',
       });
     } else if (kycPassbook?.document_url) {
-      // If no bank details but passbook exists, set the image
       setFormData((prev) => ({
         ...prev,
         proof_image: kycPassbook.document_url,
@@ -147,7 +144,12 @@ export default function DeliveryBoyBankDetailsScreen() {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Camera permission is required');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission needed',
+            text2: 'Camera permission is required',
+            position: 'top',
+          });
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -159,7 +161,12 @@ export default function DeliveryBoyBankDetailsScreen() {
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Gallery permission is required');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission needed',
+            text2: 'Gallery permission is required',
+            position: 'top',
+          });
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
@@ -172,71 +179,97 @@ export default function DeliveryBoyBankDetailsScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        
-        // Read file as base64
+
         const localFile = new File(imageUri);
         const base64 = await localFile.base64();
 
-        // Upload to storage - will replace existing KYC document if exists
         uploadProofMutation.mutate(
           {
             imageUri,
             base64,
             userId: userId || '',
-            userType: userType, // Pass delivery_boy user type
+            userType: userType,
           },
           {
             onSuccess: (data) => {
               setFormData({ ...formData, proof_image: data.documentUrl });
               setUploadModal(false);
-              Alert.alert(
-                'Success',
-                data.isUpdate
+              Toast.show({
+                type: 'success',
+                text1: data.isUpdate
                   ? 'Bank proof updated successfully'
-                  : 'Bank proof uploaded successfully'
-              );
+                  : 'Bank proof uploaded successfully',
+                position: 'top',
+              });
             },
             onError: (error: any) => {
-              Alert.alert('Upload Failed', error.message);
+              Toast.show({
+                type: 'error',
+                text1: 'Upload Failed',
+                text2: error.message,
+                position: 'top',
+              });
             },
           }
         );
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to upload image');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to upload image',
+        position: 'top',
+      });
     }
   };
 
   const handleSave = async () => {
-    // Validation
     if (
       !formData.account_holder_name ||
       !formData.bank_name ||
       !formData.account_number ||
       !formData.ifsc_code
     ) {
-      Alert.alert('Validation Error', 'Please fill all required fields');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fill all required fields',
+        position: 'top',
+      });
       return;
     }
 
     if (!validateIFSC(formData.ifsc_code)) {
-      Alert.alert('Validation Error', 'Invalid IFSC code format');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Invalid IFSC code format',
+        position: 'top',
+      });
       return;
     }
 
     if (formData.account_number.length < 8 || formData.account_number.length > 18) {
-      Alert.alert('Validation Error', 'Account number must be between 8 and 18 digits');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Account number must be between 8 and 18 digits',
+        position: 'top',
+      });
       return;
     }
 
     if (!formData.proof_image) {
-      Alert.alert('Validation Error', 'Please upload bank proof document');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please upload bank proof document',
+        position: 'top',
+      });
       return;
     }
 
-    // Add or Update
     if (bankDetails) {
-      // Update existing
       updateBankMutation.mutate(
         {
           id: bankDetails.id,
@@ -245,15 +278,23 @@ export default function DeliveryBoyBankDetailsScreen() {
         },
         {
           onSuccess: () => {
-            Alert.alert('Success', 'Bank details updated successfully');
+            Toast.show({
+              type: 'success',
+              text1: 'Bank details updated successfully',
+              position: 'top',
+            });
           },
           onError: (error: any) => {
-            Alert.alert('Update Failed', error.message);
+            Toast.show({
+              type: 'error',
+              text1: 'Update Failed',
+              text2: error.message,
+              position: 'top',
+            });
           },
         }
       );
     } else {
-      // Add new
       addBankMutation.mutate(
         {
           delivery_boy_id: userId || '',
@@ -261,10 +302,19 @@ export default function DeliveryBoyBankDetailsScreen() {
         },
         {
           onSuccess: () => {
-            Alert.alert('Success', 'Bank account added successfully');
+            Toast.show({
+              type: 'success',
+              text1: 'Bank account added successfully',
+              position: 'top',
+            });
           },
           onError: (error: any) => {
-            Alert.alert('Add Failed', error.message);
+            Toast.show({
+              type: 'error',
+              text1: 'Add Failed',
+              text2: error.message,
+              position: 'top',
+            });
           },
         }
       );
@@ -273,43 +323,45 @@ export default function DeliveryBoyBankDetailsScreen() {
 
   const handleDelete = () => {
     if (!bankDetails) return;
+    setShowDeleteConfirm(true);
+  };
 
-    Alert.alert(
-      'Confirm Delete',
-      'Removing your bank account will disable payouts until a new account is verified. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteBankMutation.mutate(
-              {
-                id: bankDetails.id,
-                delivery_boy_id: userId || '',
-              },
-              {
-                onSuccess: () => {
-                  setFormData({
-                    account_holder_name: '',
-                    bank_name: '',
-                    account_number: '',
-                    ifsc_code: '',
-                    account_type: 'savings',
-                    branch: '',
-                    upi_id: '',
-                    proof_image: '',
-                  });
-                  Alert.alert('Success', 'Bank account removed successfully');
-                },
-                onError: (error: any) => {
-                  Alert.alert('Delete Failed', error.message);
-                },
-              }
-            );
-          },
+  const handleConfirmDelete = () => {
+    if (!bankDetails) return;
+    setShowDeleteConfirm(false);
+
+    deleteBankMutation.mutate(
+      {
+        id: bankDetails.id,
+        delivery_boy_id: userId || '',
+      },
+      {
+        onSuccess: () => {
+          setFormData({
+            account_holder_name: '',
+            bank_name: '',
+            account_number: '',
+            ifsc_code: '',
+            account_type: 'savings',
+            branch: '',
+            upi_id: '',
+            proof_image: '',
+          });
+          Toast.show({
+            type: 'success',
+            text1: 'Bank account removed successfully',
+            position: 'top',
+          });
         },
-      ]
+        onError: (error: any) => {
+          Toast.show({
+            type: 'error',
+            text1: 'Delete Failed',
+            text2: error.message,
+            position: 'top',
+          });
+        },
+      }
     );
   };
 
@@ -360,11 +412,7 @@ export default function DeliveryBoyBankDetailsScreen() {
               <Text className="text-sm text-gray-600 mb-2">
                 {getStatusMessage(currentStatus)}
               </Text>
-              <View
-                className={`self-start px-3 py-1 rounded-full ${
-                  getStatusBadge(currentStatus).bg
-                }`}
-              >
+              <View className={`self-start px-3 py-1 rounded-full ${getStatusBadge(currentStatus).bg}`}>
                 <Text className={`text-xs font-medium ${getStatusBadge(currentStatus).text}`}>
                   {getStatusBadge(currentStatus).label}
                 </Text>
@@ -386,8 +434,8 @@ export default function DeliveryBoyBankDetailsScreen() {
           </View>
         )}
 
-      {/* Bank Account Form */}
-      <View className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+        {/* Bank Account Form */}
+        <View className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <Text className="font-bold text-gray-900 text-lg mb-4">
             {bankDetails ? 'Update Bank Account' : 'Add Bank Account'}
           </Text>
@@ -434,10 +482,7 @@ export default function DeliveryBoyBankDetailsScreen() {
                     : maskAccountNumber(formData.account_number)
                 }
                 onChangeText={(text) =>
-                  setFormData({
-                    ...formData,
-                    account_number: text.replace(/[^0-9]/g, ''),
-                  })
+                  setFormData({ ...formData, account_number: text.replace(/[^0-9]/g, '') })
                 }
                 keyboardType="numeric"
                 maxLength={18}
@@ -496,10 +541,7 @@ export default function DeliveryBoyBankDetailsScreen() {
                     key={type.value}
                     className="px-4 py-3 border-b border-gray-100 active:bg-gray-50"
                     onPress={() => {
-                      setFormData({
-                        ...formData,
-                        account_type: type.value as BankAccountType,
-                      });
+                      setFormData({ ...formData, account_type: type.value as BankAccountType });
                       setShowAccountTypeDropdown(false);
                     }}
                   >
@@ -548,7 +590,6 @@ export default function DeliveryBoyBankDetailsScreen() {
             Upload cancelled cheque or bank passbook front page.
           </Text>
 
-          {/* Show info if using KYC passbook */}
           {kycPassbook?.document_url && formData.proof_image === kycPassbook.document_url && (
             <View className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3 flex-row items-center gap-2">
               <Feather name="info" size={16} color="#3b82f6" />
@@ -697,6 +738,44 @@ export default function DeliveryBoyBankDetailsScreen() {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteConfirm(false)}
+      >
+        <View className="flex-1 bg-black/50 items-center justify-center px-6">
+          <View className="bg-white rounded-2xl p-6 w-full">
+            <View className="w-14 h-14 bg-red-100 rounded-full items-center justify-center mb-4 self-center">
+              <Feather name="trash-2" size={28} color="#dc2626" />
+            </View>
+            <Text className="text-lg font-bold text-gray-900 text-center mb-2">
+              Remove Bank Account?
+            </Text>
+            <Text className="text-sm text-gray-600 text-center mb-6">
+              Removing your bank account will disable payouts until a new account is verified.
+            </Text>
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 rounded-xl border-2 border-gray-200 items-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-gray-700 font-semibold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmDelete}
+                className="flex-1 py-3 rounded-xl bg-red-500 items-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-white font-bold">Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

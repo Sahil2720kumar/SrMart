@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
 export default function VendorPrivacyPolicyScreen() {
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
@@ -20,11 +21,21 @@ export default function VendorPrivacyPolicyScreen() {
   };
 
   const handleDownload = () => {
-    Alert.alert('Download', 'Downloading Privacy Policy PDF...');
+    Toast.show({
+      type: 'info',
+      text1: 'Downloading...',
+      text2: 'Privacy Policy PDF is being prepared.',
+      position: 'top',
+    });
   };
 
   const handleShare = () => {
-    Alert.alert('Share', 'Sharing Privacy Policy...');
+    Toast.show({
+      type: 'info',
+      text1: 'Share',
+      text2: 'Opening share options...',
+      position: 'top',
+    });
   };
 
   const toggleSection = (sectionId: string) => {

@@ -7,7 +7,6 @@ import {
   TextInput,
   Modal,
   Pressable,
-  Alert,
   Image,
   ActivityIndicator,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { AntDesign, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
 type VehicleStatus = 'not_added' | 'pending' | 'approved' | 'rejected';
 type VehicleType = 'bike' | 'scooter' | 'car' | 'bicycle';
@@ -66,7 +66,7 @@ export default function VehicleDetailsScreen() {
   );
 
   const vehicleTypes = [
-    { value: 'bike', label: 'Bike', icon: <MaterialCommunityIcons name="motorbike"size={20} color="#4f46e5" /> },
+    { value: 'bike', label: 'Bike', icon: <MaterialCommunityIcons name="motorbike" size={20} color="#4f46e5" /> },
     { value: 'scooter', label: 'Scooter', icon: <MaterialCommunityIcons name="motorbike" size={20} color="#4f46e5" /> },
     { value: 'car', label: 'Car', icon: <AntDesign name="car" size={20} color="#4f46e5" /> },
     { value: 'bicycle', label: 'Bicycle', icon: <MaterialCommunityIcons name="bicycle" size={20} color="#4f46e5" /> },
@@ -120,9 +120,9 @@ export default function VehicleDetailsScreen() {
 
   const getVehicleIcon = (type: VehicleType) => {
     const icons = {
-      bike:<MaterialCommunityIcons name="motorbike" size={32} color="#4f46e5" />,
-      scooter:<MaterialCommunityIcons name="motorbike" size={32} color="#4f46e5" />,
-      car:<AntDesign name="car"size={32} color="#4f46e5" />,
+      bike: <MaterialCommunityIcons name="motorbike" size={32} color="#4f46e5" />,
+      scooter: <MaterialCommunityIcons name="motorbike" size={32} color="#4f46e5" />,
+      car: <AntDesign name="car" size={32} color="#4f46e5" />,
       bicycle: <MaterialCommunityIcons name="bicycle" size={32} color="#4f46e5" />,
     };
     return icons[type];
@@ -135,7 +135,12 @@ export default function VehicleDetailsScreen() {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Camera permission is required');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Needed',
+            text2: 'Camera permission is required.',
+            position: 'top',
+          });
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -147,11 +152,16 @@ export default function VehicleDetailsScreen() {
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Gallery permission is required');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Needed',
+            text2: 'Gallery permission is required.',
+            position: 'top',
+          });
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes:['images'],
+          mediaTypes: ['images'],
           allowsEditing: true,
           aspect: [4, 3],
           quality: 0.8,
@@ -163,67 +173,83 @@ export default function VehicleDetailsScreen() {
         setUploadModal(false);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to upload image.',
+        position: 'top',
+      });
     }
   };
 
   const handleSave = async () => {
-    // Validation
     if (!formData.number || !formData.brand || !formData.color || !formData.rcNumber) {
-      Alert.alert('Validation Error', 'Please fill all required fields');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fill all required fields.',
+        position: 'top',
+      });
       return;
     }
 
     if (!formData.rcImage) {
-      Alert.alert('Validation Error', 'Please upload RC image');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please upload RC image.',
+        position: 'top',
+      });
       return;
     }
 
     setLoading(true);
     // Simulate API call
     setTimeout(() => {
-      setVehicle({
-        ...formData,
-        status: 'pending',
-      });
+      setVehicle({ ...formData, status: 'pending' });
       setLoading(false);
-      Alert.alert('Success', vehicle ? 'Vehicle details updated successfully' : 'Vehicle added successfully');
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: vehicle
+          ? 'Vehicle details updated successfully.'
+          : 'Vehicle added successfully.',
+        position: 'top',
+      });
     }, 1500);
   };
 
   const handleDelete = () => {
     if (vehicle?.status === 'approved') {
-      Alert.alert(
-        'Cannot Delete',
-        'Approved vehicles cannot be deleted. You can edit to update details.'
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Cannot Delete',
+        text2: 'Approved vehicles cannot be deleted. You can edit to update details.',
+        position: 'top',
+      });
       return;
     }
+    setDeleteModal(true);
+  };
 
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to remove this vehicle?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setVehicle(null);
-            setFormData({
-              type: 'bike',
-              number: '',
-              brand: '',
-              color: '',
-              fuelType: 'petrol',
-              rcNumber: '',
-              rcImage: null,
-            });
-            setDeleteModal(false);
-          },
-        },
-      ]
-    );
+  const confirmDelete = () => {
+    setVehicle(null);
+    setFormData({
+      type: 'bike',
+      number: '',
+      brand: '',
+      color: '',
+      fuelType: 'petrol',
+      rcNumber: '',
+      rcImage: null,
+    });
+    setDeleteModal(false);
+    Toast.show({
+      type: 'success',
+      text1: 'Vehicle Removed',
+      text2: 'Your vehicle has been removed successfully.',
+      position: 'top',
+    });
   };
 
   const currentStatus = vehicle?.status || 'not_added';
@@ -261,14 +287,8 @@ export default function VehicleDetailsScreen() {
               <Text className="text-sm text-gray-600 mb-2">
                 {getStatusMessage(currentStatus)}
               </Text>
-              <View
-                className={`self-start px-3 py-1 rounded-full ${
-                  getStatusBadge(currentStatus).bg
-                }`}
-              >
-                <Text
-                  className={`text-xs font-medium ${getStatusBadge(currentStatus).text}`}
-                >
+              <View className={`self-start px-3 py-1 rounded-full ${getStatusBadge(currentStatus).bg}`}>
+                <Text className={`text-xs font-medium ${getStatusBadge(currentStatus).text}`}>
                   {getStatusBadge(currentStatus).label}
                 </Text>
               </View>
@@ -282,9 +302,7 @@ export default function VehicleDetailsScreen() {
             <View className="flex-row items-start gap-3">
               <Feather name='alert-circle' size={20} color="#dc2626" />
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-red-900 mb-1">
-                  Admin Feedback
-                </Text>
+                <Text className="text-sm font-semibold text-red-900 mb-1">Admin Feedback</Text>
                 <Text className="text-sm text-red-800">{vehicle.rejectionReason}</Text>
               </View>
             </View>
@@ -343,9 +361,7 @@ export default function VehicleDetailsScreen() {
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., MH12AB1234"
               value={formData.number}
-              onChangeText={(text) =>
-                setFormData({ ...formData, number: text.toUpperCase() })
-              }
+              onChangeText={(text) => setFormData({ ...formData, number: text.toUpperCase() })}
               autoCapitalize="characters"
               maxLength={15}
             />
@@ -419,9 +435,7 @@ export default function VehicleDetailsScreen() {
               className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900"
               placeholder="e.g., RC1234567890"
               value={formData.rcNumber}
-              onChangeText={(text) =>
-                setFormData({ ...formData, rcNumber: text.toUpperCase() })
-              }
+              onChangeText={(text) => setFormData({ ...formData, rcNumber: text.toUpperCase() })}
               autoCapitalize="characters"
             />
           </View>
@@ -432,9 +446,7 @@ export default function VehicleDetailsScreen() {
           <Text className="font-semibold text-gray-900 text-base mb-2">
             RC Document <Text className="text-red-500">*</Text>
           </Text>
-          <Text className="text-sm text-gray-600 mb-3">
-            Upload a clear image of your RC.
-          </Text>
+          <Text className="text-sm text-gray-600 mb-3">Upload a clear image of your RC.</Text>
 
           {formData.rcImage ? (
             <View>
@@ -467,9 +479,7 @@ export default function VehicleDetailsScreen() {
         <View className="mb-6">
           <TouchableOpacity
             className={`py-4 rounded-xl flex-row items-center justify-center gap-2 ${
-              isFormValid && !loading
-                ? 'bg-[#4f46e5]'
-                : 'bg-gray-300'
+              isFormValid && !loading ? 'bg-[#4f46e5]' : 'bg-gray-300'
             }`}
             onPress={handleSave}
             disabled={!isFormValid || loading}
@@ -492,9 +502,7 @@ export default function VehicleDetailsScreen() {
               onPress={handleDelete}
             >
               <Feather name='trash-2' size={20} color="#dc2626" />
-              <Text className="text-red-600 font-semibold text-base">
-                Remove Vehicle
-              </Text>
+              <Text className="text-red-600 font-semibold text-base">Remove Vehicle</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -535,10 +543,8 @@ export default function VehicleDetailsScreen() {
               className="bg-indigo-100 py-4 rounded-xl flex-row items-center justify-center gap-3 mb-3"
               onPress={() => handleImagePicker('gallery')}
             >
-              <Feather  name='image' size={24} color="#4f46e5" />
-              <Text className="text-[#4f46e5] font-semibold text-base">
-                Choose from Gallery
-              </Text>
+              <Feather name='image' size={24} color="#4f46e5" />
+              <Text className="text-[#4f46e5] font-semibold text-base">Choose from Gallery</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -546,6 +552,45 @@ export default function VehicleDetailsScreen() {
               onPress={() => setUploadModal(false)}
             >
               <Text className="text-gray-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteModal(false)}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => setDeleteModal(false)}
+        >
+          <Pressable className="bg-white rounded-3xl p-6 w-full">
+            <View className="items-center mb-5">
+              <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-3">
+                <Feather name='trash-2' size={30} color="#dc2626" />
+              </View>
+              <Text className="text-xl font-bold text-gray-900 mb-2">Remove Vehicle?</Text>
+              <Text className="text-sm text-gray-500 text-center leading-5">
+                Are you sure you want to remove this vehicle? This action cannot be undone.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="bg-red-500 py-4 rounded-xl items-center justify-center mb-3"
+              onPress={confirmDelete}
+            >
+              <Text className="text-white font-bold text-base">Yes, Remove</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
+              onPress={() => setDeleteModal(false)}
+            >
+              <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

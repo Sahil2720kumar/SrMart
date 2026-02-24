@@ -803,6 +803,8 @@ export function useProductDetail(productId: string) {
   });
 }
 
+
+const limit = 8;
 export function useInfiniteProducts(filters?: {
   categoryId?: string;
   subCategoryId?: string;
@@ -815,10 +817,10 @@ export function useInfiniteProducts(filters?: {
   return useInfiniteQuery({
     queryKey: queryKeys.products.list(filters),
     queryFn: async ({ pageParam = 0 }) => {
-      const limit = 20;
+      
       const from = pageParam * limit;
       const to = from + limit - 1;
-
+ 
       let query = supabase
         .from('products')
         .select('*, vendors(store_name, store_image), categories(name, slug)')
@@ -849,7 +851,7 @@ export function useInfiniteProducts(filters?: {
       return data as Product[];
     },
     getNextPageParam: (lastPage, allPages) => {
-      return lastPage.length === 20 ? allPages.length : undefined;
+      return lastPage.length === limit ? allPages.length : undefined;
     },
     initialPageParam: 0,
   });

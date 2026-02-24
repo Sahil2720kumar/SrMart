@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -7,12 +7,96 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+
+// ─── Reusable Confirmation Modal ─────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmDestructive?: boolean;
+  icon?: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmDestructive = false,
+  icon,
+  onConfirm,
+  onCancel,
+}: ConfirmModalProps) {
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable className="bg-white w-full rounded-2xl overflow-hidden" onPress={() => {}}>
+          <View className="items-center pt-6 pb-2">
+            <View
+              className={`w-14 h-14 rounded-full items-center justify-center mb-3 ${
+                confirmDestructive ? 'bg-red-100' : 'bg-emerald-100'
+              }`}
+            >
+              {icon ?? (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={28}
+                  color={confirmDestructive ? '#dc2626' : '#10b981'}
+                />
+              )}
+            </View>
+            <Text className="text-lg font-bold text-gray-900 text-center px-4">{title}</Text>
+          </View>
+
+          <Text className="text-sm text-gray-500 text-center px-6 pb-6 mt-1">{message}</Text>
+
+          <View className="border-t border-gray-100 flex-row">
+            <TouchableOpacity
+              onPress={onCancel}
+              className="flex-1 py-4 items-center border-r border-gray-100"
+            >
+              <Text className="text-base font-semibold text-gray-600">{cancelLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onConfirm} className="flex-1 py-4 items-center">
+              <Text
+                className={`text-base font-bold ${
+                  confirmDestructive ? 'text-red-600' : 'text-emerald-600'
+                }`}
+              >
+                {confirmLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ResetPasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
@@ -21,11 +105,12 @@ export default function ResetPasswordScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
 
   // Password strength checker
   const getPasswordStrength = (password: string) => {
     if (!password) return { strength: 0, label: '', color: '' };
-    
+
     let strength = 0;
     if (password.length >= 8) strength++;
     if (password.length >= 12) strength++;
@@ -64,27 +149,27 @@ export default function ResetPasswordScreen() {
 
   const handleResetPassword = async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please check all fields and try again');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please check all fields and try again.',
+        position: 'top',
+      });
       return;
     }
 
     setIsLoading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('[v0] Password reset successful');
-      
-      Alert.alert(
-        'Success!',
-        'Your password has been reset successfully. Please login with your new password.',
-        [
-          {
-            text: 'Login Now',
-            onPress: () => router.replace('/vendor/auth/login'),
-          },
-        ]
-      );
+      // Show success modal instead of Alert
+      setSuccessModalVisible(true);
     } catch (error) {
-      Alert.alert('Error', 'Failed to reset password. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Reset Failed',
+        text2: 'Failed to reset password. Please try again.',
+        position: 'top',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +180,22 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gradient-to-b from-emerald-50 to-white">
+    <SafeAreaView className="flex-1 bg-white">
+      {/* Success Modal */}
+      <ConfirmModal
+        visible={successModalVisible}
+        title="Password Reset!"
+        message="Your password has been reset successfully. Please login with your new password."
+        confirmLabel="Login Now"
+        cancelLabel="Stay"
+        icon={<Ionicons name="lock-closed" size={28} color="#10b981" />}
+        onConfirm={() => {
+          setSuccessModalVisible(false);
+          router.replace('/vendor/auth/login');
+        }}
+        onCancel={() => setSuccessModalVisible(false)}
+      />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
@@ -131,11 +231,15 @@ export default function ResetPasswordScreen() {
               {/* New Password */}
               <View>
                 <Text className="text-gray-700 font-semibold text-sm mb-2">New Password</Text>
-                <View className="flex-row items-center bg-white border border-gray-300 rounded-xl px-4 py-1">
+                <View
+                  className={`flex-row items-center bg-white border rounded-xl px-4 py-1 ${
+                    errors.newPassword ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                >
                   <Feather name="lock" size={20} color="#6b7280" />
                   <TextInput
                     value={newPassword}
-                    onChangeText={(text) => {
+                    onChangeText={text => {
                       setNewPassword(text);
                       if (errors.newPassword) setErrors({ ...errors, newPassword: '' });
                     }}
@@ -145,7 +249,11 @@ export default function ResetPasswordScreen() {
                     placeholderTextColor="#9ca3af"
                   />
                   <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
-                    <Feather name={showNewPassword ? 'eye' : 'eye-off'} size={20} color="#6b7280" />
+                    <Feather
+                      name={showNewPassword ? 'eye' : 'eye-off'}
+                      size={20}
+                      color="#6b7280"
+                    />
                   </TouchableOpacity>
                 </View>
                 {errors.newPassword && (
@@ -160,15 +268,12 @@ export default function ResetPasswordScreen() {
                   <View className="mt-3">
                     <View className="flex-row items-center justify-between mb-2">
                       <Text className="text-gray-600 text-xs font-medium">Password Strength</Text>
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: passwordStrength.color }}
-                      >
+                      <Text className="text-xs font-bold" style={{ color: passwordStrength.color }}>
                         {passwordStrength.label}
                       </Text>
                     </View>
                     <View className="flex-row gap-1">
-                      {[1, 2, 3, 4, 5].map((level) => (
+                      {[1, 2, 3, 4, 5].map(level => (
                         <View
                           key={level}
                           className="flex-1 h-2 rounded-full"
@@ -188,11 +293,15 @@ export default function ResetPasswordScreen() {
               {/* Confirm Password */}
               <View>
                 <Text className="text-gray-700 font-semibold text-sm mb-2">Confirm Password</Text>
-                <View className="flex-row items-center bg-white border border-gray-300 rounded-xl px-4 py-1">
+                <View
+                  className={`flex-row items-center bg-white border rounded-xl px-4 py-1 ${
+                    errors.confirmPassword ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                >
                   <Feather name="lock" size={20} color="#6b7280" />
                   <TextInput
                     value={confirmPassword}
-                    onChangeText={(text) => {
+                    onChangeText={text => {
                       setConfirmPassword(text);
                       if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
                     }}
@@ -202,28 +311,38 @@ export default function ResetPasswordScreen() {
                     placeholderTextColor="#9ca3af"
                   />
                   <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                    <Feather name={showConfirmPassword ? 'eye' : 'eye-off'} size={20} color="#6b7280" />
+                    <Feather
+                      name={showConfirmPassword ? 'eye' : 'eye-off'}
+                      size={20}
+                      color="#6b7280"
+                    />
                   </TouchableOpacity>
                 </View>
                 {errors.confirmPassword && (
                   <View className="flex-row items-center gap-2 mt-2">
                     <Feather name="alert-circle" size={16} color="#dc2626" />
-                    <Text className="text-red-600 text-xs font-medium">{errors.confirmPassword}</Text>
+                    <Text className="text-red-600 text-xs font-medium">
+                      {errors.confirmPassword}
+                    </Text>
                   </View>
                 )}
-                
+
                 {/* Match Indicator */}
                 {confirmPassword.length > 0 && (
                   <View className="flex-row items-center gap-2 mt-2">
                     {newPassword === confirmPassword ? (
                       <>
                         <Feather name="check-circle" size={16} color="#10b981" />
-                        <Text className="text-emerald-600 text-xs font-medium">Passwords match</Text>
+                        <Text className="text-emerald-600 text-xs font-medium">
+                          Passwords match
+                        </Text>
                       </>
                     ) : (
                       <>
                         <Feather name="x-circle" size={16} color="#dc2626" />
-                        <Text className="text-red-600 text-xs font-medium">Passwords don't match</Text>
+                        <Text className="text-red-600 text-xs font-medium">
+                          Passwords don't match
+                        </Text>
                       </>
                     )}
                   </View>
@@ -236,38 +355,33 @@ export default function ResetPasswordScreen() {
                   Password Requirements:
                 </Text>
                 <View className="space-y-2">
-                  <View className="flex-row items-center gap-2">
-                    <Feather
-                      name={newPassword.length >= 8 ? 'check-circle' : 'circle'}
-                      size={16}
-                      color={newPassword.length >= 8 ? '#10b981' : '#9ca3af'}
-                    />
-                    <Text className="text-blue-800 text-xs">At least 8 characters</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Feather
-                      name={/[A-Z]/.test(newPassword) ? 'check-circle' : 'circle'}
-                      size={16}
-                      color={/[A-Z]/.test(newPassword) ? '#10b981' : '#9ca3af'}
-                    />
-                    <Text className="text-blue-800 text-xs">One uppercase letter</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Feather
-                      name={/[a-z]/.test(newPassword) ? 'check-circle' : 'circle'}
-                      size={16}
-                      color={/[a-z]/.test(newPassword) ? '#10b981' : '#9ca3af'}
-                    />
-                    <Text className="text-blue-800 text-xs">One lowercase letter</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Feather
-                      name={/\d/.test(newPassword) ? 'check-circle' : 'circle'}
-                      size={16}
-                      color={/\d/.test(newPassword) ? '#10b981' : '#9ca3af'}
-                    />
-                    <Text className="text-blue-800 text-xs">One number</Text>
-                  </View>
+                  {[
+                    {
+                      met: newPassword.length >= 8,
+                      label: 'At least 8 characters',
+                    },
+                    {
+                      met: /[A-Z]/.test(newPassword),
+                      label: 'One uppercase letter',
+                    },
+                    {
+                      met: /[a-z]/.test(newPassword),
+                      label: 'One lowercase letter',
+                    },
+                    {
+                      met: /\d/.test(newPassword),
+                      label: 'One number',
+                    },
+                  ].map(({ met, label }) => (
+                    <View key={label} className="flex-row items-center gap-2">
+                      <Feather
+                        name={met ? 'check-circle' : 'circle'}
+                        size={16}
+                        color={met ? '#10b981' : '#9ca3af'}
+                      />
+                      <Text className="text-blue-800 text-xs">{label}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
             </View>
@@ -300,7 +414,8 @@ export default function ResetPasswordScreen() {
                       Keep Your Account Safe
                     </Text>
                     <Text className="text-amber-800 text-xs leading-5">
-                      Choose a unique password that you don't use anywhere else. Never share your password with anyone.
+                      Choose a unique password that you don't use anywhere else. Never share your
+                      password with anyone.
                     </Text>
                   </View>
                 </View>

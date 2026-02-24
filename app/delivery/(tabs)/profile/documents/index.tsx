@@ -6,7 +6,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Image,
   Modal,
@@ -15,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import Toast from 'react-native-toast-message';
 import {
   useDeliveryBoyKycDocuments,
   useDeliveryBoyKycSummary,
@@ -129,6 +129,10 @@ export default function DeliveryBoyDocumentsScreen() {
   const [uploadModal, setUploadModal] = useState(false);
   const [selectedDocumentType, setSelectedDocumentType] = useState<KycDocumentType | null>(null);
 
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<KycDocument | null>(null);
+
   // Helper to get document by type
   const getDocumentByType = (docType: KycDocumentType): KycDocument | undefined => {
     return documents?.find((doc) => doc.document_type === docType);
@@ -163,7 +167,12 @@ export default function DeliveryBoyDocumentsScreen() {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission Required', 'Camera permission is required to take photos');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Required',
+            text2: 'Camera permission is required to take photos.',
+            position: 'top',
+          });
           setProcessingId(null);
           return;
         }
@@ -177,7 +186,12 @@ export default function DeliveryBoyDocumentsScreen() {
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission Required', 'Gallery permission is required to select images');
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Required',
+            text2: 'Gallery permission is required to select images.',
+            position: 'top',
+          });
           setProcessingId(null);
           return;
         }
@@ -197,7 +211,12 @@ export default function DeliveryBoyDocumentsScreen() {
       }
     } catch (error: any) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', error.message || 'Failed to pick image. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to pick image. Please try again.',
+        position: 'top',
+      });
       setProcessingId(null);
     } finally {
       setSelectedDocumentType(null);
@@ -206,7 +225,12 @@ export default function DeliveryBoyDocumentsScreen() {
 
   const handleUpload = async (documentType: KycDocumentType, imageUri: string) => {
     if (!session?.user?.id) {
-      Alert.alert('Error', 'User not found');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'User not found.',
+        position: 'top',
+      });
       setProcessingId(null);
       return;
     }
@@ -241,10 +265,12 @@ export default function DeliveryBoyDocumentsScreen() {
           base64: base64,
         });
 
-        Alert.alert(
-          'Success',
-          'Document replaced successfully! It will be verified within 24 hours.'
-        );
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Document replaced successfully! It will be verified within 24 hours.',
+          position: 'top',
+        });
       } else {
         // Upload new document
         await uploadMutation.mutateAsync({
@@ -261,47 +287,68 @@ export default function DeliveryBoyDocumentsScreen() {
           base64: base64,
         });
 
-        Alert.alert(
-          'Success',
-          'Document uploaded successfully! It will be verified within 24 hours.'
-        );
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Document uploaded successfully! It will be verified within 24 hours.',
+          position: 'top',
+        });
       }
     } catch (error: any) {
       console.error('Upload error:', error);
-      Alert.alert(
-        'Upload Failed',
-        error.message || 'Failed to upload document. Please check your connection and try again.'
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error.message || 'Failed to upload document. Please check your connection and try again.',
+        position: 'top',
+      });
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleDeleteDocument = (doc: KycDocument) => {
-    Alert.alert('Delete Document', `Are you sure you want to delete ${doc.document_name}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteMutation.mutateAsync({
-              id: doc.id,
-              userId: doc.user_id,
-              documentUrl: doc.document_url || undefined,
-            });
-            Alert.alert('Success', 'Document deleted successfully');
-          } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to delete document');
-          }
-        },
-      },
-    ]);
+    setDocumentToDelete(doc);
+    setDeleteModal(true);
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+
+    try {
+      await deleteMutation.mutateAsync({
+        id: documentToDelete.id,
+        userId: documentToDelete.user_id,
+        documentUrl: documentToDelete.document_url || undefined,
+      });
+      setDeleteModal(false);
+      setDocumentToDelete(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Document deleted successfully.',
+        position: 'top',
+      });
+    } catch (error: any) {
+      setDeleteModal(false);
+      setDocumentToDelete(null);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to delete document.',
+        position: 'top',
+      });
+    }
   };
 
   const handleViewDocument = (doc: KycDocument) => {
     if (!doc.document_url) {
-      Alert.alert('No Document', 'No document file available');
+      Toast.show({
+        type: 'info',
+        text1: 'No Document',
+        text2: 'No document file available.',
+        position: 'top',
+      });
       return;
     }
 
@@ -645,6 +692,64 @@ export default function DeliveryBoyDocumentsScreen() {
               }}
             >
               <Text className="text-gray-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setDeleteModal(false);
+          setDocumentToDelete(null);
+        }}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => {
+            setDeleteModal(false);
+            setDocumentToDelete(null);
+          }}
+        >
+          <Pressable className="bg-white rounded-3xl p-6 w-full">
+            <View className="items-center mb-5">
+              <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-3">
+                <Feather name="trash-2" size={30} color="#dc2626" />
+              </View>
+              <Text className="text-xl font-bold text-gray-900 mb-2">Delete Document?</Text>
+              <Text className="text-sm text-gray-500 text-center leading-5">
+                Are you sure you want to delete{' '}
+                <Text className="font-semibold text-gray-700">
+                  {documentToDelete?.document_name}
+                </Text>
+                ? This action cannot be undone.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="bg-red-500 py-4 rounded-xl items-center justify-center mb-3"
+              onPress={confirmDeleteDocument}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-base">Yes, Delete</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
+              onPress={() => {
+                setDeleteModal(false);
+                setDocumentToDelete(null);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

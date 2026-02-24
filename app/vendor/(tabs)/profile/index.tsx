@@ -12,88 +12,174 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+
+// ─── Reusable Confirmation Modal ────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmDestructive?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmDestructive = false,
+  onConfirm,
+  onCancel,
+}: ConfirmModalProps) {
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable
+          className="bg-white w-full rounded-2xl overflow-hidden"
+          onPress={() => {}} // prevent closing when tapping inside
+        >
+          {/* Icon header */}
+          <View className="items-center pt-6 pb-2">
+            <View
+              className={`w-14 h-14 rounded-full items-center justify-center mb-3 ${
+                confirmDestructive ? 'bg-red-100' : 'bg-amber-100'
+              }`}
+            >
+              <Ionicons
+                name={confirmDestructive ? 'log-out-outline' : 'alert-circle-outline'}
+                size={28}
+                color={confirmDestructive ? '#dc2626' : '#f59e0b'}
+              />
+            </View>
+            <Text className="text-lg font-bold text-gray-900 text-center px-4">{title}</Text>
+          </View>
+
+          <Text className="text-sm text-gray-500 text-center px-6 pb-6 mt-1">{message}</Text>
+
+          {/* Divider */}
+          <View className="border-t border-gray-100 flex-row">
+            <TouchableOpacity
+              onPress={onCancel}
+              className="flex-1 py-4 items-center border-r border-gray-100"
+            >
+              <Text className="text-base font-semibold text-gray-600">{cancelLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onConfirm}
+              className="flex-1 py-4 items-center"
+            >
+              <Text
+                className={`text-base font-bold ${
+                  confirmDestructive ? 'text-red-600' : 'text-emerald-600'
+                }`}
+              >
+                {confirmLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function ProfileOverviewScreen() {
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const { setVendorProfile, setUser, user } = useProfileStore();
   const { setSession, session } = useAuthStore();
 
-  // Fetch vendor details using the query
   const {
     data: vendorData,
     isLoading,
     isError,
     error,
-    refetch
+    refetch,
   } = useVendorDetail(session?.user?.id || '');
 
   const handleEditProfile = () => {
-    console.log('[v0] Navigating to Edit Profile screen');
-    router.push("/vendor/profile/edit");
+    router.push('/vendor/profile/edit');
   };
 
   const handleBankDetails = () => {
-    console.log('[v0] Navigating to Bank Details screen');
     router.push('/vendor/profile/documents/bank');
   };
 
   const handleDocuments = () => {
-    console.log('[v0] Navigating to Documents & KYC screen');
-    router.push("/vendor/profile/documents");
+    router.push('/vendor/profile/documents');
   };
 
   const handleSettings = () => {
-    console.log('[v0] Navigating to Settings screen');
-    router.push("/vendor/profile/settings");
+    router.push('/vendor/profile/settings');
   };
 
   const handleSupport = () => {
-    console.log('[v0] Navigating to Support screen');
-    router.push("/vendor/(tabs)/profile/support");
+    router.push('/vendor/(tabs)/profile/support');
   };
 
   const handleTermsAndConditions = () => {
-    console.log('[v0] Navigating to Support screen');
-    router.push("/vendor/(tabs)/profile/terms-and-conditions");
+    router.push('/vendor/(tabs)/profile/terms-and-conditions');
   };
 
   const handlePrivacyPolicy = () => {
-    console.log('[v0] Navigating to Support screen');
-    router.push("/vendor/(tabs)/profile/privacy-policy");
+    router.push('/vendor/(tabs)/profile/privacy-policy');
   };
 
+  // Show modal instead of Alert
   const handleLogout = () => {
-    Alert.alert(
-      'Confirm Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', onPress: () => { } },
-        {
-          text: 'Logout',
-          onPress: async () => {
-            setLogoutLoading(true);
-            try {
-              const { error } = await supabase.auth.signOut();
-              if (error) throw error;
-            } catch (err) {
-              console.error("Logout error:", err);
-            } finally {
-              // Clear local state no matter what
-              setSession(null);
-              setVendorProfile(null);
-              setUser(null);
-              router.replace('/auth/login');
-              setLogoutLoading(false);
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutModalVisible(false);
+    setLogoutLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      Toast.show({
+        type: 'success',
+        text1: 'Logged Out',
+        text2: 'You have been successfully logged out.',
+        position: 'top',
+      });
+    } catch (err: any) {
+      console.error('Logout error:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Logout Failed',
+        text2: err?.message || 'Something went wrong. Please try again.',
+        position: 'top',
+      });
+    } finally {
+      setSession(null);
+      setVendorProfile(null);
+      setUser(null);
+      router.replace('/auth/login');
+      setLogoutLoading(false);
+    }
   };
 
   // Loading state
@@ -110,58 +196,42 @@ export default function ProfileOverviewScreen() {
   if (isError || !vendorData) {
     return (
       <FullPageError
-        code='500'
-        message={error?.message || "Failed to load profile"}
+        code="500"
+        message={error?.message || 'Failed to load profile'}
         onActionPress={() => refetch()}
       />
     );
   }
 
-  // Determine verification status
+  // Derived data
   const verificationStatus = {
     isAdminVerified: vendorData.is_verified,
     isKycVerified: vendorData.kyc_status === 'approved',
   };
 
-  // Get vendor name from user data or use store name
   const vendorName = vendorData.users?.email?.split('@')[0] || 'Vendor';
   const phone = vendorData.users?.phone || 'No phone';
 
-  // Determine account status
   const getAccountStatus = () => {
     if (vendorData.suspended_until) {
       const suspensionDate = new Date(vendorData.suspended_until);
-      if (suspensionDate > new Date()) {
-        return 'Suspended';
-      }
+      if (suspensionDate > new Date()) return 'Suspended';
     }
     return vendorData.is_open ? 'Active' : 'Inactive';
   };
 
   const accountStatus = getAccountStatus();
 
-  // Format business hours for display
   const getBusinessHoursDisplay = () => {
     if (!vendorData.business_hours || Object.keys(vendorData.business_hours).length === 0) {
       return 'Not set';
     }
-
-    // Get today's hours as an example
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const todayHours = vendorData.business_hours[today];
-    console.log('todayHours',todayHours);
-
-    if (todayHours) {
-      return `${todayHours.open} - ${todayHours.close}`;
-    }
-
-    // Fallback to first available day
-    const firstDay = Object.keys(vendorData.business_hours)[0];
-    const firstHours = vendorData.business_hours[firstDay];
+    if (todayHours) return `${todayHours.open} - ${todayHours.close}`;
     return 'Shop Closed';
   };
 
-  // Get avatar emoji based on store name or default
   const getAvatarEmoji = () => {
     const storeName = vendorData.store_name.toLowerCase();
     if (storeName.includes('grocery') || storeName.includes('mart')) return '🏪';
@@ -169,22 +239,32 @@ export default function ProfileOverviewScreen() {
     if (storeName.includes('electronics')) return '📱';
     if (storeName.includes('fashion') || storeName.includes('cloth')) return '👕';
     if (storeName.includes('book')) return '📚';
-    return '🏪'; // Default
+    return '🏪';
   };
 
-  // Format address
   const formatAddress = () => {
-    const parts = [
-      vendorData.address,
-      vendorData.city,
-      vendorData.state,
-      vendorData.pincode
-    ].filter(Boolean);
-    return parts.join(', ');
+    return [vendorData.address, vendorData.city, vendorData.state, vendorData.pincode]
+      .filter(Boolean)
+      .join(', ');
   };
+
+  const isSuspended =
+    vendorData.suspended_until && new Date(vendorData.suspended_until) > new Date();
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        visible={logoutModalVisible}
+        title="Confirm Logout"
+        message="Are you sure you want to logout from your account?"
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        confirmDestructive
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutModalVisible(false)}
+      />
+
       {/* Header */}
       <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100">
         <Text className="text-2xl font-bold text-gray-900">Profile</Text>
@@ -195,16 +275,16 @@ export default function ProfileOverviewScreen() {
         {/* Profile Header Card */}
         <LinearGradient
           colors={['#ecfdf5', '#f0fdfa']}
-          className="bg-gradient-to-br from-emerald-50 to-teal-50 mx-4 mt-4 rounded-2xl p-6 border border-emerald-100"
+          className="mx-4 mt-4 rounded-2xl p-6 border border-emerald-100"
           style={{ borderRadius: 16 }}
         >
           <View className="flex-row items-start justify-between mb-4">
             <View className="flex-row items-center gap-4 flex-1">
-              <View className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl items-center justify-center">
+              <View className="w-16 h-16 bg-emerald-100 rounded-2xl items-center justify-center">
                 <Text className="text-4xl">{getAvatarEmoji()}</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-gray-600 text-xs font-semibold mb-1">Store Nmae</Text>
+                <Text className="text-gray-600 text-xs font-semibold mb-1">Store Name</Text>
                 <View className="flex-row items-center gap-2">
                   <Text className="text-lg font-bold text-gray-900" numberOfLines={1}>
                     {vendorData.store_name}
@@ -216,23 +296,28 @@ export default function ProfileOverviewScreen() {
                   )}
                 </View>
                 <View className="flex-row items-center gap-2 mt-2">
-                  <View className={`px-2.5 py-1 rounded-full ${accountStatus === 'Active'
-                      ? 'bg-emerald-100'
-                      : accountStatus === 'Suspended'
+                  <View
+                    className={`px-2.5 py-1 rounded-full ${
+                      accountStatus === 'Active'
+                        ? 'bg-emerald-100'
+                        : accountStatus === 'Suspended'
                         ? 'bg-red-100'
                         : 'bg-gray-100'
-                    }`}>
-                    <Text className={`text-xs font-semibold ${accountStatus === 'Active'
-                        ? 'text-emerald-700'
-                        : accountStatus === 'Suspended'
+                    }`}
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${
+                        accountStatus === 'Active'
+                          ? 'text-emerald-700'
+                          : accountStatus === 'Suspended'
                           ? 'text-red-700'
                           : 'text-gray-700'
-                      }`}>
+                      }`}
+                    >
                       {accountStatus}
                     </Text>
                   </View>
                 </View>
-                {/* Quick Contact */}
                 <View className="flex-row items-center gap-2 mt-2">
                   <Text className="text-gray-600 text-sm">{phone}</Text>
                 </View>
@@ -242,7 +327,7 @@ export default function ProfileOverviewScreen() {
         </LinearGradient>
 
         {/* Suspension Notice */}
-        {!vendorData.suspended_until || new Date(vendorData.suspended_until) > new Date() && (
+        {isSuspended && (
           <View className="mx-4 mt-4">
             <View className="bg-red-50 border border-red-200 rounded-xl p-4">
               <View className="flex-row items-start gap-3">
@@ -250,11 +335,10 @@ export default function ProfileOverviewScreen() {
                   <Ionicons name="ban" size={20} color="#dc2626" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-sm font-bold text-red-900 mb-1">
-                    Account Suspended
-                  </Text>
+                  <Text className="text-sm font-bold text-red-900 mb-1">Account Suspended</Text>
                   <Text className="text-xs text-red-700 mb-2">
-                    Suspended until: {new Date(vendorData.suspended_until).toLocaleDateString()}
+                    Suspended until:{' '}
+                    {new Date(vendorData.suspended_until).toLocaleDateString()}
                   </Text>
                   {vendorData.suspension_reason && (
                     <Text className="text-xs text-red-600">
@@ -267,7 +351,7 @@ export default function ProfileOverviewScreen() {
           </View>
         )}
 
-        {/* VERIFICATION STATUS BANNER */}
+        {/* Verification Banner */}
         {(!verificationStatus.isAdminVerified || !verificationStatus.isKycVerified) && (
           <View className="mx-4 mt-4">
             <View className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -299,8 +383,8 @@ export default function ProfileOverviewScreen() {
                           {vendorData.kyc_status === 'rejected'
                             ? 'KYC rejected - resubmit documents →'
                             : vendorData.kyc_status === 'pending'
-                              ? 'KYC review in progress'
-                              : 'Complete KYC verification →'}
+                            ? 'KYC review in progress'
+                            : 'Complete KYC verification →'}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -316,7 +400,7 @@ export default function ProfileOverviewScreen() {
           </View>
         )}
 
-        {/* VERIFICATION STATUS CARDS */}
+        {/* Verification Status Cards */}
         <View className="mx-4 mt-4">
           <View className="bg-white rounded-2xl p-4 border border-gray-100">
             <View className="flex-row items-center gap-2 mb-4">
@@ -326,13 +410,19 @@ export default function ProfileOverviewScreen() {
 
             <View className="gap-3">
               {/* Admin Verification */}
-              <View className={`flex-row items-center justify-between p-3 rounded-lg border ${verificationStatus.isAdminVerified
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-gray-50 border-gray-200'
-                }`}>
+              <View
+                className={`flex-row items-center justify-between p-3 rounded-lg border ${
+                  verificationStatus.isAdminVerified
+                    ? 'bg-blue-50 border-blue-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
                 <View className="flex-row items-center gap-3 flex-1">
-                  <View className={`w-10 h-10 rounded-full items-center justify-center ${verificationStatus.isAdminVerified ? 'bg-blue-100' : 'bg-gray-200'
-                    }`}>
+                  <View
+                    className={`w-10 h-10 rounded-full items-center justify-center ${
+                      verificationStatus.isAdminVerified ? 'bg-blue-100' : 'bg-gray-200'
+                    }`}
+                  >
                     <Ionicons
                       name="shield-checkmark"
                       size={20}
@@ -340,43 +430,55 @@ export default function ProfileOverviewScreen() {
                     />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-sm font-semibold ${verificationStatus.isAdminVerified ? 'text-blue-900' : 'text-gray-700'
-                      }`}>
+                    <Text
+                      className={`text-sm font-semibold ${
+                        verificationStatus.isAdminVerified ? 'text-blue-900' : 'text-gray-700'
+                      }`}
+                    >
                       Admin Verification
                     </Text>
-                    <Text className={`text-xs ${verificationStatus.isAdminVerified ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
+                    <Text
+                      className={`text-xs ${
+                        verificationStatus.isAdminVerified ? 'text-blue-600' : 'text-gray-500'
+                      }`}
+                    >
                       {verificationStatus.isAdminVerified
                         ? 'Your account is verified'
                         : 'Awaiting admin approval'}
                     </Text>
                   </View>
                 </View>
-                {verificationStatus.isAdminVerified ? (
-                  <View className="bg-blue-500 rounded-full px-3 py-1">
-                    <Text className="text-white text-xs font-bold">Verified</Text>
-                  </View>
-                ) : (
-                  <View className="bg-gray-400 rounded-full px-3 py-1">
-                    <Text className="text-white text-xs font-bold">Pending</Text>
-                  </View>
-                )}
+                <View
+                  className={`rounded-full px-3 py-1 ${
+                    verificationStatus.isAdminVerified ? 'bg-blue-500' : 'bg-gray-400'
+                  }`}
+                >
+                  <Text className="text-white text-xs font-bold">
+                    {verificationStatus.isAdminVerified ? 'Verified' : 'Pending'}
+                  </Text>
+                </View>
               </View>
 
               {/* KYC Verification */}
-              <View className={`flex-row items-center justify-between p-3 rounded-lg border ${verificationStatus.isKycVerified
-                  ? 'bg-green-50 border-green-200'
-                  : vendorData.kyc_status === 'rejected'
+              <View
+                className={`flex-row items-center justify-between p-3 rounded-lg border ${
+                  verificationStatus.isKycVerified
+                    ? 'bg-green-50 border-green-200'
+                    : vendorData.kyc_status === 'rejected'
                     ? 'bg-red-50 border-red-200'
                     : 'bg-gray-50 border-gray-200'
-                }`}>
+                }`}
+              >
                 <View className="flex-row items-center gap-3 flex-1">
-                  <View className={`w-10 h-10 rounded-full items-center justify-center ${verificationStatus.isKycVerified
-                      ? 'bg-green-100'
-                      : vendorData.kyc_status === 'rejected'
+                  <View
+                    className={`w-10 h-10 rounded-full items-center justify-center ${
+                      verificationStatus.isKycVerified
+                        ? 'bg-green-100'
+                        : vendorData.kyc_status === 'rejected'
                         ? 'bg-red-100'
                         : 'bg-gray-200'
-                    }`}>
+                    }`}
+                  >
                     <Ionicons
                       name="document-text"
                       size={20}
@@ -384,33 +486,39 @@ export default function ProfileOverviewScreen() {
                         verificationStatus.isKycVerified
                           ? '#10b981'
                           : vendorData.kyc_status === 'rejected'
-                            ? '#dc2626'
-                            : '#9ca3af'
+                          ? '#dc2626'
+                          : '#9ca3af'
                       }
                     />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-sm font-semibold ${verificationStatus.isKycVerified
-                        ? 'text-green-900'
-                        : vendorData.kyc_status === 'rejected'
+                    <Text
+                      className={`text-sm font-semibold ${
+                        verificationStatus.isKycVerified
+                          ? 'text-green-900'
+                          : vendorData.kyc_status === 'rejected'
                           ? 'text-red-900'
                           : 'text-gray-700'
-                      }`}>
+                      }`}
+                    >
                       KYC Verification
                     </Text>
-                    <Text className={`text-xs ${verificationStatus.isKycVerified
-                        ? 'text-green-600'
-                        : vendorData.kyc_status === 'rejected'
+                    <Text
+                      className={`text-xs ${
+                        verificationStatus.isKycVerified
+                          ? 'text-green-600'
+                          : vendorData.kyc_status === 'rejected'
                           ? 'text-red-600'
                           : 'text-gray-500'
-                      }`}>
+                      }`}
+                    >
                       {verificationStatus.isKycVerified
                         ? 'Documents verified'
                         : vendorData.kyc_status === 'rejected'
-                          ? 'Documents rejected'
-                          : vendorData.kyc_status === 'pending'
-                            ? 'Documents under review'
-                            : 'Documents not submitted'}
+                        ? 'Documents rejected'
+                        : vendorData.kyc_status === 'pending'
+                        ? 'Documents under review'
+                        : 'Documents not submitted'}
                     </Text>
                   </View>
                 </View>
@@ -425,8 +533,9 @@ export default function ProfileOverviewScreen() {
                 ) : (
                   <TouchableOpacity
                     onPress={handleDocuments}
-                    className={`rounded-full px-3 py-1 ${vendorData.kyc_status === 'rejected' ? 'bg-red-500' : 'bg-amber-500'
-                      }`}
+                    className={`rounded-full px-3 py-1 ${
+                      vendorData.kyc_status === 'rejected' ? 'bg-red-500' : 'bg-amber-500'
+                    }`}
                   >
                     <Text className="text-white text-xs font-bold">
                       {vendorData.kyc_status === 'rejected' ? 'Resubmit' : 'Complete'}
@@ -445,47 +554,50 @@ export default function ProfileOverviewScreen() {
           <View className="gap-3 mb-4">
             <View>
               <Text className="text-gray-600 text-xs font-semibold mb-1">Shop Name</Text>
-              <Text className="text-gray-900 font-semibold text-base">{vendorData.store_name}</Text>
+              <Text className="text-gray-900 font-semibold text-base">
+                {vendorData.store_name}
+              </Text>
             </View>
 
             {vendorData.store_description && (
               <View>
                 <Text className="text-gray-600 text-xs font-semibold mb-1">Description</Text>
-                <Text className="text-gray-900 font-medium text-sm">{vendorData.store_description}</Text>
+                <Text className="text-gray-900 font-medium text-sm">
+                  {vendorData.store_description}
+                </Text>
               </View>
             )}
 
             <View className="flex-row items-start gap-2">
-              <Feather name='map-pin' size={16} color="#6b7280" style={{ marginTop: 4 }} />
+              <Feather name="map-pin" size={16} color="#6b7280" style={{ marginTop: 4 }} />
               <View className="flex-1">
                 <Text className="text-gray-600 text-xs font-semibold mb-1">Shop Address</Text>
-                <Text className="text-gray-900 font-medium text-sm">{formatAddress() || "Not set"}</Text>
+                <Text className="text-gray-900 font-medium text-sm">
+                  {formatAddress() || 'Not set'}
+                </Text>
               </View>
             </View>
 
             <View className="flex-row items-start gap-2">
-              <Feather name='clock' size={16} color="#6b7280" style={{ marginTop: 4 }} />
+              <Feather name="clock" size={16} color="#6b7280" style={{ marginTop: 4 }} />
               <View className="flex-1">
                 <Text className="text-gray-600 text-xs font-semibold mb-1">Business Hours</Text>
-                <Text className="text-gray-900 font-medium text-sm">{getBusinessHoursDisplay()}</Text>
+                <Text className="text-gray-900 font-medium text-sm">
+                  {getBusinessHoursDisplay()}
+                </Text>
               </View>
             </View>
 
-            {/* Rating and Stats */}
             <View className="flex-row items-center gap-4 mt-2">
               <View className="flex-row items-center gap-1">
                 <Ionicons name="star" size={16} color="#f59e0b" />
                 <Text className="text-gray-900 font-semibold text-sm">
                   {vendorData.rating.toFixed(1)}
                 </Text>
-                <Text className="text-gray-500 text-xs">
-                  ({vendorData.review_count} reviews)
-                </Text>
+                <Text className="text-gray-500 text-xs">({vendorData.review_count} reviews)</Text>
               </View>
               <View className="h-4 w-px bg-gray-300" />
-              <Text className="text-gray-600 text-sm">
-                {vendorData.total_orders} orders
-              </Text>
+              <Text className="text-gray-600 text-sm">{vendorData.total_orders} orders</Text>
             </View>
           </View>
 
@@ -494,7 +606,7 @@ export default function ProfileOverviewScreen() {
             className="bg-emerald-500 rounded-lg py-3 items-center justify-center active:opacity-80"
           >
             <View className="flex-row items-center gap-2">
-              <Feather name='edit-3' size={18} color="#fff" />
+              <Feather name="edit-3" size={18} color="#fff" />
               <Text className="text-white font-bold text-base">Edit Profile</Text>
             </View>
           </TouchableOpacity>
@@ -503,41 +615,41 @@ export default function ProfileOverviewScreen() {
         {/* Management List */}
         <View className="bg-white mx-4 mt-4 rounded-2xl overflow-hidden border border-gray-100">
           <MenuItemButton
-            icon={<Feather name='credit-card' size={20} color="#059669" />}
+            icon={<Feather name="credit-card" size={20} color="#059669" />}
             label="Bank & Payout Details"
             onPress={handleBankDetails}
           />
           <MenuItemButton
-            icon={<Feather name='file' size={20} color="#3b82f6" />}
+            icon={<Feather name="file" size={20} color="#3b82f6" />}
             label="Documents & KYC"
             badge={
               !verificationStatus.isKycVerified
                 ? vendorData.kyc_status === 'rejected'
-                  ? "Rejected"
+                  ? 'Rejected'
                   : vendorData.kyc_status === 'pending'
-                    ? "Under Review"
-                    : "Action Required"
+                  ? 'Under Review'
+                  : 'Action Required'
                 : undefined
             }
             onPress={handleDocuments}
           />
           <MenuItemButton
-            icon={<Feather name='settings' size={20} color="#8b5cf6" />}
+            icon={<Feather name="settings" size={20} color="#8b5cf6" />}
             label="Settings"
             onPress={handleSettings}
           />
           <MenuItemButton
-            icon={<Feather name='help-circle' size={20} color="#f59e0b" />}
+            icon={<Feather name="help-circle" size={20} color="#f59e0b" />}
             label="Help & Support"
             onPress={handleSupport}
           />
           <MenuItemButton
-            icon={<Feather name='shield' size={20} color="#f59e0b" />}
+            icon={<Feather name="shield" size={20} color="#f59e0b" />}
             label="Privacy Policy"
             onPress={handlePrivacyPolicy}
           />
           <MenuItemButton
-            icon={<Feather name='file-text' size={20} color="#f59e0b" />}
+            icon={<Feather name="file-text" size={20} color="#f59e0b" />}
             label="Terms & Conditions"
             onPress={handleTermsAndConditions}
           />
@@ -547,11 +659,12 @@ export default function ProfileOverviewScreen() {
         <TouchableOpacity
           onPress={handleLogout}
           disabled={logoutLoading}
-          className={`bg-red-50 mx-4 mt-4 mb-6 rounded-xl py-4 items-center justify-center border border-red-200 ${logoutLoading ? 'opacity-50' : ''
-            }`}
+          className={`bg-red-50 mx-4 mt-4 mb-6 rounded-xl py-4 items-center justify-center border border-red-200 ${
+            logoutLoading ? 'opacity-50' : ''
+          }`}
         >
           <View className="flex-row items-center gap-2">
-            <Feather name='log-out' size={20} color="#dc2626" />
+            <Feather name="log-out" size={20} color="#dc2626" />
             <Text className="text-red-700 font-bold text-base">
               {logoutLoading ? 'Logging out...' : 'Logout'}
             </Text>
@@ -561,6 +674,8 @@ export default function ProfileOverviewScreen() {
     </SafeAreaView>
   );
 }
+
+// ─── Menu Item ────────────────────────────────────────────────────────────────
 
 function MenuItemButton({
   icon,
@@ -582,24 +697,30 @@ function MenuItemButton({
         {icon}
         <Text className="text-gray-900 font-semibold text-base">{label}</Text>
         {badge && (
-          <View className={`px-2 py-0.5 rounded-full ${badge === 'Rejected'
-              ? 'bg-red-100'
-              : badge === 'Under Review'
+          <View
+            className={`px-2 py-0.5 rounded-full ${
+              badge === 'Rejected'
+                ? 'bg-red-100'
+                : badge === 'Under Review'
                 ? 'bg-blue-100'
                 : 'bg-amber-100'
-            }`}>
-            <Text className={`text-xs font-bold ${badge === 'Rejected'
-                ? 'text-red-700'
-                : badge === 'Under Review'
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                badge === 'Rejected'
+                  ? 'text-red-700'
+                  : badge === 'Under Review'
                   ? 'text-blue-700'
                   : 'text-amber-700'
-              }`}>
+              }`}
+            >
               {badge}
             </Text>
           </View>
         )}
       </View>
-      <Feather name='chevron-right' size={20} color="#9ca3af" />
+      <Feather name="chevron-right" size={20} color="#9ca3af" />
     </TouchableOpacity>
   );
 }

@@ -5,12 +5,12 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Linking,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
 import { BlurView } from 'expo-blur';
 import DeliveryOTPVerificationModal from '@/components/DeliveryOTPVerificationModal';
@@ -103,15 +103,21 @@ const OrderDetailScreen = () => {
     try {
       await acceptOrderMutation.mutateAsync(order.id);
       setShowAcceptModal(false);
-      
-      Alert.alert(
-        'Order Accepted! 🎉',
-        'You can now start picking up items from vendors.',
-        [{ text: 'Got it!', onPress: () => refetch() }]
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Order Accepted! 🎉',
+        text2: 'You can now start picking up items from vendors.',
+        position: 'top',
+      });
+      refetch();
     } catch (error: any) {
       setShowAcceptModal(false);
-      Alert.alert('Error', error.message || 'Failed to accept order');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to accept order.',
+        position: 'top',
+      });
     }
   };
 
@@ -119,7 +125,12 @@ const OrderDetailScreen = () => {
   const handleMarkVendorCollectedPress = (vendorId: string) => {
     if (!isVerified || !order) return;
     if (!areAllItemsCollected(vendorId)) {
-      Alert.alert('Incomplete', 'Please collect all items before marking as picked up.');
+      Toast.show({
+        type: 'error',
+        text1: 'Incomplete',
+        text2: 'Please collect all items before marking as picked up.',
+        position: 'top',
+      });
       return;
     }
     setCurrentVendorId(vendorId);
@@ -134,16 +145,22 @@ const OrderDetailScreen = () => {
       setShowPickupModal(false);
       setCurrentVendorId(null);
       setLocalItemStates({});
-      
-      Alert.alert(
-        'Items Picked Up! 📦',
-        'All items collected! You can now deliver to the customer.',
-        [{ text: 'OK', onPress: () => refetch() }]
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Items Picked Up! 📦',
+        text2: 'All items collected! You can now deliver to the customer.',
+        position: 'top',
+      });
+      refetch();
     } catch (error: any) {
       setShowPickupModal(false);
       console.log(error.message);
-      Alert.alert('Error', error.message || 'Failed to mark order as picked up');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to mark order as picked up.',
+        position: 'top',
+      });
     }
   };
 
@@ -177,16 +194,20 @@ const OrderDetailScreen = () => {
       setShowOtpModal(false);
       setOtpInput('');
       
-      Alert.alert(
-        'Delivery Complete! 🎉', 
-        `Great job! You've earned ₹${order.payout}`,
-        [{ 
-          text: 'View Orders', 
-          onPress: () => router.replace('/delivery/orders') 
-        }]
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Delivery Complete! 🎉',
+        text2: `Great job! You've earned ₹${order.payout}`,
+        position: 'top',
+      });
+      router.replace('/delivery/orders');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Invalid OTP. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Invalid OTP. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -244,8 +265,7 @@ const OrderDetailScreen = () => {
   
   // Determine current stage
   const isUnassigned = !order.delivery_boy_id;
-  const isAssigned =
-  !!order.delivery_boy_id && !order.picked_up_at;
+  const isAssigned = !!order.delivery_boy_id && !order.picked_up_at;
   const isPickedUp = order.status === 'out_for_delivery';
   const isDelivered = order.status === 'delivered';
    
@@ -413,9 +433,7 @@ const OrderDetailScreen = () => {
           {!isUnassigned && (
             <View className="mb-4">
               <View className="flex-row items-center justify-between mb-3">
-                <Text className="text-xl font-bold text-white">
-                  Vendor Pickups
-                </Text>
+                <Text className="text-xl font-bold text-white">Vendor Pickups</Text>
                 <View className="bg-white/20 px-3 py-1.5 rounded-full">
                   <Text className="text-white text-xs font-bold">
                     {isPickedUp || isDelivered ? 'Collected' : 'In Progress'}
@@ -448,7 +466,7 @@ const OrderDetailScreen = () => {
                       </View>
                     </View>
 
-                    {/* Navigate Button - Show only if not collected and order is assigned */}
+                    {/* Navigate Button */}
                     {!vendor.collected && isAssigned && (
                       <TouchableOpacity
                         onPress={() => handleNavigateToVendor(vendor.id)}
@@ -468,7 +486,11 @@ const OrderDetailScreen = () => {
                       disabled={vendor.collected || isUnassigned}
                     >
                       <Text className="text-sm font-semibold text-gray-700">
-                        {vendor.collected ? 'All items collected' : isUnassigned ? 'Items to collect' : 'View items to collect'}
+                        {vendor.collected
+                          ? 'All items collected'
+                          : isUnassigned
+                          ? 'Items to collect'
+                          : 'View items to collect'}
                       </Text>
                       {!vendor.collected && !isUnassigned && (
                         <Feather 
@@ -498,7 +520,9 @@ const OrderDetailScreen = () => {
                             </View>
                             <View className="flex-1">
                               <Text className={`font-semibold ${
-                                isItemCollected(vendor.id, item.id) ? 'text-gray-500 line-through' : 'text-gray-900'
+                                isItemCollected(vendor.id, item.id)
+                                  ? 'text-gray-500 line-through'
+                                  : 'text-gray-900'
                               }`}>
                                 {item.name}
                               </Text>
@@ -509,7 +533,7 @@ const OrderDetailScreen = () => {
                       </View>
                     )}
 
-                    {/* Mark as Picked Up Button - Show only if assigned and not picked up yet */}
+                    {/* Mark as Picked Up Button */}
                     {!vendor.collected && isAssigned && (
                       <TouchableOpacity
                         onPress={() => handleMarkVendorCollectedPress(vendor.id)}
@@ -535,12 +559,10 @@ const OrderDetailScreen = () => {
             </View>
           )}
 
-          {/* STAGE 3: Customer Delivery Section - Show only after pickup */}
+          {/* STAGE 3: Customer Delivery Section */}
           {(isPickedUp || isDelivered) && (
             <View className="mb-4">
-              <Text className="text-xl font-bold text-white mb-3">
-                Customer Delivery
-              </Text>
+              <Text className="text-xl font-bold text-white mb-3">Customer Delivery</Text>
 
               <View className="bg-white rounded-3xl p-5 shadow-lg">
                 <View className="flex-row items-start mb-4">

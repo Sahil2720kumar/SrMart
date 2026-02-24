@@ -14,11 +14,10 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
+import Toast from 'react-native-toast-message';
 
 type FilterType = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 type SortType = 'stock-desc' | 'stock-asc' | 'name-asc';
@@ -31,7 +30,6 @@ export default function InventoryScreen() {
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   const [newStockValue, setNewStockValue] = useState('');
 
-  // Fetch inventory from Supabase
   const {
     data: inventoryItems,
     isLoading,
@@ -40,20 +38,20 @@ export default function InventoryScreen() {
     isRefetching,
   } = useVendorInventory();
 
-  // Stock update mutation
   const updateStockMutation = useUpdateProductStock();
 
-  // Filter inventory items
+  // ---------------------------------------------------------------------------
+  // Derived data
+  // ---------------------------------------------------------------------------
   const filteredItems = useMemo(() => {
     if (!inventoryItems) return [];
-    
+
     let items = inventoryItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = activeFilter === 'all' || item.stock_status === activeFilter;
       return matchesSearch && matchesFilter;
     });
 
-    // Sort items
     switch (sortBy) {
       case 'stock-asc':
         items.sort((a, b) => a.stock_quantity - b.stock_quantity);
@@ -69,27 +67,32 @@ export default function InventoryScreen() {
     return items;
   }, [inventoryItems, searchQuery, activeFilter, sortBy]);
 
-  // Calculate inventory insights
   const insights = useMemo(() => {
     if (!inventoryItems) {
       return { totalProducts: 0, inStockCount: 0, outOfStockCount: 0, lowStockCount: 0 };
     }
-
-    const totalProducts = inventoryItems.length;
-    const inStockCount = inventoryItems.filter((p) => p.stock_status === 'in_stock').length;
-    const outOfStockCount = inventoryItems.filter((p) => p.stock_status === 'out_of_stock').length;
-    const lowStockCount = inventoryItems.filter((p) => p.stock_status === 'low_stock').length;
-
-    return { totalProducts, inStockCount, outOfStockCount, lowStockCount };
+    return {
+      totalProducts: inventoryItems.length,
+      inStockCount: inventoryItems.filter((p) => p.stock_status === 'in_stock').length,
+      outOfStockCount: inventoryItems.filter((p) => p.stock_status === 'out_of_stock').length,
+      lowStockCount: inventoryItems.filter((p) => p.stock_status === 'low_stock').length,
+    };
   }, [inventoryItems]);
 
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
   const onRefresh = useCallback(async () => {
     try {
       await refetch();
-      console.log('[Inventory] Refreshed successfully');
-    } catch (error) {
-      console.error('[Inventory] Refresh error:', error);
-      Alert.alert('Error', 'Failed to refresh inventory');
+    } catch (err) {
+      console.error('[Inventory] Refresh error:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Refresh Failed',
+        text2: 'Failed to refresh inventory. Please try again.',
+        position: 'top',
+      });
     }
   }, [refetch]);
 
@@ -103,13 +106,24 @@ export default function InventoryScreen() {
     if (!selectedItem) return;
 
     if (!newStockValue || isNaN(parseInt(newStockValue))) {
-      Alert.alert('Error', 'Please enter a valid stock quantity');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Quantity',
+        text2: 'Please enter a valid stock quantity.',
+        position: 'top',
+      });
       return;
     }
 
     const newStock = parseInt(newStockValue);
+
     if (newStock < 0) {
-      Alert.alert('Error', 'Stock cannot be negative');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Quantity',
+        text2: 'Stock quantity cannot be negative.',
+        position: 'top',
+      });
       return;
     }
 
@@ -119,13 +133,22 @@ export default function InventoryScreen() {
         stockQuantity: newStock,
       });
 
-      Alert.alert('Success', `Stock updated to ${newStock}(${selectedItem.unit}) for ${selectedItem.name}`);
-      setUpdateModalVisible(false);
-      setSelectedItem(null);
-      setNewStockValue('');
-    } catch (error) {
-      console.error('[Inventory] Update error:', error);
-      Alert.alert('Error', 'Failed to update stock. Please try again.');
+      handleCloseModal();
+
+      Toast.show({
+        type: 'success',
+        text1: 'Stock Updated',
+        text2: `${selectedItem.name} → ${newStock} ${selectedItem.unit}`,
+        position: 'top',
+      });
+    } catch (err) {
+      console.error('[Inventory] Update error:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: 'Failed to update stock. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -135,6 +158,9 @@ export default function InventoryScreen() {
     setNewStockValue('');
   };
 
+  // ---------------------------------------------------------------------------
+  // Render states
+  // ---------------------------------------------------------------------------
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
@@ -166,9 +192,12 @@ export default function InventoryScreen() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
   return (
-    <SafeAreaView  className="flex-1 bg-gray-50">
-      {/* Header */}
+    <SafeAreaView className="flex-1 bg-gray-50">
+      {/* ── Header ── */}
       <View className="bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex-row items-center justify-between">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
@@ -179,12 +208,15 @@ export default function InventoryScreen() {
             <Text className="text-sm text-gray-600">Stock Management</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={() => router.push('/vendor/product/add')} className="items-center">
+        <TouchableOpacity
+          onPress={() => router.push('/vendor/product/add')}
+          className="items-center"
+        >
           <Feather name="plus-circle" size={24} color="#000" />
         </TouchableOpacity>
       </View>
 
-      {/* Inventory Insights */}
+      {/* ── Insights ── */}
       <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
         <View className="flex-row justify-between">
           <View>
@@ -206,10 +238,10 @@ export default function InventoryScreen() {
         </View>
       </View>
 
-      {/* Low Stock Alert Banner */}
+      {/* ── Low Stock Banner ── */}
       {insights.lowStockCount > 0 && (
         <View className="bg-orange-50 mx-4 mt-4 rounded-2xl p-4 border border-orange-200 flex-row items-start gap-3">
-          <Feather name="alert-circle" size={20} color="#ea580c" className="mt-0.5" />
+          <Feather name="alert-circle" size={20} color="#ea580c" />
           <View className="flex-1">
             <Text className="text-orange-700 font-semibold text-sm">
               {insights.lowStockCount} product{insights.lowStockCount > 1 ? 's' : ''} running low
@@ -221,7 +253,7 @@ export default function InventoryScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
+      {/* ── Search & Filters ── */}
       <View className="bg-white px-4 pt-3 pb-3 border-b border-gray-100">
         <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-2.5 mb-3">
           <Feather name="search" size={18} color="#9ca3af" />
@@ -239,7 +271,7 @@ export default function InventoryScreen() {
           )}
         </View>
 
-        {/* Filter Controls */}
+        {/* Filter pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
           <View className="flex-row gap-2">
             {(['all', 'in_stock', 'low_stock', 'out_of_stock'] as FilterType[]).map((filter) => (
@@ -248,9 +280,7 @@ export default function InventoryScreen() {
                 onPress={() => setActiveFilter(filter)}
                 activeOpacity={0.7}
                 className={`px-3 py-2 rounded-full ${
-                  activeFilter === filter
-                    ? 'bg-emerald-500'
-                    : 'bg-gray-100 border border-gray-200'
+                  activeFilter === filter ? 'bg-emerald-500' : 'bg-gray-100 border border-gray-200'
                 }`}
               >
                 <Text
@@ -271,7 +301,7 @@ export default function InventoryScreen() {
           </View>
         </ScrollView>
 
-        {/* Sort Dropdown */}
+        {/* Sort pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2">
             {[
@@ -302,21 +332,16 @@ export default function InventoryScreen() {
         </ScrollView>
       </View>
 
-      {/* Inventory List */}
+      {/* ── Inventory List ── */}
       <FlatList
         data={filteredItems}
         renderItem={({ item }) => (
-          <VendorInventoryCard
-            handleOpenUpdateModal={handleOpenUpdateModal}
-            item={item}
-          />
+          <VendorInventoryCard handleOpenUpdateModal={handleOpenUpdateModal} item={item} />
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-        scrollEnabled={true}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
-        }
+        scrollEnabled
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View className="flex-1 items-center justify-center py-16">
             <Feather name="package" size={48} color="#d1d5db" />
@@ -340,6 +365,7 @@ export default function InventoryScreen() {
         }
       />
 
+      {/* Blur backdrop */}
       {updateModalVisible && (
         <BlurView
           intensity={10}
@@ -348,15 +374,16 @@ export default function InventoryScreen() {
         />
       )}
 
-      {/* Stock Update Modal */}
+      {/* ── Stock Update Modal ── */}
       <Modal
         visible={updateModalVisible}
         transparent
         animationType="slide"
         onRequestClose={handleCloseModal}
       >
-        <View className="flex-1 bg-transparent bg-opacity-50 justify-end">
+        <View className="flex-1 justify-end">
           <View className="bg-white rounded-t-3xl p-6 pb-8">
+            {/* Modal Header */}
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-2xl font-bold text-gray-900">Update Stock</Text>
               <TouchableOpacity onPress={handleCloseModal}>
@@ -366,6 +393,7 @@ export default function InventoryScreen() {
 
             {selectedItem && (
               <>
+                {/* Product Info */}
                 <View className="flex-row items-center gap-3 mb-6 pb-6 border-b border-gray-200">
                   <View className="w-16 h-16 bg-emerald-100 rounded-xl items-center justify-center">
                     <Feather name="package" size={32} color="#059669" />
@@ -378,6 +406,7 @@ export default function InventoryScreen() {
                   </View>
                 </View>
 
+                {/* Stock Input */}
                 <Text className="text-gray-600 text-sm font-medium mb-2">New Stock Quantity</Text>
                 <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3 mb-2">
                   <Text className="text-2xl text-gray-900 font-bold">📦</Text>
@@ -393,16 +422,18 @@ export default function InventoryScreen() {
                   <Text className="text-gray-500 text-sm font-medium">{selectedItem.unit}</Text>
                 </View>
 
+                {/* Difference hint */}
                 <Text className="text-gray-500 text-xs mb-6">
                   Difference:{' '}
                   {newStockValue
-                    ? `${parseInt(newStockValue) - selectedItem.stock_quantity > 0 ? '+' : ''}${
-                        parseInt(newStockValue) - selectedItem.stock_quantity
-                      }`
+                    ? `${
+                        parseInt(newStockValue) - selectedItem.stock_quantity > 0 ? '+' : ''
+                      }${parseInt(newStockValue) - selectedItem.stock_quantity}`
                     : '0'}{' '}
                   {selectedItem.unit}
                 </Text>
 
+                {/* Save */}
                 <TouchableOpacity
                   onPress={handleSaveStockUpdate}
                   disabled={updateStockMutation.isPending}

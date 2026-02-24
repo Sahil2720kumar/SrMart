@@ -1,9 +1,10 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from "@gorhom/bottom-sheet"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native"
+import { Text, TouchableOpacity, View, ActivityIndicator } from "react-native"
 import { Feather } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { CustomerAddress, CustomerAddressInsert } from "@/types/users.types"
+import Toast from "react-native-toast-message"
 
 
 const INITIAL_FORM_DATA: CustomerAddressInsert = {
@@ -72,13 +73,14 @@ const AddressBottomSheet = ({
     try {
       // Request permission
       const { status } = await Location.requestForegroundPermissionsAsync()
-      
+
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant location permission to use this feature.',
-          [{ text: 'OK' }]
-        )
+        Toast.show({
+          type: "error",
+          text1: "Permission Required",
+          text2: "Please grant location permission to use this feature.",
+          position: "top",
+        })
         setIsGettingLocation(false)
         return
       }
@@ -94,10 +96,23 @@ const AddressBottomSheet = ({
         longitude: location.coords.longitude,
       })
 
-      Alert.alert('Success', 'Location captured successfully!')
+      // Clear location error if it was set
+      if (errors.latitude) {
+        setErrors({ ...errors, latitude: undefined })
+      }
+
+      Toast.show({
+        type: "success",
+        text1: "Location captured successfully!",
+        position: "top",
+      })
     } catch (error) {
       console.error('Location error:', error)
-      Alert.alert('Error', 'Failed to get location. Please try again.')
+      Toast.show({
+        type: "error",
+        text1: "Failed to get location. Please try again.",
+        position: "top",
+      })
     } finally {
       setIsGettingLocation(false)
     }
@@ -131,6 +146,10 @@ const AddressBottomSheet = ({
       newErrors.pincode = "Pincode is required"
     } else if (!/^\d{6}$/.test(formData.pincode)) {
       newErrors.pincode = "Pincode must be 6 digits"
+    }
+
+    if (!formData.latitude || !formData.longitude) {
+      newErrors.latitude = "Location coordinates are required"
     }
 
     setErrors(newErrors)
@@ -368,37 +387,37 @@ const AddressBottomSheet = ({
           )}
         </View>
 
-        {/* Location Section */}
+        {/* Location Section - Now Mandatory */}
         <View className="mb-4">
           <View className="flex-row items-center mb-2">
             <View className="w-6 h-6 rounded-full bg-cyan-100 items-center justify-center mr-2">
               <Feather name="crosshair" size={12} color="#06b6d4" />
             </View>
             <Text className="text-sm font-semibold text-gray-900">
-              Location Coordinates <Text className="text-gray-400 font-normal">(Optional)</Text>
+              Location Coordinates <Text className="text-red-500">*</Text>
             </Text>
           </View>
 
           {formData.latitude && formData.longitude ? (
             // Show captured coordinates
-            <View className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+            <View className={`bg-green-50 rounded-xl p-4 border ${errors.latitude ? "border-red-400" : "border-green-200"}`}>
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center">
-                  <View className="w-8 h-8 rounded-full bg-emerald-100 items-center justify-center mr-3">
+                  <View className="w-8 h-8 rounded-full bg-green-100 items-center justify-center mr-3">
                     <Feather name="check-circle" size={16} color="#10b981" />
                   </View>
-                  <Text className="text-emerald-900 font-semibold text-sm">
+                  <Text className="text-green-900 font-semibold text-sm">
                     Location Captured
                   </Text>
                 </View>
                 <TouchableOpacity
                   onPress={handleClearLocation}
-                  className="px-3 py-1.5 bg-white rounded-lg border border-emerald-300"
+                  className="px-3 py-1.5 bg-white rounded-lg border border-green-300"
                 >
-                  <Text className="text-emerald-700 font-medium text-xs">Clear</Text>
+                  <Text className="text-green-700 font-medium text-xs">Clear</Text>
                 </TouchableOpacity>
               </View>
-              
+
               <View className="space-y-2">
                 <View className="flex-row items-center bg-white rounded-lg p-2.5">
                   <Text className="text-gray-500 text-xs font-medium w-20">Latitude:</Text>
@@ -419,32 +438,39 @@ const AddressBottomSheet = ({
             <TouchableOpacity
               onPress={handleGetCurrentLocation}
               disabled={isGettingLocation}
-              className="bg-cyan-50 rounded-xl p-4 border border-cyan-200"
+              className={`rounded-xl p-4 border ${errors.latitude ? "bg-red-50 border-red-400" : "bg-cyan-50 border-cyan-200"}`}
               activeOpacity={0.7}
             >
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center flex-1">
-                  <View className="w-10 h-10 rounded-full bg-cyan-100 items-center justify-center mr-3">
+                  <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${errors.latitude ? "bg-red-100" : "bg-cyan-100"}`}>
                     {isGettingLocation ? (
                       <ActivityIndicator size="small" color="#06b6d4" />
                     ) : (
-                      <Feather name="map-pin" size={18} color="#06b6d4" />
+                      <Feather name="map-pin" size={18} color={errors.latitude ? "#ef4444" : "#06b6d4"} />
                     )}
                   </View>
                   <View className="flex-1">
-                    <Text className="text-cyan-900 font-semibold text-sm mb-0.5">
+                    <Text className={`font-semibold text-sm mb-0.5 ${errors.latitude ? "text-red-900" : "text-cyan-900"}`}>
                       {isGettingLocation ? "Getting location..." : "Use Current Location"}
                     </Text>
-                    <Text className="text-cyan-600 text-xs">
-                      Helps with accurate delivery
+                    <Text className={`text-xs ${errors.latitude ? "text-red-500" : "text-cyan-600"}`}>
+                      {errors.latitude ? "Required for accurate delivery" : "Required for accurate delivery"}
                     </Text>
                   </View>
                 </View>
                 {!isGettingLocation && (
-                  <Feather name="chevron-right" size={20} color="#06b6d4" />
+                  <Feather name="chevron-right" size={20} color={errors.latitude ? "#ef4444" : "#06b6d4"} />
                 )}
               </View>
             </TouchableOpacity>
+          )}
+
+          {errors.latitude && (
+            <View className="flex-row items-center mt-1 ml-1">
+              <Feather name="alert-circle" size={12} color="#ef4444" />
+              <Text className="text-red-500 text-xs ml-1">{errors.latitude}</Text>
+            </View>
           )}
         </View>
 
@@ -456,7 +482,7 @@ const AddressBottomSheet = ({
         >
           <View
             className={`w-12 h-7 rounded-full mr-3 ${
-              formData.is_default ? "bg-emerald-500" : "bg-gray-300"
+              formData.is_default ? "bg-green-500" : "bg-gray-300"
             }`}
             style={{
               justifyContent: "center",
@@ -483,7 +509,7 @@ const AddressBottomSheet = ({
             </Text>
           </View>
           {formData.is_default && (
-            <View className="w-8 h-8 rounded-full bg-emerald-100 items-center justify-center">
+            <View className="w-8 h-8 rounded-full bg-green-100 items-center justify-center">
               <Feather name="check" size={16} color="#10b981" />
             </View>
           )}
@@ -497,7 +523,7 @@ const AddressBottomSheet = ({
           <View className="flex-1">
             <Text className="text-blue-900 font-semibold text-sm mb-1">Quick Tip</Text>
             <Text className="text-blue-700 text-xs leading-5">
-              Adding location coordinates helps delivery partners find you faster and ensures accurate deliveries.
+              Location coordinates are required to ensure delivery partners can find you accurately and on time.
             </Text>
           </View>
         </View>
@@ -509,7 +535,7 @@ const AddressBottomSheet = ({
             onPress={handleSave}
             disabled={isLoading}
             className={`rounded-full py-4 items-center justify-center flex-row ${
-              isLoading ? "bg-gray-300" : "bg-emerald-500"
+              isLoading ? "bg-gray-300" : "bg-green-500"
             }`}
             style={{
               shadowColor: isLoading ? "#000" : "#10b981",

@@ -5,14 +5,8 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   RefreshControl,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -30,6 +24,7 @@ import { useAuthStore } from '@/store/authStore';
 import { format, parseISO } from 'date-fns';
 import { CancelCashoutModal, SuccessModal, WithdrawalModal } from '@/components/WalletModals';
 import { useDeliveryBoyBankDetails } from '@/hooks/queries/useDeliveryBoy';
+import Toast from 'react-native-toast-message';
 
 
 
@@ -56,6 +51,7 @@ const EarningsScreen = () => {
     'delivery_boy'
   );
   const bankDetails = useDeliveryBoyBankDetails(session?.user?.id || '');
+
   // Fetch earnings stats for selected period
   const {
     totalEarnings,
@@ -102,16 +98,23 @@ const EarningsScreen = () => {
 
   const handleWithdrawClick = () => {
     if (!isVerified) {
-      Alert.alert(
-        'Verification Required',
-        'Please complete KYC and admin verification to withdraw funds.',
-        [{ text: 'OK' }]
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Verification Required',
+        text2: 'Please complete KYC and admin verification to withdraw funds.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
       return;
     }
 
     if (!wallet || availableBalance <= 0) {
-      Alert.alert('No Balance', 'You have no available balance to withdraw.', [{ text: 'OK' }]);
+      Toast.show({
+        type: 'info',
+        text1: 'No Balance',
+        text2: 'You have no available balance to withdraw.',
+        position: 'top',
+      });
       return;
     }
 
@@ -120,14 +123,16 @@ const EarningsScreen = () => {
 
   const handleWithdrawalSubmit = async (amount: number) => {
     try {
-
       if (!bankDetails.data?.is_verified) {
-        Alert.alert(
-          'Bank Account Required',
-          bankDetails.data
+        Toast.show({
+          type: 'error',
+          text1: 'Bank Account Required',
+          text2: bankDetails.data
             ? 'Your bank account is pending verification. Please wait for admin approval.'
-            : 'Please add and verify a bank account first.'
-        );
+            : 'Please add and verify a bank account first.',
+          position: 'top',
+          visibilityTime: 4000,
+        });
         return;
       }
 
@@ -141,11 +146,12 @@ const EarningsScreen = () => {
       setShowSuccessModal(true);
     } catch (error: any) {
       setShowWithdrawalModal(false);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to process withdrawal request. Please try again.',
-        [{ text: 'OK' }]
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to process withdrawal request. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -161,26 +167,35 @@ const EarningsScreen = () => {
       await cancelCashoutMutation.mutateAsync(selectedCashout.id);
       setShowCancelModal(false);
       setSelectedCashout(null);
-      Alert.alert('Success', 'Withdrawal request cancelled successfully. Funds have been returned to your available balance.');
+      Toast.show({
+        type: 'success',
+        text1: 'Request Cancelled',
+        text2: 'Funds have been returned to your available balance.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
     } catch (error: any) {
       setShowCancelModal(false);
-      Alert.alert('Error', error.message || 'Failed to cancel withdrawal request.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to cancel withdrawal request.',
+        position: 'top',
+      });
     }
   };
 
   const formatDate = (dateString: string) => {
     try {
-      // Remove timezone offset (+00:00, +05:30, -08:00, etc.) and Z
-      const localDateString = dateString.replace(/([+-]\d{2}:\d{2}|Z)$/, '');      
+      const localDateString = dateString.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
       return format(parseISO(localDateString), 'MMM dd, yyyy');
     } catch {
       return dateString;
     }
   };
-  
+
   const formatTime = (dateString: string) => {
     try {
-      // Remove timezone offset (+00:00, +05:30, -08:00, etc.) and Z
       const localDateString = dateString.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
       return format(parseISO(localDateString), 'hh:mm a');
     } catch {
@@ -396,39 +411,18 @@ const EarningsScreen = () => {
 
           {/* Time Filter Tabs */}
           <View className="flex-row gap-2 mb-4">
-            <TouchableOpacity
-              onPress={() => setSelectedPeriod('today')}
-              className={`flex-1 py-3 rounded-full ${selectedPeriod === 'today' ? 'bg-white' : 'bg-white/20'
-                }`}
-              activeOpacity={0.8}
-            >
-              <Text className={`text-center font-bold ${selectedPeriod === 'today' ? 'text-[#4f46e5]' : 'text-white'
-                }`}>
-                Today
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setSelectedPeriod('week')}
-              className={`flex-1 py-3 rounded-full ${selectedPeriod === 'week' ? 'bg-white' : 'bg-white/20'
-                }`}
-              activeOpacity={0.8}
-            >
-              <Text className={`text-center font-bold ${selectedPeriod === 'week' ? 'text-[#4f46e5]' : 'text-white'
-                }`}>
-                This Week
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setSelectedPeriod('month')}
-              className={`flex-1 py-3 rounded-full ${selectedPeriod === 'month' ? 'bg-white' : 'bg-white/20'
-                }`}
-              activeOpacity={0.8}
-            >
-              <Text className={`text-center font-bold ${selectedPeriod === 'month' ? 'text-[#4f46e5]' : 'text-white'
-                }`}>
-                This Month
-              </Text>
-            </TouchableOpacity>
+            {(['today', 'week', 'month'] as const).map((period) => (
+              <TouchableOpacity
+                key={period}
+                onPress={() => setSelectedPeriod(period)}
+                className={`flex-1 py-3 rounded-full ${selectedPeriod === period ? 'bg-white' : 'bg-white/20'}`}
+                activeOpacity={0.8}
+              >
+                <Text className={`text-center font-bold ${selectedPeriod === period ? 'text-[#4f46e5]' : 'text-white'}`}>
+                  {period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {statsLoading ? (
@@ -527,7 +521,7 @@ const EarningsScreen = () => {
                               <View className="flex-row items-center">
                                 <Feather name="navigation" size={10} color="#9ca3af" />
                                 <Text className="text-xs text-gray-500 ml-1">
-                                   {distanceKm.toFixed(1)} km
+                                  {distanceKm.toFixed(1)} km
                                 </Text>
                               </View>
                             )}
@@ -539,18 +533,6 @@ const EarningsScreen = () => {
                       </View>
                     );
                   })}
-
-                  {/* {periodTransactions.length > 8 && (
-                    <TouchableOpacity
-                      className="mt-3 py-2 items-center"
-                      activeOpacity={0.8}
-                      onPress={() => router.push('/delivery/earnings/history')}
-                    >
-                      <Text className="text-indigo-600 font-semibold text-sm">
-                        View All {periodTransactions.length} Transactions
-                      </Text>
-                    </TouchableOpacity>
-                  )} */}
                 </View>
               )}
 

@@ -16,6 +16,7 @@ type MenuItem = {
  
 const menuItems: MenuItem[] = [
   { id: "1", iconName: "edit-2" as const, title: "Edit Profile", route: "edit-profile", iconColor: "#3b82f6" },
+  { id: "2", iconName: "heart" as const, title: "My Wishlist", route: "my-wishlist", iconColor: "#B01E28" },
   // { id: "2", iconName: "lock" as const, title: "Change Password", route: "change-password", iconColor: "#8b5cf6" },
   { id: "3", iconName: "map-pin" as const, title: "My Addresses", route: "my-addresses", iconColor: "#10b981" },
   { id: "4", iconName: "package" as const, title: "My Orders", route: "Orders", iconColor: "#10b981" },

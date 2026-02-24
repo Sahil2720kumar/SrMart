@@ -5,12 +5,10 @@ import useWishlistStore from "@/store/wishlistStore"
 import { Stack, useLocalSearchParams } from "expo-router"
 import { FlatList, StatusBar, View, Text, ActivityIndicator } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-
+import { Image } from "expo-image"
 import { useOfferDetail, useOfferProductsFetcher } from "@/hooks/queries"
+import { blurhash } from "@/types/categories-products.types"
 
-// ─── label helpers ──────────────────────────────────────────────────────────
-
-/** Human-readable scope label shown below the offer title */
 function getScopeLabel(offer: { applicable_to: string; applicable_id?: string | null }): string {
   switch (offer.applicable_to) {
     case "category": return "Category Offer"
@@ -21,14 +19,11 @@ function getScopeLabel(offer: { applicable_to: string; applicable_id?: string | 
   }
 }
 
-/** End-date string or "Ongoing" */
 function formatEndDate(iso: string | null | undefined): string {
   if (!iso) return "Ongoing"
   const date = new Date(iso)
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
-
-// ─── screen ─────────────────────────────────────────────────────────────────
 
 export default function OfferScreen() {
   const { offerId } = useLocalSearchParams<{ offerId: string }>()
@@ -36,13 +31,9 @@ export default function OfferScreen() {
   const { cart, addToCart, updateQuantity, totalItems, totalPrice } = useCartStore()
   const { wishlist, toggleWishlist } = useWishlistStore()
 
-  // 1. fetch the offer row
   const { data: offer, isLoading: isOfferLoading, error: offerError } = useOfferDetail(offerId ?? "")
-
-  // 2. orchestrator — reads offer.applicable_to and enables the right query
   const { products, isLoading: isProductsLoading, error: productsError } = useOfferProductsFetcher(offer)
 
-  // ── loading ───────────────────────────────────────────────────────────────
   if (isOfferLoading) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center">
@@ -53,7 +44,6 @@ export default function OfferScreen() {
     )
   }
 
-  // ── error ─────────────────────────────────────────────────────────────────
   if (offerError || productsError) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
@@ -66,7 +56,8 @@ export default function OfferScreen() {
     )
   }
 
-  // ── render ────────────────────────────────────────────────────────────────
+  const hasBanner = !!offer?.banner_image
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -74,33 +65,80 @@ export default function OfferScreen() {
 
       {/* Offer banner card */}
       <View
-        className="mx-4 mt-3 mb-2 rounded-2xl p-4"
+        className="mx-4 mt-3 mb-2 rounded-2xl overflow-hidden"
         style={{ backgroundColor: offer?.bg_color ?? "#f3f4f6" }}
       >
-        <View className="flex-row items-start justify-between">
+        {/* Background image + scrim */}
+        {hasBanner && (
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}>
+            <Image
+              source={offer!.banner_image}
+              placeholder={{ blurhash }}
+              contentFit="cover"
+              transition={1000}
+              style={{ width: '100%', height: '100%',opacity:0.4 }}
+            />
+            <View style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+              backgroundColor: 'rgba(0,0,0,0.45)'
+            }} />
+          </View>
+        )}
+
+        {/* Content */}
+        <View className="p-4 flex-row items-start justify-between">
           <View className="flex-1 pr-3">
             {offer?.tag && (
-              <View className="self-start bg-white/60 px-2 py-0.5 rounded-full mb-1">
-                <Text className="text-gray-700 text-xs font-semibold">{offer.tag}</Text>
+              <View className="self-start bg-white/30 px-2 py-0.5 rounded-full mb-1">
+                <Text className="text-white text-xs font-semibold">{offer.tag}</Text>
               </View>
             )}
-            <Text className="text-2xl font-bold text-gray-800">{offer?.discount}</Text>
-            <Text className="text-gray-600 text-sm mt-1">{offer?.description ?? ""}</Text>
+            <Text
+              className="text-2xl font-bold"
+              style={{ color: hasBanner ? '#ffffff' : '#1f2937' }}
+            >
+              {offer?.discount}
+            </Text>
+            <Text
+              className="text-sm mt-1"
+              style={{ color: hasBanner ? 'rgba(255,255,255,0.85)' : '#4b5563' }}
+            >
+              {offer?.description ?? ""}
+            </Text>
           </View>
-          {/* skeleton image placeholder */}
-          <View className="w-16 h-16 bg-white/50 rounded-xl items-center justify-center">
-            <View className="w-10 h-10 bg-gray-200 rounded-lg" />
+
+          {/* Thumbnail */}
+          <View className="w-16 h-16 rounded-xl overflow-hidden"
+            style={{ backgroundColor: hasBanner ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.5)' }}
+          >
+            {!hasBanner && (
+              <View className="w-full h-full bg-gray-200 rounded-xl" />
+            )}
           </View>
         </View>
 
-        {/* meta row */}
-        <View className="flex-row items-center justify-between mt-3">
+        {/* Meta row */}
+        <View className="flex-row items-center justify-between px-4 pb-4">
           <View className="flex-row items-center">
-            <Text className="text-gray-500 text-xs mr-2">⏱ {formatEndDate(offer?.end_date)}</Text>
-            <Text className="text-gray-500 text-xs">{getScopeLabel(offer!)}</Text>
+            <Text
+              className="text-xs mr-2"
+              style={{ color: hasBanner ? 'rgba(255,255,255,0.75)' : '#6b7280' }}
+            >
+              ⏱ {formatEndDate(offer?.end_date)}
+            </Text>
+            <Text
+              className="text-xs"
+              style={{ color: hasBanner ? 'rgba(255,255,255,0.75)' : '#6b7280' }}
+            >
+              {getScopeLabel(offer!)}
+            </Text>
           </View>
-          <View className="bg-white/60 px-2 py-0.5 rounded-full">
-            <Text className="text-gray-600 text-xs">{products.length} items</Text>
+          <View style={{ backgroundColor: hasBanner ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)' }}
+            className="px-2 py-0.5 rounded-full"
+          >
+            <Text style={{ color: hasBanner ? '#ffffff' : '#4b5563' }} className="text-xs">
+              {products.length} items
+            </Text>
           </View>
         </View>
       </View>
@@ -140,7 +178,6 @@ export default function OfferScreen() {
         />
       )}
 
-      {/* Floating Cart Bar */}
       <FloatingCartBar totalItems={totalItems} totalPrice={totalPrice} />
     </SafeAreaView>
   )

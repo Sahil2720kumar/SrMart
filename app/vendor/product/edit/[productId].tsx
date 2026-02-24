@@ -1,5 +1,5 @@
-import { 
-  useProductDetailsByVendorIdAndProductId, 
+import {
+  useProductDetailsByVendorIdAndProductId,
   useProductImagesByProductId,
   useUpdateProduct,
   useUploadProductImage,
@@ -15,37 +15,121 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   Switch,
   Image,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import * as ImagePicker from 'expo-image-picker';
 
+// ---------------------------------------------------------------------------
+// Reusable Confirm Modal
+// ---------------------------------------------------------------------------
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmStyle?: 'danger' | 'primary' | 'warning';
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmStyle = 'primary',
+  onConfirm,
+  onCancel,
+  loading = false,
+}: ConfirmModalProps) {
+  const confirmBg =
+    confirmStyle === 'danger'
+      ? 'bg-red-500'
+      : confirmStyle === 'warning'
+      ? 'bg-orange-500'
+      : 'bg-emerald-500';
+
+  const accentBg =
+    confirmStyle === 'danger'
+      ? 'bg-red-500'
+      : confirmStyle === 'warning'
+      ? 'bg-orange-500'
+      : 'bg-emerald-500';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable className="w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+          <View className={`h-1 w-full ${accentBg}`} />
+          <View className="p-6">
+            <Text className="text-gray-900 text-lg font-bold mb-2">{title}</Text>
+            <Text className="text-gray-600 text-sm leading-6">{message}</Text>
+          </View>
+          <View className="flex-row border-t border-gray-100">
+            <TouchableOpacity
+              onPress={onCancel}
+              disabled={loading}
+              className="flex-1 py-4 items-center border-r border-gray-100"
+            >
+              <Text className="text-gray-600 font-semibold text-sm">{cancelLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onConfirm}
+              disabled={loading}
+              className={`flex-1 py-4 items-center ${confirmBg} ${loading ? 'opacity-60' : ''}`}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text className="text-white font-bold text-sm">{confirmLabel}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Screen
+// ---------------------------------------------------------------------------
 export default function EditProductScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
-  
-  // Fetch product data
+
   const {
     data: product,
     isLoading: isLoadingProduct,
     error: productError,
   } = useProductDetailsByVendorIdAndProductId(productId);
 
-  // Fetch product images
-  const {
-    data: productImages,
-    isLoading: isLoadingImages,
-  } = useProductImagesByProductId(productId);
+  const { data: productImages, isLoading: isLoadingImages } =
+    useProductImagesByProductId(productId);
 
-  // Update mutation
   const updateProductMutation = useUpdateProduct();
   const uploadImageMutation = useUploadProductImage();
   const deleteImageMutation = useDeleteProductImage();
   const setPrimaryImageMutation = useSetPrimaryImage();
 
-  // Form State
+  // Form state
   const [productName, setProductName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [subCategoryId, setSubCategoryId] = useState('');
@@ -59,11 +143,21 @@ export default function EditProductScreen() {
   const [shortDescription, setShortDescription] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [barcode, setBarcode] = useState('');
-
   const [isOrganic, setIsOrganic] = useState(false);
   const [isVeg, setIsVeg] = useState(true);
 
-  // Load product data into form when it's available
+  // Modal state
+  const [goBackModalVisible, setGoBackModalVisible] = useState(false);
+  const [deleteImageModalVisible, setDeleteImageModalVisible] = useState(false);
+  const [deleteImageTarget, setDeleteImageTarget] = useState<{
+    id: string;
+    url: string;
+  } | null>(null);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (product) {
       setProductName(product.name || '');
@@ -84,100 +178,9 @@ export default function EditProductScreen() {
     }
   }, [product]);
 
-  const handleGoBack = () => {
-    if (hasUnsavedChanges()) {
-      Alert.alert(
-        'Unsaved Changes',
-        'You have unsaved changes. Are you sure you want to go back?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-        ]
-      );
-    } else {
-      router.back();
-    }
-  };
-
-  const handleUploadImage = async () => {
-    try {
-      // Request permission
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant camera roll permissions to upload images.'
-        );
-        return;
-      }
-
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-        aspect: [1, 1],
-        allowsEditing: false,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-        
-        // Upload image
-        await uploadImageMutation.mutateAsync({
-          productId,
-          imageUri,
-          isPrimary: !productImages || productImages.length === 0, // First image is primary
-        });
-
-        Alert.alert('Success', 'Image uploaded successfully!');
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
-    }
-  };
-
-  const handleDeleteImage = (imageId: string, imageUrl: string) => {
-    Alert.alert(
-      'Delete Image',
-      'Are you sure you want to delete this image?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteImageMutation.mutateAsync({
-                productId,
-                imageId,
-                imageUrl,
-              });
-              Alert.alert('Success', 'Image deleted successfully!');
-            } catch (error) {
-              console.error('Delete error:', error);
-              Alert.alert('Error', 'Failed to delete image.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleSetPrimaryImage = async (imageId: string) => {
-    try {
-      await setPrimaryImageMutation.mutateAsync({
-        productId,
-        imageId,
-      });
-      Alert.alert('Success', 'Primary image updated!');
-    } catch (error) {
-      console.error('Set primary error:', error);
-      Alert.alert('Error', 'Failed to set primary image.');
-    }
-  };
-
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
   const hasUnsavedChanges = () => {
     if (!product) return false;
     return (
@@ -192,88 +195,206 @@ export default function EditProductScreen() {
 
   const validateForm = () => {
     const errors: string[] = [];
-
     if (!productName.trim()) errors.push('Product name is required');
     if (!unit.trim()) errors.push('Unit is required');
     if (!price.trim()) errors.push('Price is required');
     if (!stockQuantity.trim()) errors.push('Stock quantity is required');
-
     if (Number(price) <= 0) errors.push('Price must be greater than 0');
-    if (discountPrice && Number(discountPrice) <= 0) errors.push('Discount price must be greater than 0');
-    if (discountPrice && Number(discountPrice) > Number(price)) {
+    if (discountPrice && Number(discountPrice) <= 0)
+      errors.push('Discount price must be greater than 0');
+    if (discountPrice && Number(discountPrice) > Number(price))
       errors.push('Discount price cannot exceed regular price');
-    }
     if (Number(stockQuantity) < 0) errors.push('Stock cannot be negative');
-    if (lowStockThreshold && Number(lowStockThreshold) < 0) {
+    if (lowStockThreshold && Number(lowStockThreshold) < 0)
       errors.push('Low stock threshold cannot be negative');
-    }
-
     return errors;
-  };
-
-  const handleUpdateProduct = async () => {
-    const errors = validateForm();
-
-    if (errors.length > 0) {
-      Alert.alert('Validation Error', errors.join('\n'));
-      return;
-    }
-
-    try {
-      const updates = {
-        name: productName.trim(),
-        unit: unit.trim(),
-        price: Number(price),
-        discount_price: Number(discountPrice),
-        stock_quantity: Number(stockQuantity),
-        low_stock_threshold: lowStockThreshold ? Number(lowStockThreshold) : 10,
-        is_available: isAvailable,
-        description: description.trim(),
-        short_description: shortDescription.trim() || "",
-        expiry_date: expiryDate.trim() || "",
-        barcode: barcode.trim() || "",
-        is_organic: isOrganic,
-        is_veg: isVeg,
-      };
-
-      await updateProductMutation.mutateAsync({
-        productId,
-        updates,
-      });
-
-      Alert.alert(
-        'Success',
-        `"${productName}" updated successfully!`,
-        [
-          {
-            text: 'View Product',
-            onPress: () => router.push(`vendor/product/${productId}`),
-          },
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Update error:', error);
-      Alert.alert('Error', 'Failed to update product. Please try again.');
-    }
   };
 
   const calculateDiscount = () => {
     if (!price || !discountPrice) return '0';
-    const priceNum = Number(price);
-    const discountNum = Number(discountPrice);
-    if (priceNum <= 0 || discountNum <= 0) return '0';
-    return ((priceNum - discountNum) / priceNum * 100).toFixed(1);
+    const p = Number(price);
+    const d = Number(discountPrice);
+    if (p <= 0 || d <= 0) return '0';
+    return ((p - d) / p * 100).toFixed(1);
   };
 
   const discountPercentage = calculateDiscount();
-
   const isLoading = isLoadingProduct || isLoadingImages;
-  const isUploadingOrDeleting = uploadImageMutation.isPending || deleteImageMutation.isPending || setPrimaryImageMutation.isPending;
+  const isUploadingOrDeleting =
+    uploadImageMutation.isPending ||
+    deleteImageMutation.isPending ||
+    setPrimaryImageMutation.isPending;
 
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+  const handleGoBack = () => {
+    if (hasUnsavedChanges()) {
+      setGoBackModalVisible(true);
+    } else {
+      router.back();
+    }
+  };
+
+  const handleUploadImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Required',
+        text2: 'Please grant camera roll permissions to upload images.',
+        position: 'top',
+      });
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ 
+        mediaTypes: ['images'], 
+        allowsMultipleSelection: false, 
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8, 
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadImageMutation.mutateAsync({
+          productId,
+          imageUri: result.assets[0].uri,
+          isPrimary: !productImages || productImages.length === 0,
+        });
+        Toast.show({
+          type: 'success',
+          text1: 'Image Uploaded',
+          text2: 'Image uploaded successfully.',
+          position: 'top',
+        });
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: 'Failed to upload image. Please try again.',
+        position: 'top',
+      });
+    }
+  };
+
+  const handleDeleteImage = (imageId: string, imageUrl: string) => {
+    setDeleteImageTarget({ id: imageId, url: imageUrl });
+    setDeleteImageModalVisible(true);
+  };
+
+  const handleConfirmDeleteImage = async () => {
+    if (!deleteImageTarget) return;
+    try {
+      await deleteImageMutation.mutateAsync({
+        productId,
+        imageId: deleteImageTarget.id,
+        imageUrl: deleteImageTarget.url,
+      });
+      setDeleteImageModalVisible(false);
+      setDeleteImageTarget(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Image Deleted',
+        text2: 'Image removed successfully.',
+        position: 'top',
+      });
+    } catch (error) {
+      console.error('Delete error:', error);
+      setDeleteImageModalVisible(false);
+      setDeleteImageTarget(null);
+      Toast.show({
+        type: 'error',
+        text1: 'Delete Failed',
+        text2: 'Failed to delete image.',
+        position: 'top',
+      });
+    }
+  };
+
+  const handleSetPrimaryImage = async (imageId: string) => {
+    try {
+      await setPrimaryImageMutation.mutateAsync({ productId, imageId });
+      Toast.show({
+        type: 'success',
+        text1: 'Primary Image Updated',
+        position: 'top',
+        visibilityTime: 2000,
+      });
+    } catch (error) {
+      console.error('Set primary error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: 'Failed to set primary image.',
+        position: 'top',
+      });
+    }
+  };
+
+  const handleUpdateProduct = () => {
+    const errors = validateForm();
+    if (errors.length > 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: errors[0],
+        position: 'top',
+        visibilityTime: 4000,
+      });
+      return;
+    }
+    setSaveModalVisible(true);
+  };
+
+  const handleConfirmUpdate = async () => {
+    setSaveModalVisible(false);
+    try {
+      await updateProductMutation.mutateAsync({
+        productId,
+        updates: {
+          name: productName.trim(),
+          unit: unit.trim(),
+          price: Number(price),
+          discount_price: Number(discountPrice),
+          stock_quantity: Number(stockQuantity),
+          low_stock_threshold: lowStockThreshold ? Number(lowStockThreshold) : 10,
+          is_available: isAvailable,
+          description: description.trim(),
+          short_description: shortDescription.trim() || '',
+          expiry_date: expiryDate.trim() || '',
+          barcode: barcode.trim() || '',
+          is_organic: isOrganic,
+          is_veg: isVeg,
+        },
+      });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Product Updated',
+        text2: `"${productName}" saved successfully.`,
+        position: 'top',
+        visibilityTime: 3000,
+      });
+
+      setTimeout(() => router.push(`vendor/product/${productId}`), 1000);
+    } catch (error) {
+      console.error('Update error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: 'Failed to update product. Please try again.',
+        position: 'top',
+      });
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Render states
+  // ---------------------------------------------------------------------------
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
@@ -305,9 +426,12 @@ export default function EditProductScreen() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+      {/* ── Header ── */}
       <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center justify-between">
         <View className="flex-row items-center flex-1">
           <TouchableOpacity className="p-2 -ml-2" onPress={handleGoBack}>
@@ -326,7 +450,7 @@ export default function EditProductScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        {/* Product Images Section */}
+        {/* ── Product Images ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <View className="flex-row items-center justify-between mb-3">
             <Text className="text-sm font-semibold text-gray-600">PRODUCT IMAGES</Text>
@@ -335,13 +459,8 @@ export default function EditProductScreen() {
             </Text>
           </View>
 
-          {/* Images Grid */}
           {productImages && productImages.length > 0 ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              className="mb-3"
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
               <View className="flex-row gap-3">
                 {productImages.map((image) => (
                   <View key={image.id} className="relative">
@@ -352,17 +471,14 @@ export default function EditProductScreen() {
                         resizeMode="cover"
                       />
                     </View>
-                    
-                    {/* Primary Badge */}
+
                     {image.is_primary && (
                       <View className="absolute top-1 left-1 bg-emerald-500 rounded px-2 py-0.5">
                         <Text className="text-white text-xs font-bold">Primary</Text>
                       </View>
                     )}
-                    
-                    {/* Action Buttons */}
+
                     <View className="absolute top-1 right-1 flex-col gap-1">
-                      {/* Delete Button */}
                       <TouchableOpacity
                         onPress={() => handleDeleteImage(image.id, image.image_url)}
                         disabled={isUploadingOrDeleting}
@@ -370,8 +486,6 @@ export default function EditProductScreen() {
                       >
                         <Feather name="trash-2" size={10} color="#fff" />
                       </TouchableOpacity>
-                      
-                      {/* Set Primary Button */}
                       {!image.is_primary && (
                         <TouchableOpacity
                           onPress={() => handleSetPrimaryImage(image.id)}
@@ -382,8 +496,7 @@ export default function EditProductScreen() {
                         </TouchableOpacity>
                       )}
                     </View>
-                    
-                    {/* Display Order */}
+
                     <View className="absolute bottom-1 left-1 bg-black/60 rounded px-2 py-0.5">
                       <Text className="text-white text-xs font-semibold">
                         #{image.display_order + 1}
@@ -405,7 +518,6 @@ export default function EditProductScreen() {
             </View>
           )}
 
-          {/* Upload Button */}
           <TouchableOpacity
             onPress={handleUploadImage}
             disabled={isUploadingOrDeleting}
@@ -418,19 +530,17 @@ export default function EditProductScreen() {
             ) : (
               <>
                 <Feather name="upload" size={18} color="#059669" />
-                <Text className="text-emerald-700 font-semibold text-sm">
-                  Upload New Image
-                </Text>
+                <Text className="text-emerald-700 font-semibold text-sm">Upload New Image</Text>
               </>
             )}
           </TouchableOpacity>
-          
-          {/* Help Text */}
+
           <Text className="text-xs text-gray-500 mt-2 text-center">
             First image will be set as primary. Tap star icon to change primary image.
           </Text>
         </View>
-        {/* Category Info (Read-only) */}
+
+        {/* ── Category (read-only) ── */}
         <View className="bg-blue-50 mx-4 mt-4 rounded-2xl p-4 border border-blue-200">
           <View className="flex-row items-center gap-2 mb-2">
             <Feather name="info" size={16} color="#2563eb" />
@@ -443,9 +553,7 @@ export default function EditProductScreen() {
             {product.sub_categories?.name && (
               <>
                 <Text className="text-sm text-blue-600">›</Text>
-                <Text className="text-sm text-blue-800">
-                  {product.sub_categories.name}
-                </Text>
+                <Text className="text-sm text-blue-800">{product.sub_categories.name}</Text>
               </>
             )}
           </View>
@@ -454,11 +562,10 @@ export default function EditProductScreen() {
           </Text>
         </View>
 
-        {/* Basic Information */}
+        {/* ── Basic Information ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-4">BASIC INFORMATION</Text>
 
-          {/* Product Name */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">Product Name *</Text>
             <TextInput
@@ -470,7 +577,6 @@ export default function EditProductScreen() {
             />
           </View>
 
-          {/* Unit / Size */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">Unit *</Text>
             <TextInput
@@ -482,7 +588,6 @@ export default function EditProductScreen() {
             />
           </View>
 
-          {/* Short Description */}
           <View>
             <Text className="text-sm font-semibold text-gray-700 mb-2">Short Description</Text>
             <TextInput
@@ -497,13 +602,15 @@ export default function EditProductScreen() {
           </View>
         </View>
 
-        {/* Pricing Section */}
+        {/* ── Pricing ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-4">PRICING</Text>
 
           <View className="flex-row gap-3 mb-4">
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Regular Price (₹) *</Text>
+              <Text className="text-sm font-semibold text-gray-700 mb-2">
+                Regular Price (₹) *
+              </Text>
               <TextInput
                 placeholder="0"
                 value={price}
@@ -513,9 +620,10 @@ export default function EditProductScreen() {
                 placeholderTextColor="#9ca3af"
               />
             </View>
-
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Discount Price (₹)</Text>
+              <Text className="text-sm font-semibold text-gray-700 mb-2">
+                Discount Price (₹)
+              </Text>
               <TextInput
                 placeholder="0"
                 value={discountPrice}
@@ -527,7 +635,6 @@ export default function EditProductScreen() {
             </View>
           </View>
 
-          {/* Discount Display */}
           {price && discountPrice && Number(discountPrice) < Number(price) && (
             <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
               <View className="flex-row justify-between items-center">
@@ -543,7 +650,7 @@ export default function EditProductScreen() {
           )}
         </View>
 
-        {/* Stock & Availability */}
+        {/* ── Stock & Availability ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-4">STOCK & AVAILABILITY</Text>
 
@@ -559,7 +666,6 @@ export default function EditProductScreen() {
                 placeholderTextColor="#9ca3af"
               />
             </View>
-
             <View className="flex-1">
               <Text className="text-sm font-semibold text-gray-700 mb-2">Low Stock Alert</Text>
               <TextInput
@@ -573,12 +679,13 @@ export default function EditProductScreen() {
             </View>
           </View>
 
-          {/* Available Toggle */}
           <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
             <View>
               <Text className="text-gray-900 font-semibold text-sm">Available for Sale</Text>
               <Text className="text-gray-600 text-xs mt-1">
-                {isAvailable ? 'Customers can order this product' : 'Product is hidden from customers'}
+                {isAvailable
+                  ? 'Customers can order this product'
+                  : 'Product is hidden from customers'}
               </Text>
             </View>
             <Switch
@@ -590,11 +697,10 @@ export default function EditProductScreen() {
           </View>
         </View>
 
-        {/* Product Details */}
+        {/* ── Product Details ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT DETAILS</Text>
 
-          {/* Description */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">Description</Text>
             <TextInput
@@ -609,9 +715,10 @@ export default function EditProductScreen() {
             />
           </View>
 
-          {/* Expiry Date */}
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Expiry Date / Shelf Life</Text>
+            <Text className="text-sm font-semibold text-gray-700 mb-2">
+              Expiry Date / Shelf Life
+            </Text>
             <TextInput
               placeholder="e.g., 2025-12-31 or 5 days"
               value={expiryDate}
@@ -621,7 +728,6 @@ export default function EditProductScreen() {
             />
           </View>
 
-          {/* Barcode */}
           <View>
             <Text className="text-sm font-semibold text-gray-700 mb-2">Barcode</Text>
             <TextInput
@@ -634,15 +740,20 @@ export default function EditProductScreen() {
           </View>
         </View>
 
-        {/* Product Flags */}
+        {/* ── Product Badges ── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT BADGES</Text>
 
-          {/* Vegetarian Toggle */}
           <View className="flex-row items-center justify-between pb-3 mb-3 border-b border-gray-100">
             <View className="flex-row items-center gap-2">
-              <View className={`w-5 h-5 rounded border-2 items-center justify-center ${isVeg ? 'border-green-600 bg-green-50' : 'border-red-600 bg-red-50'}`}>
-                <View className={`w-2 h-2 rounded-full ${isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+              <View
+                className={`w-5 h-5 rounded border-2 items-center justify-center ${
+                  isVeg ? 'border-green-600 bg-green-50' : 'border-red-600 bg-red-50'
+                }`}
+              >
+                <View
+                  className={`w-2 h-2 rounded-full ${isVeg ? 'bg-green-600' : 'bg-red-600'}`}
+                />
               </View>
               <Text className="text-gray-900 font-semibold text-sm">Vegetarian</Text>
             </View>
@@ -654,7 +765,6 @@ export default function EditProductScreen() {
             />
           </View>
 
-          {/* Organic Toggle */}
           <View className="flex-row items-center justify-between pb-3 mb-3 border-b border-gray-100">
             <View className="flex-row items-center gap-2">
               <Feather name="award" size={18} color={isOrganic ? '#059669' : '#9ca3af'} />
@@ -669,18 +779,17 @@ export default function EditProductScreen() {
           </View>
         </View>
 
-        {/* Bottom spacing */}
         <View className="h-6" />
       </ScrollView>
 
-      {/* Sticky Action Buttons */}
+      {/* ── Sticky Save Button ── */}
       <View className="bg-white px-4 py-4 border-t border-gray-200">
         <TouchableOpacity
           onPress={handleUpdateProduct}
           disabled={updateProductMutation.isPending || !hasUnsavedChanges()}
           activeOpacity={0.7}
           className={`w-full bg-emerald-500 rounded-xl py-4 items-center justify-center ${
-            (updateProductMutation.isPending || !hasUnsavedChanges()) ? 'opacity-50' : ''
+            updateProductMutation.isPending || !hasUnsavedChanges() ? 'opacity-50' : ''
           }`}
         >
           {updateProductMutation.isPending ? (
@@ -692,6 +801,48 @@ export default function EditProductScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* ── Go Back Modal ── */}
+      <ConfirmModal
+        visible={goBackModalVisible}
+        title="Unsaved Changes"
+        message="You have unsaved changes. Are you sure you want to go back? Your changes will be lost."
+        confirmLabel="Discard"
+        cancelLabel="Stay"
+        confirmStyle="danger"
+        onConfirm={() => {
+          setGoBackModalVisible(false);
+          router.back();
+        }}
+        onCancel={() => setGoBackModalVisible(false)}
+      />
+
+      {/* ── Delete Image Modal ── */}
+      <ConfirmModal
+        visible={deleteImageModalVisible}
+        title="Delete Image"
+        message="Are you sure you want to delete this image? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmStyle="danger"
+        loading={deleteImageMutation.isPending}
+        onConfirm={handleConfirmDeleteImage}
+        onCancel={() => {
+          setDeleteImageModalVisible(false);
+          setDeleteImageTarget(null);
+        }}
+      />
+
+      {/* ── Save Changes Modal ── */}
+      <ConfirmModal
+        visible={saveModalVisible}
+        title="Save Changes?"
+        message={`Update "${productName}"? The product will be re-verified if pricing or stock details have changed.`}
+        confirmLabel="Save"
+        confirmStyle="primary"
+        loading={updateProductMutation.isPending}
+        onConfirm={handleConfirmUpdate}
+        onCancel={() => setSaveModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

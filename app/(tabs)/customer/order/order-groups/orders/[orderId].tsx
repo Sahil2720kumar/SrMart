@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, Alert, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Linking, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -13,6 +13,7 @@ import { OrderItem, OrderStatus } from '@/types/orders-carts.types';
 import { Image } from 'expo-image';
 import { blurhash, Product } from '@/types/categories-products.types';
 import useCartStore from '@/store/cartStore';
+import Toast from 'react-native-toast-message';
 
 
 export default function OrderDetailsScreen() {
@@ -20,58 +21,17 @@ export default function OrderDetailsScreen() {
   const { session } = useAuthStore();
   const { data: order, isLoading, error } = useOrderDetail(orderId);
   const { data: timeline } = useOrderTimeline(orderId);
-  const {addToCart,updateQuantity}=useCartStore()
-  // console.log(order);
-  // console.log(timeline);
+  const { addToCart, updateQuantity } = useCartStore();
 
   const cancelOrderMutation = useCancelOrder();
   const reorderMutation = useReorder();
-
-  // const handleCancelOrder = () => {
-  //   Alert.alert(
-  //     'Cancel Order',
-  //     'Are you sure you want to cancel this order?',
-  //     [
-  //       { text: 'No', style: 'cancel' },
-  //       {
-  //         text: 'Yes, Cancel',
-  //         style: 'destructive',
-  //         onPress: () => {
-  //           Alert.prompt(
-  //             'Reason for Cancellation',
-  //             'Please tell us why you want to cancel',
-  //             [
-  //               { text: 'Cancel', style: 'cancel' },
-  //               {
-  //                 text: 'Submit',
-  //                 onPress: (reason?: string) => {
-  //                   if (!reason?.trim()) {
-  //                     Alert.alert('Error', 'Please provide a reason');
-  //                     return;
-  //                   }
-
-  //                   cancelOrderMutation.mutate({
-  //                     orderId,
-  //                     customerId: session?.user?.id || '',
-  //                     reason,
-  //                   });
-  //                 },
-  //               },
-  //             ],
-  //             'plain-text'
-  //           );
-  //         },
-  //       },
-  //     ]
-  //   );
-  // };
 
   type ReorderItem = {
     product_id: string;
     quantity: number;
     products: Product;
   };
-   
+
   const handleReorder = () => {
     reorderMutation.mutate(orderId, {
       onSuccess: (items: ReorderItem[]) => {
@@ -81,22 +41,20 @@ export default function OrderDetailsScreen() {
             updateQuantity(products.id, quantity - 1);
           }
         });
-  
-        Alert.alert('Success', 'Items added to cart!', [
-          {
-            text: 'View Cart',
-            onPress: () => router.push('/customer/order/cart'),
-          },
-          { text: 'Continue Shopping', style: 'cancel' },
-        ]);
+
+        Toast.show({
+          type: 'success',
+          text1: 'Items added to cart!',
+          text2: 'Tap to view your cart',
+          position: 'top',
+          onPress: () => router.push('/customer/order/cart'),
+        });
       },
     });
   };
-  
 
   const handleCallDeliveryBoy = () => {
     if (order?.delivery_boys) {
-      // Assuming delivery boy has a phone in users table
       Linking.openURL(`tel:+91XXXXXXXXXX`); // Replace with actual phone
     }
   };
@@ -141,7 +99,6 @@ export default function OrderDetailsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
-        
       >
         {/* Order Status Timeline */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3">
@@ -179,12 +136,6 @@ export default function OrderDetailsScreen() {
                 >
                   {step.status}
                 </Text>
-
-                {/* {step?.description && (
-                  <Text className="text-xs text-gray-500 mt-0.5">
-                    {step?.description}
-                  </Text>
-                )} */}
 
                 {step.timestamp && (
                   <Text className="text-xs text-gray-500 mt-1">
@@ -464,19 +415,6 @@ export default function OrderDetailsScreen() {
       {/* Action Buttons */}
       <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <View className="flex-row gap-3">
-          {/* {canCancelOrder(order.status) && (
-            <TouchableOpacity
-              // onPress={handleCancelOrder}
-              disabled={cancelOrderMutation.isPending}
-              className="flex-1 bg-red-500 rounded-xl py-4 items-center justify-center"
-              style={{ opacity: cancelOrderMutation.isPending ? 0.6 : 1 }}
-            >
-              <Text className="text-white font-bold text-base">
-                {cancelOrderMutation.isPending ? 'Cancelling...' : 'Cancel Order'}
-              </Text>
-            </TouchableOpacity>
-          )} */}
-
           {order.status === 'delivered' && (
             <TouchableOpacity
               onPress={handleReorder}
@@ -492,8 +430,13 @@ export default function OrderDetailsScreen() {
 
           <TouchableOpacity
             onPress={() => {
-              // Navigate to help/support
-              Alert.alert('Need Help?', 'Contact support at support@example.com');
+              Toast.show({
+                type: 'info',
+                text1: 'Need Help?',
+                text2: 'Contact support at support@example.com',
+                position: 'top',
+                visibilityTime: 4000,
+              });
             }}
             className="flex-1 bg-white border-2 border-gray-200 rounded-xl py-4 items-center justify-center"
           >

@@ -1,5 +1,5 @@
 // app/(tabs)/customer/order/order-groups/[groupId].tsx
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { PaymentStatus, OrderStatus } from '@/types/orders-carts.types';
 import { Image } from 'expo-image';
 import { blurhash } from '@/types/categories-products.types';
+import Toast from 'react-native-toast-message';
 
 export default function OrderGroupDetailScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -206,9 +207,7 @@ export default function OrderGroupDetailScreen() {
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
-                  <View className="w-full h-full items-center justify-center bg-green-100">
-                    {/* <Text className="text-2xl">👤</Text> */}
-                  </View>
+                  <View className="w-full h-full items-center justify-center bg-green-100" />
                 )}
               </View>
 
@@ -218,20 +217,18 @@ export default function OrderGroupDetailScreen() {
                   {orderGroup.customers.first_name}{' '}
                   {orderGroup.customers.last_name}
                 </Text>
-
                 <Text className="text-xs text-gray-500">
                   Customer ID:{' '}
                   {String(orderGroup.customers.user_id).slice(0, 8)}...
                 </Text>
               </View>
-
             </View>
           </View>
         )}
 
         {/* Orders in this Group */}
         <View className="bg-white mx-4 rounded-2xl p-4 mb-3 gap-y-2">
-          <Text className="text-base font-bold text-gray-900 ">
+          <Text className="text-base font-bold text-gray-900">
             Orders ({orderGroup.orders?.length || 0})
           </Text>
 
@@ -240,8 +237,9 @@ export default function OrderGroupDetailScreen() {
               <TouchableOpacity
                 key={order.id}
                 onPress={() => router.push(`/customer/order/order-groups/orders/${order.id}`)}
-                className={`border border-gray-100 rounded-xl p-4 mb-3 last:mb-0 ${index < orderGroup.orders.length - 1 ? 'mb-3' : ''
-                  }`}
+                className={`border border-gray-100 rounded-xl p-4 mb-3 last:mb-0 ${
+                  index < orderGroup.orders.length - 1 ? 'mb-3' : ''
+                }`}
                 activeOpacity={0.7}
               >
                 {/* Order Header */}
@@ -280,14 +278,11 @@ export default function OrderGroupDetailScreen() {
                               </Text>
                             </View>
                           )}
-
                       </View>
                     </View>
                   </View>
                   <View
-                    className={`px-3 py-1.5 rounded-full ${getOrderStatusColor(
-                      order.status
-                    )}`}
+                    className={`px-3 py-1.5 rounded-full ${getOrderStatusColor(order.status)}`}
                   >
                     <Text className="text-xs font-semibold">
                       {getOrderStatusText(order.status)}
@@ -339,11 +334,6 @@ export default function OrderGroupDetailScreen() {
                     ₹{order.total_amount.toFixed(2)}
                   </Text>
                 </View>
-
-                {/* View Details Arrow */}
-                {/* <View className="absolute top-4 right-4">
-                  <Feather name="chevron-right" size={15} color="#9ca3af" />
-                </View> */}
               </TouchableOpacity>
             ))
           ) : (
@@ -359,7 +349,13 @@ export default function OrderGroupDetailScreen() {
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={() => {
-              Alert.alert('Need Help?', 'Contact support at support@example.com');
+              Toast.show({
+                type: 'info',
+                text1: 'Need Help?',
+                text2: 'Contact support at support@example.com',
+                position: 'top',
+                visibilityTime: 4000,
+              });
             }}
             className="flex-1 bg-white border-2 border-gray-200 rounded-xl py-4 items-center justify-center"
           >
@@ -369,12 +365,13 @@ export default function OrderGroupDetailScreen() {
           {orderGroup.razorpay_payment_id && (
             <TouchableOpacity
               onPress={() => {
-                Alert.alert(
-                  'Payment Receipt',
-                  `Payment ID: ${orderGroup.razorpay_payment_id}
-Amount: ₹${orderGroup.total_amount.toFixed(2)}
-Status: ${orderGroup.payment_status.toUpperCase()}`
-                );
+                Toast.show({
+                  type: 'success',
+                  text1: `Payment ID: ${orderGroup.razorpay_payment_id}`,
+                  text2: `₹${orderGroup.total_amount.toFixed(2)} • ${orderGroup.payment_status.toUpperCase()}`,
+                  position: 'top',
+                  visibilityTime: 5000,
+                });
               }}
               className="flex-1 bg-green-500 rounded-xl py-4 items-center justify-center"
             >

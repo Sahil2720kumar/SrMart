@@ -7,13 +7,15 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   TextInput,
   Platform,
   KeyboardAvoidingView,
   Switch,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import { useVendorDetail, useUpdateVendorProfile } from '@/hooks/queries';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
@@ -62,11 +64,8 @@ export default function EditProfileScreen() {
     isLoading: isLoadingVendor,
     isError,
     error,
-    refetch
+    refetch,
   } = useVendorDetail(session?.user?.id || '');
-
-  // console.log(vendorData);
-  
 
   // Update mutation
   const updateVendorMutation = useUpdateVendorProfile();
@@ -90,6 +89,10 @@ export default function EditProfileScreen() {
   const [showBusinessHours, setShowBusinessHours] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Copy-to-all-days confirmation modal
+  const [copyModal, setCopyModal] = useState(false);
+  const [sourceDayToCopy, setSourceDayToCopy] = useState<typeof DAYS[number] | null>(null);
+
   // Initialize form with vendor data
   useEffect(() => {
     if (vendorData) {
@@ -100,10 +103,9 @@ export default function EditProfileScreen() {
       setState(vendorData.state || '');
       setPincode(vendorData.pincode || '');
 
-      // Parse business hours
       if (vendorData.business_hours && Object.keys(vendorData.business_hours).length > 0) {
         const parsedHours: Partial<WeekSchedule> = {};
-        DAYS.forEach(day => {
+        DAYS.forEach((day) => {
           const dayHours = vendorData.business_hours[day];
           if (dayHours) {
             parsedHours[day] = {
@@ -123,26 +125,17 @@ export default function EditProfileScreen() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!storeName.trim()) {
-      newErrors.storeName = 'Store name is required';
-    }
-    if (!address.trim()) {
-      newErrors.address = 'Address is required';
-    }
-    if (!city.trim()) {
-      newErrors.city = 'City is required';
-    }
-    if (!state.trim()) {
-      newErrors.state = 'State is required';
-    }
+    if (!storeName.trim()) newErrors.storeName = 'Store name is required';
+    if (!address.trim()) newErrors.address = 'Address is required';
+    if (!city.trim()) newErrors.city = 'City is required';
+    if (!state.trim()) newErrors.state = 'State is required';
     if (!pincode.trim()) {
       newErrors.pincode = 'Pincode is required';
     } else if (!/^\d{6}$/.test(pincode)) {
       newErrors.pincode = 'Please enter a valid 6-digit pincode';
     }
 
-    // Validate business hours
-    DAYS.forEach(day => {
+    DAYS.forEach((day) => {
       const schedule = businessHours[day];
       if (!schedule.isClosed) {
         if (!schedule.open || !schedule.close) {
@@ -159,14 +152,18 @@ export default function EditProfileScreen() {
 
   const handleSaveProfile = async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix all errors before saving');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fix all errors before saving.',
+        position: 'top',
+      });
       return;
     }
 
     try {
-      // Format business hours for database (remove isClosed flag and closed days)
       const formattedBusinessHours: Record<string, { open: string; close: string }> = {};
-      DAYS.forEach(day => {
+      DAYS.forEach((day) => {
         if (!businessHours[day].isClosed) {
           formattedBusinessHours[day] = {
             open: businessHours[day].open,
@@ -188,12 +185,21 @@ export default function EditProfileScreen() {
 
       await updateVendorMutation.mutateAsync(updates);
 
-      Alert.alert('Success', 'Your profile has been updated successfully!', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Your profile has been updated successfully!',
+        position: 'top',
+      });
+      router.back();
     } catch (error: any) {
       console.error('Failed to update profile:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to update profile. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -202,12 +208,9 @@ export default function EditProfileScreen() {
   };
 
   const updateDaySchedule = (day: typeof DAYS[number], field: keyof DaySchedule, value: any) => {
-    setBusinessHours(prev => ({
+    setBusinessHours((prev) => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [field]: value,
-      },
+      [day]: { ...prev[day], [field]: value },
     }));
   };
 
@@ -216,24 +219,26 @@ export default function EditProfileScreen() {
   };
 
   const copyToAllDays = (sourceDay: typeof DAYS[number]) => {
-    Alert.alert(
-      'Copy to All Days',
-      `Copy ${DAY_LABELS[sourceDay]}'s hours to all other days?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Copy',
-          onPress: () => {
-            const sourceDaySchedule = businessHours[sourceDay];
-            const updatedSchedule: Partial<WeekSchedule> = {};
-            DAYS.forEach(day => {
-              updatedSchedule[day] = { ...sourceDaySchedule };
-            });
-            setBusinessHours(updatedSchedule as WeekSchedule);
-          },
-        },
-      ]
-    );
+    setSourceDayToCopy(sourceDay);
+    setCopyModal(true);
+  };
+
+  const confirmCopyToAllDays = () => {
+    if (!sourceDayToCopy) return;
+    const sourceDaySchedule = businessHours[sourceDayToCopy];
+    const updatedSchedule: Partial<WeekSchedule> = {};
+    DAYS.forEach((day) => {
+      updatedSchedule[day] = { ...sourceDaySchedule };
+    });
+    setBusinessHours(updatedSchedule as WeekSchedule);
+    setCopyModal(false);
+    setSourceDayToCopy(null);
+    Toast.show({
+      type: 'success',
+      text1: 'Hours Copied',
+      text2: `${DAY_LABELS[sourceDayToCopy]}'s hours applied to all days.`,
+      position: 'top',
+    });
   };
 
   // Loading state
@@ -250,8 +255,8 @@ export default function EditProfileScreen() {
   if (isError || !vendorData) {
     return (
       <FullPageError
-        code='500'
-        message={error?.message || "Failed to load profile"}
+        code="500"
+        message={error?.message || 'Failed to load profile'}
         onActionPress={refetch}
       />
     );
@@ -260,13 +265,13 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         {/* Header */}
         <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center gap-3">
           <TouchableOpacity onPress={handleGoBack} className="p-2 -ml-2">
-            <Feather name='chevron-left' size={24} color="#1f2937" />
+            <Feather name="chevron-left" size={24} color="#1f2937" />
           </TouchableOpacity>
           <View>
             <Text className="text-2xl font-bold text-gray-900">Edit Profile</Text>
@@ -279,7 +284,6 @@ export default function EditProfileScreen() {
           className="flex-1"
           keyboardShouldPersistTaps="handled"
         >
-          {/* Form Section */}
           <View className="px-4 pt-6 pb-8">
             {/* Store Name */}
             <View className="mb-5">
@@ -295,7 +299,7 @@ export default function EditProfileScreen() {
               />
               {errors.storeName && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.storeName}</Text>
                 </View>
               )}
@@ -326,16 +330,12 @@ export default function EditProfileScreen() {
                   {vendorData?.users?.phone || 'Not set'}
                 </Text>
               </View>
-              <Text className="text-gray-500 text-xs mt-1">
-                Phone number cannot be changed
-              </Text>
+              <Text className="text-gray-500 text-xs mt-1">Phone number cannot be changed</Text>
             </View>
 
             {/* Email (Read-only) */}
             <View className="mb-5">
-              <Text className="text-gray-700 font-semibold text-sm mb-2">
-                Email (Read-only)
-              </Text>
+              <Text className="text-gray-700 font-semibold text-sm mb-2">Email (Read-only)</Text>
               <View className="bg-gray-100 border border-gray-300 rounded-xl px-4 py-3 opacity-60">
                 <Text className="text-gray-600 font-medium">
                   {vendorData.users?.email || 'Not set'}
@@ -360,7 +360,7 @@ export default function EditProfileScreen() {
               />
               {errors.address && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.address}</Text>
                 </View>
               )}
@@ -381,7 +381,7 @@ export default function EditProfileScreen() {
                 />
                 {errors.city && (
                   <View className="flex-row items-center gap-2 mt-2">
-                    <Feather name='alert-circle' size={16} color="#dc2626" />
+                    <Feather name="alert-circle" size={16} color="#dc2626" />
                     <Text className="text-red-600 text-xs font-medium">{errors.city}</Text>
                   </View>
                 )}
@@ -400,7 +400,7 @@ export default function EditProfileScreen() {
                 />
                 {errors.state && (
                   <View className="flex-row items-center gap-2 mt-2">
-                    <Feather name='alert-circle' size={16} color="#dc2626" />
+                    <Feather name="alert-circle" size={16} color="#dc2626" />
                     <Text className="text-red-600 text-xs font-medium">{errors.state}</Text>
                   </View>
                 )}
@@ -423,7 +423,7 @@ export default function EditProfileScreen() {
               />
               {errors.pincode && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.pincode}</Text>
                 </View>
               )}
@@ -471,10 +471,7 @@ export default function EditProfileScreen() {
                           </View>
 
                           {!businessHours[day].isClosed && (
-                            <TouchableOpacity
-                              onPress={() => copyToAllDays(day)}
-                              className="ml-2"
-                            >
+                            <TouchableOpacity onPress={() => copyToAllDays(day)} className="ml-2">
                               <Ionicons name="copy-outline" size={18} color="#059669" />
                             </TouchableOpacity>
                           )}
@@ -504,21 +501,20 @@ export default function EditProfileScreen() {
 
                         {errors[`${day}_hours`] && (
                           <View className="flex-row items-center gap-2 mt-2 ml-24">
-                            <Feather name='alert-circle' size={14} color="#dc2626" />
+                            <Feather name="alert-circle" size={14} color="#dc2626" />
                             <Text className="text-red-600 text-xs">{errors[`${day}_hours`]}</Text>
                           </View>
                         )}
                       </View>
 
-                      {index < DAYS.length - 1 && (
-                        <View className="h-px bg-gray-200 mb-4" />
-                      )}
+                      {index < DAYS.length - 1 && <View className="h-px bg-gray-200 mb-4" />}
                     </View>
                   ))}
 
                   <View className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
                     <Text className="text-blue-900 text-xs">
-                      💡 Tip: Use 24-hour format (e.g., 09:00, 21:00). Click the copy icon to apply hours to all days.
+                      💡 Tip: Use 24-hour format (e.g., 09:00, 21:00). Click the copy icon to apply
+                      hours to all days.
                     </Text>
                   </View>
                 </View>
@@ -542,8 +538,9 @@ export default function EditProfileScreen() {
           <TouchableOpacity
             onPress={handleSaveProfile}
             disabled={updateVendorMutation.isPending}
-            className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${updateVendorMutation.isPending ? 'opacity-50' : ''
-              }`}
+            className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${
+              updateVendorMutation.isPending ? 'opacity-50' : ''
+            }`}
           >
             {updateVendorMutation.isPending ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -556,6 +553,58 @@ export default function EditProfileScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Copy to All Days Confirmation Modal */}
+      <Modal
+        visible={copyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setCopyModal(false);
+          setSourceDayToCopy(null);
+        }}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => {
+            setCopyModal(false);
+            setSourceDayToCopy(null);
+          }}
+        >
+          <Pressable className="bg-white rounded-3xl p-6 w-full">
+            <View className="items-center mb-5">
+              <View className="w-16 h-16 bg-emerald-100 rounded-full items-center justify-center mb-3">
+                <Ionicons name="copy-outline" size={30} color="#059669" />
+              </View>
+              <Text className="text-xl font-bold text-gray-900 mb-2">Copy to All Days?</Text>
+              <Text className="text-sm text-gray-500 text-center leading-5">
+                Copy{' '}
+                <Text className="font-semibold text-gray-700">
+                  {sourceDayToCopy ? DAY_LABELS[sourceDayToCopy] : ''}'s
+                </Text>{' '}
+                hours to all other days?
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="bg-emerald-500 py-4 rounded-xl items-center justify-center mb-3"
+              onPress={confirmCopyToAllDays}
+            >
+              <Text className="text-white font-bold text-base">Copy</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
+              onPress={() => {
+                setCopyModal(false);
+                setSourceDayToCopy(null);
+              }}
+            >
+              <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

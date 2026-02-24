@@ -1,69 +1,57 @@
 import { useEffect, useState } from "react"
 import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StatusBar, ActivityIndicator } from "react-native"
 
-// Icons
 import { LocationIcon } from "@/assets/svgs/LocationIcon"
 import { ChevronDownIcon } from "@/assets/svgs/ChevronDownIcon"
 import { BagIcon } from "@/assets/svgs/BagIcon"
 import { SearchIcon } from "@/assets/svgs/SearchIcon"
-import { HeartIcon } from "@/assets/svgs/HeartIcon"
 import { router } from "expo-router"
 
-// Components
-import ProductCard from "@/components/ProductCard"
 import SkeletonImage from "@/components/SkeletonImage"
 import useWishlistStore from "@/store/wishlistStore"
 import useCartStore from "@/store/cartStore"
 import OfferProductCard from "@/components/OfferProductCard"
-
 import SelectAddressBottomSheet from "@/components/SelectAddressBottomSheet"
 import { BlurView } from "expo-blur"
-import { useCategories, useCustomerAddresses, useProducts } from "@/hooks/queries"
+import { useCategories, useCustomerAddresses } from "@/hooks/queries"
 import { FullPageError } from "@/components/ErrorComp"
 import { Image } from "expo-image"
 import { blurhash } from "@/types/categories-products.types"
-
-
-
+import { useBestSellerProducts, useTrendingProducts } from "@/hooks/queries/useDeals"
 
 export default function HomeScreen() {
   const { data: categories = [], isLoading: isLoadingCategories, isError: isErrorCategories } = useCategories()
   const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
-  const { data: Products = [], isLoading: isLoadingProducts, isError: isErrorProducts } = useProducts()
-
-
-
+  const { data: bestSellerProducts = [], isLoading: isLoadingBestSellers, isError: isErrorBestSellers } = useBestSellerProducts()
+  const { data: trendingProducts = [], isLoading: isLoadingTrending, isError: isErrorTrending } = useTrendingProducts()
 
   const [searchQuery, setSearchQuery] = useState("")
-
-  const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
+  const { cart, addToCart, updateQuantity, totalItems } = useCartStore()
   const { wishlist, toggleWishlist } = useWishlistStore()
-
   const [showAddressSheet, setShowAddressSheet] = useState(false)
   const [selectedAddress, setSelectedAddress] = useState<any>(null)
 
   useEffect(() => {
     if (!selectedAddress && addresses.length > 0) {
-      const defaultAddress =
-        addresses.find(a => a.is_default) || addresses[0]
-
+      const defaultAddress = addresses.find(a => a.is_default) || addresses[0]
       setSelectedAddress(defaultAddress)
     }
   }, [addresses])
 
-
-
-
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity onPress={() => router.push(`/customer/category/${item.id}`)} className="items-center w-[80px] mr-2 mb-4">
       <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
-        {item.image?<Image
-          source={item.image}
-          placeholder={{ blurhash: blurhash }}
-          contentFit="cover"
-          transition={1000}
-          style={{ width: '100%', height: '100%' }}
-        />:<SkeletonImage size="small"/>}
+        {item.image ? (
+          <Image
+            source={item.image}
+            placeholder={{ blurhash }}
+            contentFit="cover"
+            transition={1000}
+            style={{ width: '100%', height: '100%' }}
+          />
+        ) : (
+          <SkeletonImage size="small" />
+        )}
       </View>
       <Text className="text-xs text-gray-700 text-center leading-4">{item.name}</Text>
     </TouchableOpacity>
@@ -75,7 +63,10 @@ export default function HomeScreen() {
     }
   }
 
-  if (isLoadingAddresses || isLoadingCategories || isLoadingProducts) {
+  const isLoading = isLoadingAddresses || isLoadingCategories || isLoadingBestSellers || isLoadingTrending
+  const isError = isErrorAddresses || isErrorCategories || isErrorBestSellers || isErrorTrending
+
+  if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center py-20">
         <ActivityIndicator size="large" color="#22c55e" />
@@ -84,12 +75,9 @@ export default function HomeScreen() {
     )
   }
 
-  if (isErrorAddresses || isErrorCategories || isErrorProducts) {
-    return (
-      <FullPageError code="500" />
-    )
+  if (isError) {
+    return <FullPageError code="500" />
   }
-
 
   return (
     <View className="flex-1 bg-white">
@@ -130,22 +118,18 @@ export default function HomeScreen() {
               onSubmitEditing={handleSearch}
             />
           </View>
-          {/* <TouchableOpacity className="w-12 h-12 bg-green-500 rounded-xl items-center justify-center">
-            <FilterIcon />
-          </TouchableOpacity> */}
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Categories */}
-        <View className="px-4 mb-4 ">
+        <View className="px-4 mb-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Shop By Category</Text>
             <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/category")}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
-
           <View className="flex-row flex-wrap items-center justify-start">
             {categories.map((category) => (
               <CategoryItem key={category.id} item={category} />
@@ -165,13 +149,12 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             <View className="w-[120px] h-[100px]">
-              {/* <Image source={require(`@/assets/images/cookies-cola-snacks-food-festival.jpg`)}className="w-full h-full" resizeMode="contain" /> */}
               <SkeletonImage size="large" />
             </View>
           </View>
         </View>
 
-        {/* Best Deals */}
+        {/* Best Deals — from v_best_seller_products */}
         <View className="mb-6">
           <View className="flex-row items-center justify-between px-4 mb-4">
             <Text className="text-lg font-bold text-gray-900">Best Deal</Text>
@@ -179,34 +162,60 @@ export default function HomeScreen() {
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
-
-          <FlatList
-            data={Products}
-            renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
-          />
+          {bestSellerProducts.length === 0 ? (
+            <Text className="px-4 text-gray-400 text-sm">No best deals available right now.</Text>
+          ) : (
+            <FlatList
+              data={bestSellerProducts}
+              renderItem={({ item }) => (
+                <OfferProductCard
+                  item={item}
+                  layoutMode="horizontal"
+                  wishlist={wishlist}
+                  cart={cart}
+                  toggleWishlist={toggleWishlist}
+                  updateQuantity={updateQuantity}
+                  addToCart={addToCart}
+                />
+              )}
+              keyExtractor={(item) => item.id ?? item.name}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+            />
+          )}
         </View>
 
-        {/* Treading Deals */}
-        <View className="mb-6 mt-6  ">
+        {/* Trending Deals — from v_trending_products */}
+        <View className="mb-6 mt-6">
           <View className="flex-row items-center justify-between px-4 mb-4">
-            <Text className="text-lg font-bold text-gray-900">Treading Deals</Text>
+            <Text className="text-lg font-bold text-gray-900">Trending Deals</Text>
             <TouchableOpacity>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
-
-          <FlatList
-            data={Products}
-            renderItem={({ item }) => <OfferProductCard item={item} layoutMode="horizontal" wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
-          />
+          {trendingProducts.length === 0 ? (
+            <Text className="px-4 text-gray-400 text-sm">No trending products right now.</Text>
+          ) : (
+            <FlatList
+              data={trendingProducts}
+              renderItem={({ item }) => (
+                <OfferProductCard
+                  item={item}
+                  layoutMode="horizontal"
+                  wishlist={wishlist}
+                  cart={cart}
+                  toggleWishlist={toggleWishlist}
+                  updateQuantity={updateQuantity}
+                  addToCart={addToCart}
+                />
+              )}
+              keyExtractor={(item) => item.id ?? item.name}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+            />
+          )}
         </View>
 
         {showAddressSheet && (
@@ -217,7 +226,6 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* Address Selection Bottom Sheet */}
         <SelectAddressBottomSheet
           isVisible={showAddressSheet}
           addresses={addresses}
@@ -233,7 +241,6 @@ export default function HomeScreen() {
           }}
         />
 
-        {/* Add some bottom padding for tab bar */}
         <View className="h-24" />
       </ScrollView>
     </View>

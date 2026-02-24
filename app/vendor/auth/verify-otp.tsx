@@ -7,88 +7,106 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
 export default function VerifyOTPScreen() {
   const params = useLocalSearchParams();
-  const phone = params.phone as string || '9876543210';
-  const type = params.type as string || 'signup';
+  const phone = (params.phone as string) || '9876543210';
+  const type = (params.type as string) || 'signup';
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  
+
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
+  // ---------------------------------------------------------------------------
+  // Timer
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    // Timer countdown
     if (timer > 0) {
-      const interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
-      }, 1000);
+      const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
       return () => clearInterval(interval);
     } else {
       setCanResend(true);
     }
   }, [timer]);
 
+  // ---------------------------------------------------------------------------
+  // OTP input helpers
+  // ---------------------------------------------------------------------------
   const handleOtpChange = (value: string, index: number) => {
-    // Only allow numbers
     if (!/^\d*$/.test(value)) return;
-
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-
-    // Auto-focus next input
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleKeyPress = (e: any, index: number) => {
-    // Handle backspace
     if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
+  const resetOtp = () => {
+    setOtp(['', '', '', '', '', '']);
+    setTimeout(() => inputRefs.current[0]?.focus(), 50);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
   const handleVerifyOTP = async () => {
     const otpCode = otp.join('');
-    
+
     if (otpCode.length !== 6) {
-      Alert.alert('Invalid OTP', 'Please enter the complete 6-digit OTP');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid OTP',
+        text2: 'Please enter the complete 6-digit OTP.',
+        position: 'top',
+      });
       return;
     }
 
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       console.log('[v0] OTP verification:', { phone, otp: otpCode, type });
-      
-      Alert.alert('Success', 'Phone number verified successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            // Navigate based on type
-            if (type === 'signup') {
-              router.replace('/vendor/(tabs)/profile/privacy-policy'); // Navigate to main app
-            } else {
-              router.replace('/vendor/auth/reset-password'); // Navigate to reset password
-            }
-          },
-        },
-      ]);
-    } catch (error) {
-      Alert.alert('Error', 'Invalid OTP. Please try again.');
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+
+      Toast.show({
+        type: 'success',
+        text1: 'Verified!',
+        text2: 'Phone number verified successfully.',
+        position: 'top',
+        visibilityTime: 2000,
+      });
+
+      // Navigate after toast is visible
+      setTimeout(() => {
+        if (type === 'signup') {
+          router.replace('/vendor/(tabs)/profile/privacy-policy');
+        } else {
+          router.replace('/vendor/auth/reset-password');
+        }
+      }, 1200);
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Verification Failed',
+        text2: 'Invalid OTP. Please try again.',
+        position: 'top',
+      });
+      resetOtp();
     } finally {
       setIsLoading(false);
     }
@@ -99,23 +117,32 @@ export default function VerifyOTPScreen() {
 
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       console.log('[v0] Resending OTP to:', phone);
-      Alert.alert('OTP Sent', 'A new OTP has been sent to your phone number');
+
+      Toast.show({
+        type: 'success',
+        text1: 'OTP Sent',
+        text2: 'A new OTP has been sent to your phone number.',
+        position: 'top',
+      });
+
       setTimer(60);
       setCanResend(false);
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to resend OTP. Please try again.');
+      resetOtp();
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Resend Failed',
+        text2: 'Failed to resend OTP. Please try again.',
+        position: 'top',
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoBack = () => {
-    router.back();
-  };
+  const handleGoBack = () => router.back();
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -123,6 +150,9 @@ export default function VerifyOTPScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <SafeAreaView className="flex-1 bg-gradient-to-b from-emerald-50 to-white">
       <KeyboardAvoidingView
@@ -135,14 +165,14 @@ export default function VerifyOTPScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View className="flex-1 px-6 pt-8">
-            {/* Header */}
+            {/* Back button */}
             <View className="flex-row items-center mb-12">
               <TouchableOpacity onPress={handleGoBack} className="p-2 -ml-2">
                 <Feather name="chevron-left" size={24} color="#1f2937" />
               </TouchableOpacity>
             </View>
 
-            {/* Icon */}
+            {/* Icon & Title */}
             <View className="items-center mb-8">
               <View className="bg-emerald-100 w-24 h-24 rounded-full items-center justify-center mb-6">
                 <Feather name="smartphone" size={48} color="#10b981" />
@@ -153,9 +183,7 @@ export default function VerifyOTPScreen() {
               <Text className="text-gray-600 text-base mt-3 text-center px-4">
                 We've sent a 6-digit code to
               </Text>
-              <Text className="text-gray-900 font-bold text-lg mt-1">
-                +91 {phone}
-              </Text>
+              <Text className="text-gray-900 font-bold text-lg mt-1">+91 {phone}</Text>
             </View>
 
             {/* OTP Input */}
@@ -174,10 +202,8 @@ export default function VerifyOTPScreen() {
                     maxLength={1}
                     keyboardType="number-pad"
                     selectTextOnFocus
-                    className="bg-white border-2 border-gray-300 rounded-xl w-12 h-14 text-center text-xl font-bold text-gray-900 shadow-sm"
-                    style={{
-                      borderColor: digit ? '#10b981' : '#d1d5db',
-                    }}
+                    className="bg-white border-2 rounded-xl w-12 h-14 text-center text-xl font-bold text-gray-900 shadow-sm"
+                    style={{ borderColor: digit ? '#10b981' : '#d1d5db' }}
                   />
                 ))}
               </View>
@@ -197,7 +223,7 @@ export default function VerifyOTPScreen() {
                 <TouchableOpacity
                   onPress={handleResendOTP}
                   disabled={isLoading}
-                  className="flex-row items-center gap-2"
+                  className={`flex-row items-center gap-2 ${isLoading ? 'opacity-50' : ''}`}
                 >
                   <Feather name="refresh-cw" size={18} color="#10b981" />
                   <Text className="text-emerald-600 font-bold text-base">Resend OTP</Text>
@@ -208,9 +234,9 @@ export default function VerifyOTPScreen() {
             {/* Verify Button */}
             <TouchableOpacity
               onPress={handleVerifyOTP}
-              disabled={isLoading || otp.some(d => !d)}
+              disabled={isLoading || otp.some((d) => !d)}
               className={`bg-emerald-500 rounded-xl py-4 items-center justify-center shadow-md ${
-                (isLoading || otp.some(d => !d)) ? 'opacity-50' : ''
+                isLoading || otp.some((d) => !d) ? 'opacity-50' : ''
               }`}
             >
               {isLoading ? (
@@ -223,7 +249,7 @@ export default function VerifyOTPScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Help Section */}
+            {/* Help section */}
             <View className="mt-auto pt-8 pb-6">
               <View className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <View className="flex-row items-start gap-3">
@@ -233,22 +259,20 @@ export default function VerifyOTPScreen() {
                       Didn't receive the code?
                     </Text>
                     <Text className="text-amber-800 text-xs leading-5">
-                      Check your phone's messages. If you still haven't received it, tap "Resend OTP" above or contact support.
+                      Check your phone's messages. If you still haven't received it, tap "Resend
+                      OTP" above or contact support.
                     </Text>
                   </View>
                 </View>
               </View>
 
-              {/* Edit Phone Number */}
               <TouchableOpacity
                 onPress={handleGoBack}
                 className="mt-4 items-center py-3"
               >
                 <View className="flex-row items-center gap-2">
                   <Feather name="edit-2" size={16} color="#6b7280" />
-                  <Text className="text-gray-600 font-semibold text-sm">
-                    Change Phone Number
-                  </Text>
+                  <Text className="text-gray-600 font-semibold text-sm">Change Phone Number</Text>
                 </View>
               </TouchableOpacity>
             </View>

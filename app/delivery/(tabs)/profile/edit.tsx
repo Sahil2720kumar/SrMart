@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
 import { useDeliveryBoyProfile, useUpdateDeliveryBoyProfile, useUploadDeliveryBoyPhoto } from '@/hooks/queries/useDeliveryBoy';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,7 +51,7 @@ interface ValidationErrors {
 }
 
 /* ---------------- MAIN COMPONENT ---------------- */
-const EditProfileScreen: React.FC = () => {
+const EditProfileScreen = () => {
   const router = useRouter();
   const store = useDeliveryStore();
  
@@ -85,7 +85,6 @@ const EditProfileScreen: React.FC = () => {
   // Initialize form with fetched data
   useEffect(() => {
     if (profileData) {
-      
       setFormData({
         first_name: profileData.first_name || '',
         last_name: profileData.last_name || '',
@@ -104,7 +103,6 @@ const EditProfileScreen: React.FC = () => {
         license_number: profileData.license_number || '',
         profile_photo: profileData.profile_photo || '',
       });
-      
     }
   }, [profileData]);
 
@@ -169,58 +167,81 @@ const EditProfileScreen: React.FC = () => {
 
   const handleSave = async (): Promise<void> => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix the errors before saving.');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fix the errors before saving.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
       return;
     }
 
     try {
       await updateProfile.mutateAsync(formData);
-      Alert.alert(
-        'Success',
-        profileData?.kyc_status === 'approved'
-          ? 'Profile updated successfully. Changes may require admin review.'
-          : 'Profile updated successfully.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2:
+          profileData?.kyc_status === 'approved'
+            ? 'Profile updated successfully. Changes may require admin review.'
+            : 'Profile updated successfully.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
       setHasChanges(false);
+      router.back();
     } catch (error) {
       console.error('Save error:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to update profile. Please try again.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
     }
   };
 
   const handleCancel = (): void => {
     if (hasChanges) {
-      Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Are you sure you want to go back?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.back() }
-        ]
-      );
+      Toast.show({
+        type: 'info',
+        text1: 'Unsaved Changes',
+        text2: 'Going back will discard your unsaved changes.',
+        position: 'top',
+        visibilityTime: 3000,
+      });
+      // Small delay so the toast is visible before navigating back
+      setTimeout(() => router.back(), 300);
     } else {
       router.back();
     }
   };
 
   const handleChangePhoto = (): void => {
-    Alert.alert(
-      'Change Profile Photo',
-      'Choose an option',
-      [
-        { text: 'Take Photo', onPress: handleTakePhoto },
-        { text: 'Choose from Gallery', onPress: handlePickImage },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    Toast.show({
+      type: 'info',
+      text1: 'Change Profile Photo',
+      text2: 'Opening photo options...',
+      position: 'top',
+      visibilityTime: 1500,
+    });
+    // Slight delay to let the toast show before launching picker choice
+    setTimeout(() => handlePickImage(), 400);
   };
 
   const handleTakePhoto = async (): Promise<void> => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Camera permission is required to take photos.');
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Required',
+        text2: 'Camera permission is required to take photos.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
       return;
     }
 
@@ -240,7 +261,13 @@ const EditProfileScreen: React.FC = () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Gallery access permission is required.');
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Required',
+        text2: 'Gallery access permission is required.',
+        position: 'top',
+        visibilityTime: 4000,
+      });
       return;
     }
 

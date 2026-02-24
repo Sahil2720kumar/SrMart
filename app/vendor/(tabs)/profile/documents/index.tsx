@@ -6,33 +6,27 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
-  Platform,
   Modal,
-  Image,
-  Dimensions,
-  Linking,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import Toast from 'react-native-toast-message';
 import {
   useKycDocuments,
   useKycSummary,
   useUploadKycDocument,
   useReplaceKycDocument,
-  useDeleteKycDocument
+  useDeleteKycDocument,
 } from '@/hooks/queries';
 import { useVendorDetail } from '@/hooks/queries';
-import { useProfileStore } from '@/store/profileStore';
 import { useAuthStore } from '@/store/authStore';
 import { FullPageError } from '@/components/ErrorComp';
 import { KycDocument, KycDocumentStatus, KycDocumentType } from '@/types/documents-kyc.types';
 import { BlurView } from 'expo-blur';
 import DocumentViewerModal from '@/components/DocumentViewerModal';
-
-
 
 const DOCUMENT_CONFIGS: Record<KycDocumentType, {
   label: string;
@@ -106,30 +100,24 @@ function getStatusBadge(status: KycDocumentStatus) {
   }
 }
 
-
-
 export default function VendorDocumentsKYCScreen() {
   const { session } = useAuthStore();
 
-  // Fetch vendor details
   const {
     data: vendorData,
-    isLoading: isLoadingVendor
+    isLoading: isLoadingVendor,
   } = useVendorDetail(session?.user?.id || '');
 
-  // Fetch KYC documents
   const {
     data: documents,
     isLoading: isLoadingDocs,
     isError,
     error,
-    refetch
+    refetch,
   } = useKycDocuments(session?.user?.id || '', 'vendor');
 
-  // Get KYC summary
   const summary = useKycSummary(session?.user?.id || '', 'vendor');
 
-  // Mutations
   const uploadMutation = useUploadKycDocument();
   const replaceMutation = useReplaceKycDocument();
   const deleteMutation = useDeleteKycDocument();
@@ -138,12 +126,18 @@ export default function VendorDocumentsKYCScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<KycDocument | null>(null);
 
-  // Helper to get document by type
+  // Upload source modal state
+  const [uploadModal, setUploadModal] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<KycDocumentType | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<KycDocument | null>(null);
+
   const getDocumentByType = (docType: KycDocumentType): KycDocument | undefined => {
     return documents?.find(doc => doc.document_type === docType);
   };
 
-  // Convert image URI to base64
   const convertImageToBase64 = async (uri: string): Promise<string> => {
     try {
       const localFile = new FileSystem.File(uri);
@@ -156,85 +150,89 @@ export default function VendorDocumentsKYCScreen() {
   };
 
   const handlePickImage = async (documentType: KycDocumentType) => {
-    try {
-      setProcessingId(documentType);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Required',
+        text2: 'Media library permission is required to select images.',
+        position: 'top',
+      });
+      return;
+    }
+    setSelectedDocumentType(documentType);
+    setUploadModal(true);
+  };
 
-      // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Media library permission is required to select images');
-        setProcessingId(null);
-        return;
+  const handleImagePicker = async (source: 'camera' | 'gallery') => {
+    if (!selectedDocumentType) return;
+
+    try {
+      setProcessingId(selectedDocumentType);
+      setUploadModal(false);
+
+      let result;
+
+      if (source === 'camera') {
+        const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+        if (cameraPermission.status !== 'granted') {
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Required',
+            text2: 'Camera permission is required to take photos.',
+            position: 'top',
+          });
+          setProcessingId(null);
+          return;
+        }
+
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
       }
 
-      // Show options: Camera or Gallery
-      Alert.alert(
-        'Choose Photo Source',
-        'Select where to get the photo from',
-        [
-          {
-            text: 'Camera',
-            onPress: async () => {
-              const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-              if (cameraPermission.status !== 'granted') {
-                Alert.alert('Permission Required', 'Camera permission is required to take photos');
-                setProcessingId(null);
-                return;
-              }
-
-              const cameraResult = await ImagePicker.launchCameraAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [4, 3],
-                quality: 0.8,
-              });
-
-              if (!cameraResult.canceled && cameraResult.assets[0]) {
-                await handleUpload(documentType, cameraResult.assets[0].uri);
-              } else {
-                setProcessingId(null);
-              }
-            },
-          },
-          {
-            text: 'Gallery',
-            onPress: async () => {
-              const galleryResult = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [4, 3],
-                quality: 0.8,
-              });
-
-              if (!galleryResult.canceled && galleryResult.assets[0]) {
-                await handleUpload(documentType, galleryResult.assets[0].uri);
-              } else {
-                setProcessingId(null);
-              }
-            },
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setProcessingId(null),
-          },
-        ]
-      );
+      if (!result.canceled && result.assets[0]) {
+        await handleUpload(selectedDocumentType, result.assets[0].uri);
+      } else {
+        setProcessingId(null);
+      }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to pick image. Please try again.',
+        position: 'top',
+      });
       setProcessingId(null);
+    } finally {
+      setSelectedDocumentType(null);
     }
   };
 
   const handleUpload = async (documentType: KycDocumentType, imageUri: string) => {
     if (!session?.user?.id) {
-      Alert.alert('Error', 'User not found');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'User not found.',
+        position: 'top',
+      });
       setProcessingId(null);
       return;
     }
 
-    const userId = session?.user?.id
+    const userId = session?.user?.id;
 
     try {
       setProcessingId(documentType);
@@ -242,13 +240,11 @@ export default function VendorDocumentsKYCScreen() {
       const existingDoc = getDocumentByType(documentType);
       const config = DOCUMENT_CONFIGS[documentType];
 
-      // Convert image to base64
       console.log('Converting image to base64...');
       const base64 = await convertImageToBase64(imageUri);
       console.log('Base64 conversion successful, length:', base64.length);
 
       if (existingDoc) {
-        // Replace existing document
         console.log('Replacing document:', documentType);
         await replaceMutation.mutateAsync({
           documentId: existingDoc.id,
@@ -268,12 +264,13 @@ export default function VendorDocumentsKYCScreen() {
           base64: base64,
         });
 
-        Alert.alert(
-          'Success',
-          'Document replaced successfully! It will be verified within 24 hours.'
-        );
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Document replaced successfully! It will be verified within 24 hours.',
+          position: 'top',
+        });
       } else {
-        // Upload new document
         console.log('Uploading new document:', documentType);
         await uploadMutation.mutateAsync({
           document: {
@@ -289,55 +286,71 @@ export default function VendorDocumentsKYCScreen() {
           base64: base64,
         });
 
-        Alert.alert(
-          'Success',
-          'Document uploaded successfully! It will be verified within 24 hours.'
-        );
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Document uploaded successfully! It will be verified within 24 hours.',
+          position: 'top',
+        });
       }
     } catch (error: any) {
       console.error('Upload error:', error);
-      Alert.alert(
-        'Upload Failed',
-        error.message || 'Failed to upload document. Please check your connection and try again.'
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error.message || 'Failed to upload document. Please check your connection and try again.',
+        position: 'top',
+      });
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleDeleteDocument = (doc: KycDocument) => {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete ${doc.document_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMutation.mutateAsync({
-                id: doc.id,
-                userId: doc.user_id,
-                userType: 'vendor',
-                documentUrl: doc.document_url || undefined,
-              });
-              Alert.alert('Success', 'Document deleted successfully');
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete document');
-            }
-          },
-        },
-      ]
-    );
+    setDocumentToDelete(doc);
+    setDeleteModal(true);
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+
+    try {
+      await deleteMutation.mutateAsync({
+        id: documentToDelete.id,
+        userId: documentToDelete.user_id,
+        userType: 'vendor',
+        documentUrl: documentToDelete.document_url || undefined,
+      });
+      setDeleteModal(false);
+      setDocumentToDelete(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Document deleted successfully.',
+        position: 'top',
+      });
+    } catch (error: any) {
+      setDeleteModal(false);
+      setDocumentToDelete(null);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to delete document.',
+        position: 'top',
+      });
+    }
   };
 
   const handleViewDocument = (doc: KycDocument) => {
     if (!doc.document_url) {
-      Alert.alert('No Document', 'No document file available');
+      Toast.show({
+        type: 'info',
+        text1: 'No Document',
+        text2: 'No document file available.',
+        position: 'top',
+      });
       return;
     }
-
     setSelectedDocument(doc);
     setViewerVisible(true);
   };
@@ -346,7 +359,6 @@ export default function VendorDocumentsKYCScreen() {
     router.back();
   };
 
-  // Loading state
   if (isLoadingVendor || isLoadingDocs) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
@@ -356,29 +368,28 @@ export default function VendorDocumentsKYCScreen() {
     );
   }
 
-  // Error state
   if (isError) {
     return (
       <FullPageError
         code='500'
-        message={error?.message || "Failed to load documents"}
+        message={error?.message || 'Failed to load documents'}
         onActionPress={refetch}
       />
     );
   }
 
-  // Create list of all document types with their status
   const documentsList = (Object.keys(DOCUMENT_CONFIGS) as KycDocumentType[]).map(docType => {
     const existingDoc = getDocumentByType(docType);
     const config = DOCUMENT_CONFIGS[docType];
-
     return {
       type: docType,
       config,
       document: existingDoc || null,
-      status: existingDoc?.status || 'not_uploaded' as KycDocumentStatus,
+      status: (existingDoc?.status || 'not_uploaded') as KycDocumentStatus,
     };
   });
+
+  const currentDocumentConfig = selectedDocumentType ? DOCUMENT_CONFIGS[selectedDocumentType] : null;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -396,40 +407,33 @@ export default function VendorDocumentsKYCScreen() {
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         <View className="px-4 pt-6 pb-8">
           {/* Progress Summary */}
-          <View className={`border rounded-xl p-4 mb-6 ${summary.isComplete
-              ? 'bg-emerald-50 border-emerald-200'
-              : 'bg-blue-50 border-blue-200'
-            }`}>
+          <View className={`border rounded-xl p-4 mb-6 ${
+            summary.isComplete ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'
+          }`}>
             <View className="flex-row items-center justify-between mb-2">
-              <Text className={`font-bold text-sm ${summary.isComplete ? 'text-emerald-900' : 'text-blue-900'
-                }`}>
+              <Text className={`font-bold text-sm ${summary.isComplete ? 'text-emerald-900' : 'text-blue-900'}`}>
                 {summary.isComplete ? 'KYC Complete!' : 'Verification Progress'}
               </Text>
-              {summary.isComplete && (
-                <Ionicons name="checkmark-circle" size={24} color="#059669" />
-              )}
+              {summary.isComplete && <Ionicons name="checkmark-circle" size={24} color="#059669" />}
             </View>
 
             <View className="flex-row items-center gap-2 mt-2">
-              <View className={`flex-1 h-2 rounded-full overflow-hidden ${summary.isComplete ? 'bg-emerald-200' : 'bg-blue-200'
-                }`}>
+              <View className={`flex-1 h-2 rounded-full overflow-hidden ${
+                summary.isComplete ? 'bg-emerald-200' : 'bg-blue-200'
+              }`}>
                 <View
-                  className={`h-full ${summary.isComplete ? 'bg-emerald-600' : 'bg-blue-600'
-                    }`}
+                  className={`h-full ${summary.isComplete ? 'bg-emerald-600' : 'bg-blue-600'}`}
                   style={{ width: `${summary.progress}%` }}
                 />
               </View>
-              <Text className={`font-semibold text-sm ${summary.isComplete ? 'text-emerald-700' : 'text-blue-700'
-                }`}>
+              <Text className={`font-semibold text-sm ${summary.isComplete ? 'text-emerald-700' : 'text-blue-700'}`}>
                 {summary.progress}%
               </Text>
             </View>
 
-            <Text className={`text-xs mt-2 ${summary.isComplete ? 'text-emerald-700' : 'text-blue-700'
-              }`}>
-              {summary.requiredVerified} of {Object.values(DOCUMENT_CONFIGS).filter(
-                (doc) => doc.isRequired
-              ).length} required documents verified
+            <Text className={`text-xs mt-2 ${summary.isComplete ? 'text-emerald-700' : 'text-blue-700'}`}>
+              {summary.requiredVerified} of{' '}
+              {Object.values(DOCUMENT_CONFIGS).filter(doc => doc.isRequired).length} required documents verified
             </Text>
 
             {summary.rejected > 0 && (
@@ -446,7 +450,8 @@ export default function VendorDocumentsKYCScreen() {
           <View className="gap-4">
             {documentsList.map((item) => {
               const statusInfo = getStatusBadge(item.status);
-              const isProcessing = processingId === item.type ||
+              const isProcessing =
+                processingId === item.type ||
                 uploadMutation.isPending ||
                 replaceMutation.isPending ||
                 deleteMutation.isPending;
@@ -458,24 +463,18 @@ export default function VendorDocumentsKYCScreen() {
                     <View className="flex-row items-start justify-between mb-2">
                       <View className="flex-1">
                         <View className="flex-row items-center gap-2">
-                          <Text className="text-gray-900 font-bold text-base">
-                            {item.config.label}
-                          </Text>
+                          <Text className="text-gray-900 font-bold text-base">{item.config.label}</Text>
                           {item.config.isRequired && (
                             <View className="bg-amber-100 px-2 py-0.5 rounded-full">
                               <Text className="text-amber-700 text-xs font-bold">Required</Text>
                             </View>
                           )}
                         </View>
-                        <Text className="text-gray-600 text-xs mt-1">
-                          {item.config.description}
-                        </Text>
+                        <Text className="text-gray-600 text-xs mt-1">{item.config.description}</Text>
                       </View>
                       <View className={`flex-row items-center gap-1.5 px-3 py-1 rounded-full ${statusInfo.bg}`}>
                         {statusInfo.icon}
-                        <Text className={`text-xs font-semibold ${statusInfo.text}`}>
-                          {statusInfo.label}
-                        </Text>
+                        <Text className={`text-xs font-semibold ${statusInfo.text}`}>{statusInfo.label}</Text>
                       </View>
                     </View>
 
@@ -496,12 +495,8 @@ export default function VendorDocumentsKYCScreen() {
                     <View className="px-4 py-3 bg-red-50 border-b border-red-100 flex-row items-start gap-2">
                       <Feather name='alert-circle' size={16} color="#dc2626" style={{ marginTop: 2 }} />
                       <View className="flex-1">
-                        <Text className="text-red-900 font-semibold text-sm mb-1">
-                          Rejection Reason
-                        </Text>
-                        <Text className="text-red-800 text-xs">
-                          {item.document.rejection_reason}
-                        </Text>
+                        <Text className="text-red-900 font-semibold text-sm mb-1">Rejection Reason</Text>
+                        <Text className="text-red-800 text-xs">{item.document.rejection_reason}</Text>
                       </View>
                     </View>
                   )}
@@ -509,12 +504,12 @@ export default function VendorDocumentsKYCScreen() {
                   {/* Action Buttons */}
                   <View className="px-4 py-3">
                     <View className="flex-row gap-2">
-                      {/* Primary Action: Upload/Replace */}
                       <TouchableOpacity
                         onPress={() => handlePickImage(item.type)}
                         disabled={isProcessing}
-                        className={`flex-1 bg-emerald-50 border border-emerald-200 rounded-lg py-3 items-center justify-center active:opacity-70 ${isProcessing ? 'opacity-50' : ''
-                          }`}
+                        className={`flex-1 bg-emerald-50 border border-emerald-200 rounded-lg py-3 items-center justify-center active:opacity-70 ${
+                          isProcessing ? 'opacity-50' : ''
+                        }`}
                       >
                         {processingId === item.type ? (
                           <ActivityIndicator size="small" color="#059669" />
@@ -525,14 +520,13 @@ export default function VendorDocumentsKYCScreen() {
                               {item.status === 'verified' || item.status === 'approved'
                                 ? 'Replace'
                                 : item.status === 'rejected'
-                                  ? 'Re-upload'
-                                  : 'Upload'}
+                                ? 'Re-upload'
+                                : 'Upload'}
                             </Text>
                           </View>
                         )}
                       </TouchableOpacity>
 
-                      {/* Secondary Actions */}
                       {item.document && (
                         <>
                           <TouchableOpacity
@@ -554,7 +548,6 @@ export default function VendorDocumentsKYCScreen() {
                       )}
                     </View>
 
-                    {/* Format info */}
                     <Text className="text-gray-500 text-xs mt-2 text-center">
                       Accepted: {item.config.acceptedFormats}
                     </Text>
@@ -569,9 +562,7 @@ export default function VendorDocumentsKYCScreen() {
             <View className="flex-row items-start gap-3">
               <Ionicons name="information-circle" size={20} color="#3b82f6" />
               <View className="flex-1">
-                <Text className="text-blue-900 font-bold text-sm mb-1">
-                  Document Requirements
-                </Text>
+                <Text className="text-blue-900 font-bold text-sm mb-1">Document Requirements</Text>
                 <Text className="text-blue-800 text-xs leading-5">
                   • Ensure documents are clear and legible{'\n'}
                   • Upload color images (JPG or PNG) only{'\n'}
@@ -601,12 +592,12 @@ export default function VendorDocumentsKYCScreen() {
         </View>
       </ScrollView>
 
-
-      {viewerVisible && (
+      {/* Blur overlay */}
+      {(viewerVisible || uploadModal || deleteModal) && (
         <BlurView
           intensity={10}
           experimentalBlurMethod='dimezisBlurView'
-          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
         />
       )}
 
@@ -619,6 +610,136 @@ export default function VendorDocumentsKYCScreen() {
           setSelectedDocument(null);
         }}
       />
+
+      {/* Upload Source Modal */}
+      <Modal
+        visible={uploadModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setUploadModal(false);
+          setSelectedDocumentType(null);
+          setProcessingId(null);
+        }}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-end"
+          onPress={() => {
+            setUploadModal(false);
+            setSelectedDocumentType(null);
+            setProcessingId(null);
+          }}
+        >
+          <Pressable className="bg-white rounded-t-3xl p-6">
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-1">
+                <Text className="text-xl font-bold text-gray-900">
+                  Upload {currentDocumentConfig?.label}
+                </Text>
+                <Text className="text-sm text-gray-600 mt-1">
+                  {currentDocumentConfig?.description}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setUploadModal(false);
+                  setSelectedDocumentType(null);
+                  setProcessingId(null);
+                }}
+              >
+                <Feather name="x" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-sm text-gray-600 mb-4">
+              Accepted formats: {currentDocumentConfig?.acceptedFormats}
+            </Text>
+
+            <TouchableOpacity
+              className="bg-emerald-600 py-4 rounded-xl flex-row items-center justify-center gap-3 mb-3"
+              onPress={() => handleImagePicker('camera')}
+            >
+              <Feather name="camera" size={22} color="#ffffff" />
+              <Text className="text-white font-semibold text-base">Take Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-emerald-50 border border-emerald-200 py-4 rounded-xl flex-row items-center justify-center gap-3 mb-3"
+              onPress={() => handleImagePicker('gallery')}
+            >
+              <Feather name="image" size={22} color="#059669" />
+              <Text className="text-emerald-700 font-semibold text-base">Choose from Gallery</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="py-4 rounded-xl flex-row items-center justify-center"
+              onPress={() => {
+                setUploadModal(false);
+                setSelectedDocumentType(null);
+                setProcessingId(null);
+              }}
+            >
+              <Text className="text-gray-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setDeleteModal(false);
+          setDocumentToDelete(null);
+        }}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => {
+            setDeleteModal(false);
+            setDocumentToDelete(null);
+          }}
+        >
+          <Pressable className="bg-white rounded-3xl p-6 w-full">
+            <View className="items-center mb-5">
+              <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-3">
+                <Feather name="trash-2" size={30} color="#dc2626" />
+              </View>
+              <Text className="text-xl font-bold text-gray-900 mb-2">Delete Document?</Text>
+              <Text className="text-sm text-gray-500 text-center leading-5">
+                Are you sure you want to delete{' '}
+                <Text className="font-semibold text-gray-700">{documentToDelete?.document_name}</Text>
+                ? This action cannot be undone.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="bg-red-500 py-4 rounded-xl items-center justify-center mb-3"
+              onPress={confirmDeleteDocument}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-base">Yes, Delete</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
+              onPress={() => {
+                setDeleteModal(false);
+                setDocumentToDelete(null);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

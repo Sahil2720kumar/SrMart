@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, Modal,
-  Alert, ActivityIndicator, Linking,
+  ActivityIndicator, Linking,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { supabase } from "@/lib/supabase";
@@ -14,6 +14,7 @@ import useCartStore from "@/store/cartStore";
 import { useCustomerAddresses, useCustomerProfile } from "@/hooks/queries";
 import { useDeliveryFees } from "@/hooks/usedeliveryfees";
 import { DeliveryFeeBreakdown } from "@/components/Deliveryfeebreakdown";
+import Toast from "react-native-toast-message";
 
 interface CreateOrderInput {
   vendor_id: string;
@@ -228,12 +229,25 @@ export default function PaymentScreen() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedPayment) return Alert.alert("Error", "Please select a payment method");
+    if (!selectedPayment) {
+      Toast.show({ type: "error", text1: "Please select a payment method", position: "top" });
+      return;
+    }
     if (!session?.user?.id) { router.replace("/auth/login"); return; }
-    if (!selectedAddress) { Alert.alert("Error", "Please select a delivery address"); router.back(); return; }
-    if (!customerData) return Alert.alert("Error", "Customer profile not found");
+    if (!selectedAddress) {
+      Toast.show({ type: "error", text1: "Please select a delivery address", position: "top" });
+      router.back();
+      return;
+    }
+    if (!customerData) {
+      Toast.show({ type: "error", text1: "Customer profile not found", position: "top" });
+      return;
+    }
     if (cartItems.length === 0) { router.back(); return; }
-    if (isCalculatingDelivery) return Alert.alert("Please wait", "Calculating delivery fees...");
+    if (isCalculatingDelivery) {
+      Toast.show({ type: "info", text1: "Please wait", text2: "Calculating delivery fees...", position: "top" });
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -265,7 +279,12 @@ export default function PaymentScreen() {
         await handleOpenRazorpay();
       }
     } catch (error: any) {
-      Alert.alert("Order Failed", error.message || "Something went wrong. Please try again.");
+      Toast.show({
+        type: "error",
+        text1: "Order Failed",
+        text2: error.message || "Something went wrong. Please try again.",
+        position: "top",
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -285,7 +304,6 @@ export default function PaymentScreen() {
 
     const { razorpay_order_id, amount, key_id } = data;
 
-    // Track if test mode for UI hint
     setIsTestMode(key_id?.startsWith("rzp_test_") || false);
 
     const { data: userRecord } = await supabase
@@ -326,10 +344,13 @@ export default function PaymentScreen() {
           setPendingOrderData(null);
           setShowSuccess(true);
         } catch (err: any) {
-          Alert.alert(
-            "⚠️ Important",
-            `Payment was successful but order creation failed. Please contact support with Payment ID: ${data.razorpay_payment_id}`,
-          );
+          Toast.show({
+            type: "error",
+            text1: "⚠️ Important",
+            text2: `Payment successful but order creation failed. Contact support with Payment ID: ${data.razorpay_payment_id}`,
+            position: "top",
+            visibilityTime: 6000,
+          });
         } finally {
           setIsProcessing(false);
         }
@@ -337,15 +358,22 @@ export default function PaymentScreen() {
       } else if (data.type === "PAYMENT_DISMISSED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
-        Alert.alert("Payment Cancelled", "No order was placed. You can try again anytime.");
+        Toast.show({
+          type: "info",
+          text1: "Payment Cancelled",
+          text2: "No order was placed. You can try again anytime.",
+          position: "top",
+        });
 
       } else if (data.type === "PAYMENT_FAILED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
-        Alert.alert(
-          "Payment Failed",
-          data.error || "Payment could not be processed. Please try again.",
-        );
+        Toast.show({
+          type: "error",
+          text1: "Payment Failed",
+          text2: data.error || "Payment could not be processed. Please try again.",
+          position: "top",
+        });
       }
     } catch (e) {
       console.error("WebView message parse error", e);
@@ -498,7 +526,6 @@ export default function PaymentScreen() {
       </View>
 
       {/* Razorpay WebView Modal — Full Screen */}
-      {/* Razorpay WebView Modal — Full Screen */}
       <Modal
         visible={showRazorpayWebView}
         transparent={false}
@@ -506,7 +533,12 @@ export default function PaymentScreen() {
         onRequestClose={() => {
           setShowRazorpayWebView(false);
           setPendingOrderData(null);
-          Alert.alert("Payment Cancelled", "No order was placed.");
+          Toast.show({
+            type: "info",
+            text1: "Payment Cancelled",
+            text2: "No order was placed.",
+            position: "top",
+          });
         }}
       >
         <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -537,7 +569,7 @@ export default function PaymentScreen() {
             </View>
           )}
 
-          {/* Test mode banner — only shows in test mode */}
+          {/* Test mode banner */}
           {!isTestMode && (
             <View style={{
               backgroundColor: "#fef9c3",
@@ -556,7 +588,7 @@ export default function PaymentScreen() {
             </View>
           )}
 
-          {/* WebView — takes all remaining space */}
+          {/* WebView */}
           <WebView
             source={{ html: razorpayHTML }}
             onMessage={handleWebViewMessage}
@@ -579,11 +611,13 @@ export default function PaymentScreen() {
               const isUpiLink = upiSchemes.some((scheme) => url.startsWith(scheme));
               if (isUpiLink) {
                 if (isTestMode) {
-                  Alert.alert(
-                    "Test Mode",
-                    "UPI apps don't work in test mode.\nUse UPI ID: success@razorpay",
-                    [{ text: "Got it" }]
-                  );
+                  Toast.show({
+                    type: "info",
+                    text1: "Test Mode",
+                    text2: "UPI apps don't work in test mode. Use UPI ID: success@razorpay",
+                    position: "top",
+                    visibilityTime: 4000,
+                  });
                   return false;
                 }
                 Linking.openURL(url).catch(console.error);

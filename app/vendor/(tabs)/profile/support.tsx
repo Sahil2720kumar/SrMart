@@ -6,11 +6,11 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Linking,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
 const mockFAQs = [
   {
@@ -36,28 +36,35 @@ const mockFAQs = [
   {
     id: 'faq-5',
     question: 'How long does document verification take?',
-    answer: 'Document verification typically takes 24-48 hours. You\'ll receive a notification once the verification is complete.',
+    answer: "Document verification typically takes 24-48 hours. You'll receive a notification once the verification is complete.",
   },
 ];
 
 export default function SupportScreen() {
   const [expandedFAQ, setExpandedFAQ] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
 
   const handleGoBack = () => {
-    console.log('[v0] Going back to profile overview');
-    router.back()
+    router.back();
   };
 
   const handleChatSupport = async () => {
     setProcessingAction('chat');
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log('[v0] Opening live chat support');
-      Alert.alert('Live Chat', 'Opening chat support window...');
+      Toast.show({
+        type: 'info',
+        text1: 'Live Chat',
+        text2: 'Opening chat support window...',
+        position: 'top',
+      });
     } catch (error) {
-      Alert.alert('Error', 'Failed to open chat support');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to open chat support.',
+        position: 'top',
+      });
     } finally {
       setProcessingAction(null);
     }
@@ -68,7 +75,12 @@ export default function SupportScreen() {
     try {
       await Linking.openURL('mailto:support@vendor.app?subject=Support Request');
     } catch (error) {
-      Alert.alert('Error', 'Failed to open email client');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to open email client.',
+        position: 'top',
+      });
     } finally {
       setProcessingAction(null);
     }
@@ -79,7 +91,12 @@ export default function SupportScreen() {
     try {
       await Linking.openURL('tel:+919876543210');
     } catch (error) {
-      Alert.alert('Error', 'Failed to open phone dialer');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to open phone dialer.',
+        position: 'top',
+      });
     } finally {
       setProcessingAction(null);
     }
@@ -108,31 +125,13 @@ export default function SupportScreen() {
           <Text className="text-lg font-bold text-gray-900 mb-3">Contact Support</Text>
 
           <View className="gap-3 mb-6">
-            {/* Live Chat */}
-            {/* <TouchableOpacity
-              onPress={handleChatSupport}
-              disabled={processingAction === 'chat'}
-              className={`bg-white border border-gray-200 rounded-xl p-4 flex-row items-center gap-3 active:opacity-70 ${processingAction === 'chat' ? 'opacity-50' : ''}`}
-            >
-              <View className="w-12 h-12 bg-blue-100 rounded-xl items-center justify-center">
-                <Feather name='message-circle' size={24} color="#2563eb" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-gray-900 font-bold text-base">Live Chat</Text>
-                <Text className="text-gray-600 text-xs mt-1">Chat with our support team</Text>
-              </View>
-              {processingAction === 'chat' ? (
-                <ActivityIndicator size="small" color="#2563eb" />
-              ) : (
-                <Feather name='chevron-right' size={20} color="#9ca3af" />
-              )}
-            </TouchableOpacity> */}
-
             {/* Email Support */}
             <TouchableOpacity
               onPress={handleEmailSupport}
               disabled={processingAction === 'email'}
-              className={`bg-white border border-gray-200 rounded-xl p-4 flex-row items-center gap-3 active:opacity-70 ${processingAction === 'email' ? 'opacity-50' : ''}`}
+              className={`bg-white border border-gray-200 rounded-xl p-4 flex-row items-center gap-3 active:opacity-70 ${
+                processingAction === 'email' ? 'opacity-50' : ''
+              }`}
             >
               <View className="w-12 h-12 bg-emerald-100 rounded-xl items-center justify-center">
                 <Feather name='mail' size={24} color="#059669" />
@@ -152,7 +151,9 @@ export default function SupportScreen() {
             <TouchableOpacity
               onPress={handleCallSupport}
               disabled={processingAction === 'call'}
-              className={`bg-white border border-gray-200 rounded-xl p-4 flex-row items-center gap-3 active:opacity-70 ${processingAction === 'call' ? 'opacity-50' : ''}`}
+              className={`bg-white border border-gray-200 rounded-xl p-4 flex-row items-center gap-3 active:opacity-70 ${
+                processingAction === 'call' ? 'opacity-50' : ''
+              }`}
             >
               <View className="w-12 h-12 bg-orange-100 rounded-xl items-center justify-center">
                 <Feather name='phone' size={24} color="#f59e0b" />
@@ -188,17 +189,34 @@ export default function SupportScreen() {
 
           <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             {mockFAQs.map((faq, index) => (
-              <View key={faq.id} className={`${index !== mockFAQs.length - 1 ? 'border-b border-gray-100' : ''}`}>
+              <View
+                key={faq.id}
+                className={`${index !== mockFAQs.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
                 {/* Question */}
                 <TouchableOpacity
                   onPress={() => toggleFAQ(faq.id)}
-                  className={`px-5 py-4 flex-row items-center justify-between active:opacity-70 ${expandedFAQ === faq.id ? 'bg-emerald-50' : ''}`}
+                  className={`px-5 py-4 flex-row items-center justify-between active:opacity-70 ${
+                    expandedFAQ === faq.id ? 'bg-emerald-50' : ''
+                  }`}
                 >
-                  <Text className={`font-semibold text-base flex-1 mr-3 ${expandedFAQ === faq.id ? 'text-emerald-700' : 'text-gray-900'}`}>
+                  <Text
+                    className={`font-semibold text-base flex-1 mr-3 ${
+                      expandedFAQ === faq.id ? 'text-emerald-700' : 'text-gray-900'
+                    }`}
+                  >
                     {faq.question}
                   </Text>
-                  <View className={`transform transition-transform ${expandedFAQ === faq.id ? 'rotate-180' : 'rotate-0'}`}>
-                  <Feather name='chevron-right' size={20} color={expandedFAQ === faq.id ? '#059669' : '#9ca3af'} />
+                  <View
+                    className={`transform transition-transform ${
+                      expandedFAQ === faq.id ? 'rotate-180' : 'rotate-0'
+                    }`}
+                  >
+                    <Feather
+                      name='chevron-right'
+                      size={20}
+                      color={expandedFAQ === faq.id ? '#059669' : '#9ca3af'}
+                    />
                   </View>
                 </TouchableOpacity>
 

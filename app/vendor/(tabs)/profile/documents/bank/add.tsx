@@ -7,12 +7,12 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   TextInput,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import {
   useAddVendorBankDetails,
 } from '@/hooks/queries';
@@ -33,14 +33,11 @@ const ACCOUNT_TYPES: AccountTypeOption[] = [
 export default function AddBankAccountScreen() {
   const { session } = useAuthStore();
 
-  // Fetch vendor details to get vendor_id
   const {
     data: vendorData,
-    isLoading: isLoadingVendor
+    isLoading: isLoadingVendor,
   } = useVendorDetail(session?.user?.id || '');
 
-
-  // Mutations
   const addBankMutation = useAddVendorBankDetails();
 
   // Form states
@@ -55,24 +52,19 @@ export default function AddBankAccountScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAccountTypeDropdown, setShowAccountTypeDropdown] = useState(false);
 
-
-
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Account Holder Name
     if (!accountHolder.trim()) {
       newErrors.accountHolder = 'Account holder name is required';
     } else if (accountHolder.trim().length < 3) {
       newErrors.accountHolder = 'Name must be at least 3 characters';
     }
 
-    // Bank Name
     if (!bankName.trim()) {
       newErrors.bankName = 'Bank name is required';
     }
 
-    // Account Number
     if (!accountNumber.trim()) {
       newErrors.accountNumber = 'Account number is required';
     } else if (accountNumber.length < 9 || accountNumber.length > 18) {
@@ -81,14 +73,12 @@ export default function AddBankAccountScreen() {
       newErrors.accountNumber = 'Account number must contain only digits';
     }
 
-    // Confirm Account Number
     if (!confirmAccountNumber.trim()) {
       newErrors.confirmAccountNumber = 'Please confirm account number';
     } else if (accountNumber !== confirmAccountNumber) {
       newErrors.confirmAccountNumber = 'Account numbers do not match';
     }
 
-    // IFSC Code
     if (!ifscCode.trim()) {
       newErrors.ifscCode = 'IFSC code is required';
     } else if (ifscCode.length !== 11) {
@@ -97,7 +87,6 @@ export default function AddBankAccountScreen() {
       newErrors.ifscCode = 'Invalid IFSC code format';
     }
 
-    // UPI ID (optional but validate format if provided)
     if (upiId.trim() && !upiId.includes('@')) {
       newErrors.upiId = 'Invalid UPI ID format (should contain @)';
     }
@@ -108,12 +97,22 @@ export default function AddBankAccountScreen() {
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix all errors before submitting');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fix all errors before submitting.',
+        position: 'top',
+      });
       return;
     }
 
     if (!vendorData?.id || !session?.user.id) {
-      Alert.alert('Error', 'Vendor information not found');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Vendor information not found.',
+        position: 'top',
+      });
       return;
     }
 
@@ -129,18 +128,23 @@ export default function AddBankAccountScreen() {
         upi_id: upiId.trim() || undefined,
       };
 
-      // Add new bank details
       await addBankMutation.mutateAsync(bankDetails);
 
-      Alert.alert(
-        'Success',
-        "Bank account added successfully!\n\nYour account will be verified by our team within 24 hours. You'll receive a notification once verification is complete.",
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Bank account added successfully! Your account will be verified within 24 hours.',
+        position: 'top',
+      });
+      router.back();
     } catch (error: any) {
       console.error('Bank account submission error:', error);
-      Alert.alert('Error', error.message || 'Failed to save bank details. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to save bank details. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -148,7 +152,6 @@ export default function AddBankAccountScreen() {
     router.back();
   };
 
-  // Loading state
   if (isLoadingVendor) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
@@ -158,14 +161,12 @@ export default function AddBankAccountScreen() {
     );
   }
 
-
-
-  const isLoading = addBankMutation.isPending
+  const isLoading = addBankMutation.isPending;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         {/* Header */}
@@ -174,9 +175,7 @@ export default function AddBankAccountScreen() {
             <Feather name='chevron-left' size={24} color="#1f2937" />
           </TouchableOpacity>
           <View>
-            <Text className="text-2xl font-bold text-gray-900">
-              Add Bank Account
-            </Text>
+            <Text className="text-2xl font-bold text-gray-900">Add Bank Account</Text>
             <Text className="text-sm text-gray-600 mt-1">Secure payment method</Text>
           </View>
         </View>
@@ -192,16 +191,13 @@ export default function AddBankAccountScreen() {
               <View className="flex-row items-start gap-3">
                 <Ionicons name="shield-checkmark" size={20} color="#059669" />
                 <View className="flex-1">
-                  <Text className="text-emerald-900 font-bold text-sm mb-1">
-                    Secure & Encrypted
-                  </Text>
+                  <Text className="text-emerald-900 font-bold text-sm mb-1">Secure & Encrypted</Text>
                   <Text className="text-emerald-800 text-xs">
                     Your bank details are encrypted and stored securely using industry-standard protocols.
                   </Text>
                 </View>
               </View>
             </View>
-
 
             {/* Account Holder Name */}
             <View className="mb-5">
@@ -273,11 +269,13 @@ export default function AddBankAccountScreen() {
                           setAccountType(type.value);
                           setShowAccountTypeDropdown(false);
                         }}
-                        className={`px-4 py-3 border-b border-gray-100 ${accountType === type.value ? 'bg-emerald-50' : ''
-                          }`}
+                        className={`px-4 py-3 border-b border-gray-100 ${
+                          accountType === type.value ? 'bg-emerald-50' : ''
+                        }`}
                       >
-                        <Text className={`font-medium ${accountType === type.value ? 'text-emerald-700' : 'text-gray-900'
-                          }`}>
+                        <Text className={`font-medium ${
+                          accountType === type.value ? 'text-emerald-700' : 'text-gray-900'
+                        }`}>
                           {type.label}
                         </Text>
                       </TouchableOpacity>
@@ -391,9 +389,7 @@ export default function AddBankAccountScreen() {
                   <Text className="text-red-600 text-xs font-medium">{errors.upiId}</Text>
                 </View>
               )}
-              <Text className="text-gray-500 text-xs mt-1">
-                For faster payouts (if available)
-              </Text>
+              <Text className="text-gray-500 text-xs mt-1">For faster payouts (if available)</Text>
             </View>
 
             {/* Admin Approval Notice */}
@@ -405,7 +401,8 @@ export default function AddBankAccountScreen() {
                     Admin Verification Required
                   </Text>
                   <Text className="text-blue-800 text-xs leading-5">
-                    Your bank account will be verified by our team within 24 hours. Once approved, you'll be able to request cashouts.
+                    Your bank account will be verified by our team within 24 hours. Once approved,
+                    you'll be able to request cashouts.
                   </Text>
                 </View>
               </View>
@@ -418,17 +415,16 @@ export default function AddBankAccountScreen() {
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={isLoading}
-            className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${isLoading ? 'opacity-50' : ''
-              }`}
+            className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${
+              isLoading ? 'opacity-50' : ''
+            }`}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <View className="flex-row items-center gap-2">
                 <Feather name="check" size={20} color="#fff" />
-                <Text className="text-white font-bold text-base">
-                  Submit & Verify
-                </Text>
+                <Text className="text-white font-bold text-base">Submit & Verify</Text>
               </View>
             )}
           </TouchableOpacity>

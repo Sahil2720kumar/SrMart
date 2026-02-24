@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
-  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { router, Stack } from "expo-router"
@@ -25,6 +24,7 @@ import {
   useUploadProfileImage 
 } from "@/hooks/queries"
 import { useAuthStore } from "@/store/authStore"
+import Toast from "react-native-toast-message"
 
 // Calendar Icon Component
 const CalendarIcon = () => (
@@ -55,8 +55,6 @@ export default function UpdateProfileScreen() {
   // Load profile data when available
   useEffect(() => {
     if (customerProfile) {
-      // console.log("customerProfile", customerProfile.phone);
-      
       setFirstName(customerProfile.first_name || "")
       setLastName(customerProfile.last_name || "")
       setPhone(customerProfile.phone || "")
@@ -84,7 +82,6 @@ export default function UpdateProfileScreen() {
     if (!phone.trim() || !validatePhone(phone)) {
       newErrors.phone = "Please enter a valid phone number"
     }
-
 
     // Validate date format if provided (YYYY-MM-DD)
     if (dateOfBirth && !/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateOfBirth)) {
@@ -114,12 +111,19 @@ export default function UpdateProfileScreen() {
         updated_at: new Date().toISOString(),
       })
       
-      Alert.alert("Success", "Profile updated successfully", [
-        { text: "OK", onPress: () => router.back() }
-      ])
+      Toast.show({
+        type: "success",
+        text1: "Profile updated successfully",
+        position: "top",
+      });
+      router.back()
     } catch (error) {
       console.error("Update error:", error)
-      Alert.alert("Error", "Failed to update profile. Please try again.")
+      Toast.show({
+        type: "error",
+        text1: "Failed to update profile. Please try again.",
+        position: "top",
+      });
     }
   }
 
@@ -129,11 +133,12 @@ export default function UpdateProfileScreen() {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
       
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please allow access to your photo library to change your profile picture.',
-          [{ text: 'OK' }]
-        )
+        Toast.show({
+          type: "error",
+          text1: "Permission Required",
+          text2: "Please allow access to your photo library to change your profile picture.",
+          position: "top",
+        })
         return
       }
 
@@ -151,7 +156,12 @@ export default function UpdateProfileScreen() {
       }
     } catch (error: any) {
       console.error("Photo selection error:", error)
-      Alert.alert("Error", "Failed to select photo. Please try again.")
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Failed to select photo. Please try again.",
+        position: "top",
+      })
     }
   }
 

@@ -10,7 +10,6 @@ import {
   ScrollView,
   Modal,
   FlatList,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,6 +34,7 @@ import {
   useDeliveryBoyStats,
 } from '@/hooks/queries/useDeliveryOrders';
 import { DeliveryOrder } from '@/types/delivery-orders.types';
+import Toast from 'react-native-toast-message';
 
 // ==========================================
 // KYC DOCUMENT TYPES
@@ -104,46 +104,23 @@ const DeliveryPartnerHome = () => {
   // BUILD KYC STEPS FROM ACTUAL DOCUMENTS
   // ==========================================
 
-  // Helper to check if document is verified
   const isDocumentVerified = (docType: KycDocumentType) => {
     const doc = kycDocuments.data?.find(d => d.document_type === docType);
     return doc?.status === 'verified' || doc?.status === 'approved';
   };
 
-  // Build KYC steps based on actual KYC documents
   const kycSteps = [
-    {
-      id: 'aadhaar',
-      title: KYC_DOCUMENTS.aadhaar,
-      status: isDocumentVerified('aadhaar') ? 'completed' : 'pending'
-    },
-    {
-      id: 'pan',
-      title: KYC_DOCUMENTS.pan,
-      status: isDocumentVerified('pan') ? 'completed' : 'pending'
-    },
-    {
-      id: 'driving_license',
-      title: KYC_DOCUMENTS.driving_license,
-      status: isDocumentVerified('driving_license') ? 'completed' : 'pending'
-    },
-    {
-      id: 'bank_passbook',
-      title: KYC_DOCUMENTS.bank_passbook,
-      status: isDocumentVerified('bank_passbook') ? 'completed' : 'pending'
-    },
-    {
-      id: 'profile_photo',
-      title: KYC_DOCUMENTS.profile_photo,
-      status: isDocumentVerified('profile_photo') ? 'completed' : 'pending'
-    }
+    { id: 'aadhaar', title: KYC_DOCUMENTS.aadhaar, status: isDocumentVerified('aadhaar') ? 'completed' : 'pending' },
+    { id: 'pan', title: KYC_DOCUMENTS.pan, status: isDocumentVerified('pan') ? 'completed' : 'pending' },
+    { id: 'driving_license', title: KYC_DOCUMENTS.driving_license, status: isDocumentVerified('driving_license') ? 'completed' : 'pending' },
+    { id: 'bank_passbook', title: KYC_DOCUMENTS.bank_passbook, status: isDocumentVerified('bank_passbook') ? 'completed' : 'pending' },
+    { id: 'profile_photo', title: KYC_DOCUMENTS.profile_photo, status: isDocumentVerified('profile_photo') ? 'completed' : 'pending' },
   ];
 
   const kycProgress = kycSteps.filter(s => s.status === 'completed').length;
   const totalKycSteps = kycSteps.length;
   const kycPercentage = (kycProgress / totalKycSteps) * 100;
 
-  // Today's stats
   const todayStats = {
     todayOrders: stats.data?.completedOrders || 0,
     distanceKm: stats.data?.totalDistance || 0,
@@ -162,7 +139,12 @@ const DeliveryPartnerHome = () => {
       });
     } catch (error) {
       console.error('Error toggling online status:', error);
-      Alert.alert('Error', 'Failed to update online status');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to update online status',
+        position: 'top',
+      });
     }
   };
 
@@ -180,10 +162,19 @@ const DeliveryPartnerHome = () => {
       setShowAcceptModal(false);
       setSelectedOrderForAccept(null);
       setShowOrdersModal(false);
-      Alert.alert('Success', 'Order accepted successfully! 🎉');
+      Toast.show({
+        type: 'success',
+        text1: 'Order accepted successfully! 🎉',
+        position: 'top',
+      });
     } catch (error: any) {
       setShowAcceptModal(false);
-      Alert.alert('Error', error.message || 'Failed to accept order');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to accept order',
+        position: 'top',
+      });
     }
   };
 
@@ -200,10 +191,19 @@ const DeliveryPartnerHome = () => {
       await markPickedUp.mutateAsync(selectedOrderForPickup.id);
       setShowPickupModal(false);
       setSelectedOrderForPickup(null);
-      Alert.alert('Success', 'Order marked as picked up! 📦');
+      Toast.show({
+        type: 'success',
+        text1: 'Order marked as picked up! 📦',
+        position: 'top',
+      });
     } catch (error: any) {
       setShowPickupModal(false);
-      Alert.alert('Error', error.message || 'Failed to mark order as picked up');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to mark order as picked up',
+        position: 'top',
+      });
     }
   };
 
@@ -226,10 +226,19 @@ const DeliveryPartnerHome = () => {
       setShowOtpModal(false);
       setOtpInput('');
       setSelectedOrderForOtp(null);
-      Alert.alert('Success!', 'Order delivered successfully! 🎉');
+      Toast.show({
+        type: 'success',
+        text1: 'Order delivered successfully! 🎉',
+        position: 'top',
+      });
     } catch (error: any) {
       console.error('Error completing delivery:', error);
-      Alert.alert('Invalid OTP', error.message || 'Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid OTP',
+        text2: error.message || 'Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -269,6 +278,7 @@ const DeliveryPartnerHome = () => {
                   Complete verification to start earning
                 </Text>
               </View>
+
               {/* Verification Status Alert */}
               <View className="bg-orange-50 border-l-4 border-orange-400 p-5 rounded-2xl mb-6 shadow-sm">
                 <View className="flex-row gap-4">
@@ -290,21 +300,19 @@ const DeliveryPartnerHome = () => {
 
                 <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-sm font-semibold text-gray-700">Verification Status</Text>
-                  <View className={`px-3 py-1.5 rounded-full ${adminStatus === 'approved' ? 'bg-green-500' :
-                      adminStatus === 'pending' ? 'bg-yellow-500' :
-                        'bg-red-500'
-                    }`}>
+                  <View className={`px-3 py-1.5 rounded-full ${
+                    adminStatus === 'approved' ? 'bg-green-500' :
+                    adminStatus === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}>
                     <Text className="text-white text-xs font-bold">
                       {adminStatus === 'approved' ? 'Approved' :
-                        adminStatus === 'pending' ? 'Pending' :
-                          'Rejected'}
+                       adminStatus === 'pending' ? 'Pending' : 'Rejected'}
                     </Text>
                   </View>
                 </View>
                 <Text className="text-xs text-gray-500 mb-3">
                   {adminStatus === 'approved' ? 'Orders enabled' :
-                    adminStatus === 'pending' ? 'Verification in progress' :
-                      'Action required'}
+                   adminStatus === 'pending' ? 'Verification in progress' : 'Action required'}
                 </Text>
 
                 {adminStatus === 'rejected' && (
@@ -329,7 +337,6 @@ const DeliveryPartnerHome = () => {
                   </Text>
                 </View>
 
-                {/* Progress Bar */}
                 <View className="h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
                   <View
                     className="h-full bg-indigo-600 rounded-full"
@@ -337,27 +344,27 @@ const DeliveryPartnerHome = () => {
                   />
                 </View>
 
-                {/* KYC Steps */}
                 <View className="gap-y-3 mb-4">
                   {kycSteps.map((step) => (
                     <View key={step.id} className="flex-row items-center">
-                      <View className={`w-6 h-6 rounded-full items-center justify-center mr-3 ${step.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'
-                        }`}>
+                      <View className={`w-6 h-6 rounded-full items-center justify-center mr-3 ${
+                        step.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'
+                      }`}>
                         {step.status === 'completed' ? (
                           <Feather name="check" size={14} color="white" />
                         ) : (
                           <View className="w-2 h-2 rounded-full bg-gray-400" />
                         )}
                       </View>
-                      <Text className={`font-semibold ${step.status === 'completed' ? 'text-gray-900' : 'text-gray-500'
-                        }`}>
+                      <Text className={`font-semibold ${
+                        step.status === 'completed' ? 'text-gray-900' : 'text-gray-500'
+                      }`}>
                         {step.title}
                       </Text>
                     </View>
                   ))}
                 </View>
 
-                {/* Action Button */}
                 <TouchableOpacity
                   className="bg-indigo-600 py-3 rounded-xl"
                   activeOpacity={0.8}
@@ -383,23 +390,15 @@ const DeliveryPartnerHome = () => {
 
                   <TouchableOpacity
                     onPress={handleToggleOnline}
-                    className={`px-6 py-3 rounded-full shadow-lg flex-row items-center gap-2 ${isOnline
-                        ? 'bg-green-500'
-                        : 'bg-white/20 border border-white/30'
-                      }`}
+                    className={`px-6 py-3 rounded-full shadow-lg flex-row items-center gap-2 ${
+                      isOnline ? 'bg-green-500' : 'bg-white/20 border border-white/30'
+                    }`}
                     activeOpacity={0.8}
                     disabled={updateProfile.isPending}
                   >
-                    <View
-                      className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-white' : 'bg-gray-300'
-                        }`}
-                    />
+                    <View className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-white' : 'bg-gray-300'}`} />
                     <Text className="font-bold text-white">
-                      {updateProfile.isPending
-                        ? 'Loading...'
-                        : isOnline
-                          ? 'Online'
-                          : 'Offline'}
+                      {updateProfile.isPending ? 'Loading...' : isOnline ? 'Online' : 'Offline'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -478,24 +477,9 @@ const DeliveryPartnerHome = () => {
               <View className="mb-6">
                 <Text className="text-xl font-bold text-white mb-4">Today's Performance</Text>
                 <View className="flex-row gap-3">
-                  <StatCard
-                    icon="package"
-                    label="Orders"
-                    value={todayStats.todayOrders}
-                    bgColor="bg-indigo-500"
-                  />
-                  <StatCard
-                    icon="navigation"
-                    label="Distance"
-                    value={`${todayStats.distanceKm} km`}
-                    bgColor="bg-blue-500"
-                  />
-                  <StatCard
-                    icon="dollar-sign"
-                    label="Earned"
-                    value={`₹${todayStats.earnings}`}
-                    bgColor="bg-green-500"
-                  />
+                  <StatCard icon="package" label="Orders" value={todayStats.todayOrders} bgColor="bg-indigo-500" />
+                  <StatCard icon="navigation" label="Distance" value={`${todayStats.distanceKm} km`} bgColor="bg-blue-500" />
+                  <StatCard icon="dollar-sign" label="Earned" value={`₹${todayStats.earnings}`} bgColor="bg-green-500" />
                 </View>
               </View>
             </>
@@ -554,16 +538,12 @@ const DeliveryPartnerHome = () => {
                         >
                           <Feather name="shopping-bag" size={16} color="#3b82f6" />
                           <View className="flex-1 ml-2">
-                            <Text className="text-xs text-blue-600 font-bold">
-                              PICKUP {idx + 1}
-                            </Text>
+                            <Text className="text-xs text-blue-600 font-bold">PICKUP {idx + 1}</Text>
                             <Text className="font-semibold text-gray-900">{vendor.name}</Text>
                             <Text className="text-xs text-gray-600" numberOfLines={1}>
                               {vendor.address}
                             </Text>
-                            <Text className="text-xs text-gray-500 mt-1">
-                              {vendor.items.length} items
-                            </Text>
+                            <Text className="text-xs text-gray-500 mt-1">{vendor.items.length} items</Text>
                           </View>
                         </View>
                       ))}
@@ -572,9 +552,7 @@ const DeliveryPartnerHome = () => {
                         <Feather name="map-pin" size={16} color="#22c55e" />
                         <View className="flex-1 ml-2">
                           <Text className="text-xs text-green-600 font-bold">DELIVERY</Text>
-                          <Text className="font-semibold text-gray-900">
-                            {item.customer.name}
-                          </Text>
+                          <Text className="font-semibold text-gray-900">{item.customer.name}</Text>
                           <Text className="text-xs text-gray-600" numberOfLines={1}>
                             {item.customer.address}
                           </Text>
@@ -585,21 +563,15 @@ const DeliveryPartnerHome = () => {
                     <View className="flex-row gap-2 mb-4">
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
                         <Text className="text-xs text-gray-500">Distance</Text>
-                        <Text className="font-bold text-gray-900 text-sm">
-                          {item.distance.toFixed(1)} km
-                        </Text>
+                        <Text className="font-bold text-gray-900 text-sm">{item.distance.toFixed(1)} km</Text>
                       </View>
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
                         <Text className="text-xs text-gray-500">Total Items</Text>
-                        <Text className="font-bold text-gray-900 text-sm">
-                          {item.totalItems}
-                        </Text>
+                        <Text className="font-bold text-gray-900 text-sm">{item.totalItems}</Text>
                       </View>
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
                         <Text className="text-xs text-gray-500">Vendors</Text>
-                        <Text className="font-bold text-gray-900 text-sm">
-                          {item.vendors.length}
-                        </Text>
+                        <Text className="font-bold text-gray-900 text-sm">{item.vendors.length}</Text>
                       </View>
                     </View>
 
@@ -678,7 +650,6 @@ const DeliveryPartnerHome = () => {
 };
 
 /* ---------------- STAT CARD COMPONENT ---------------- */
-
 const StatCard = ({
   icon,
   label,
@@ -691,9 +662,7 @@ const StatCard = ({
   bgColor: string;
 }) => (
   <View className="flex-1 bg-white rounded-2xl p-4 shadow-md">
-    <View
-      className={`w-10 h-10 ${bgColor} rounded-xl items-center justify-center mb-3 shadow-md`}
-    >
+    <View className={`w-10 h-10 ${bgColor} rounded-xl items-center justify-center mb-3 shadow-md`}>
       <Feather name={icon} size={20} color="white" />
     </View>
     <Text className="text-xs text-gray-500 mb-1 font-semibold">{label}</Text>

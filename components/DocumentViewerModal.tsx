@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import { memo, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, Linking, Modal, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 
 // Document Viewer Modal Component
 function DocumentViewerModal({
@@ -63,7 +64,11 @@ function DocumentViewerModal({
       try {
         await Linking.openURL(document.document_url);
       } catch (error) {
-        Alert.alert('Error', 'Unable to open document URL');
+        Toast.show({
+          type: 'error',
+          text1: 'Unable to open document URL',
+          position: 'top',
+        });
       }
     }
   };

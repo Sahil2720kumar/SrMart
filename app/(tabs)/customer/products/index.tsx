@@ -93,98 +93,93 @@ export default function AllProductsScreen({ navigation }: { navigation?: any }) 
   }
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Search Input */}
-      <View className="px-4 mb-4 mt-6">
-        <View className="flex-row items-center bg-gray-100 rounded-full px-4">
-          <SearchIcon />
-          <TextInput
-            className="flex-1 py-3.5 px-3 text-black text-base"
-            placeholder="Search products"
-            placeholderTextColor="#9ca3af"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <CloseIcon />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {/* Category Filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, flexGrow: 0 }}
-        className="mb-4 max-h-14"
-      >
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category.id}
-            onPress={() => setSelectedCategory(category.id)}
-            className={`mr-2 px-4 py-2 h-10 rounded-full border ${
-              selectedCategory === category.id 
-                ? "bg-green-500 border-green-500" 
-                : "bg-white border-gray-200"
-            }`}
-          >
-            <Text className={`text-sm font-medium ${
-              selectedCategory === category.id ? "text-white" : "text-gray-600"
-            }`}>
-              {category.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Product Count */}
-      <View className="px-4 mb-2">
-        <Text className="text-sm text-gray-500">
-          {products.length} product{products.length !== 1 ? 's' : ''} found
-        </Text>
-      </View>
-
-      {/* Products Grid */}
-      {isError ? (
-        <View className="flex-1 items-center justify-center px-8">
-          <View className="w-20 h-20 bg-red-100 rounded-full items-center justify-center mb-4">
-            <Text style={{ fontSize: 32 }}>⚠️</Text>
-          </View>
-          <Text className="text-lg font-semibold text-gray-900 mb-2">Error loading products</Text>
-          <Text className="text-gray-500 text-center">Please try again later.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={products}
-          renderItem={({ item }) => (
-            <ProductCard
-              layoutMode="vertical"
-              item={item}
-              wishlist={wishlist}
-              cart={cart}
-              toggleWishlist={toggleWishlist}
-              updateQuantity={updateQuantity}
-              addToCart={addToCart}
+    <>
+      <ScrollView className="flex-1 bg-white">
+        {/* Search Input */}
+        <View className="px-4 mb-4 mt-6">
+          <View className="flex-row items-center bg-gray-100 rounded-full px-4">
+            <SearchIcon />
+            <TextInput
+              className="flex-1 py-3.5 px-3 text-black text-base"
+              placeholder="Search products"
+              placeholderTextColor="#9ca3af"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
-          )}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          contentContainerStyle={{ 
-            paddingHorizontal: 8, 
-            paddingBottom: totalItems > 0 ? 100 : 20 
-          }}
-          showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={renderEmpty}
-        />
-      )}
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <CloseIcon />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
-      {/* Floating Cart Bar */}
+        {/* Category Filter */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, flexGrow: 0 }}
+          className="mb-4 max-h-14"
+        >
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              onPress={() => setSelectedCategory(category.id)}
+              className={`mr-2 px-4 py-2 h-10 rounded-full border ${selectedCategory === category.id
+                ? "bg-green-500 border-green-500"
+                : "bg-white border-gray-200"
+                }`}
+            >
+              <Text className={`text-sm font-medium ${selectedCategory === category.id ? "text-white" : "text-gray-600"
+                }`}>
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Product Count */}
+        <View className="px-4 mb-2">
+          <Text className="text-sm text-gray-500">
+            {products.length} product{products.length !== 1 ? 's' : ''} found
+          </Text>
+        </View>
+
+        {/* Products Grid */}
+        {isError ? (
+          <View className="flex-1 items-center justify-center px-8">
+            <View className="w-20 h-20 bg-red-100 rounded-full items-center justify-center mb-4">
+              <Text style={{ fontSize: 32 }}>⚠️</Text>
+            </View>
+            <Text className="text-lg font-semibold text-gray-900 mb-2">Error loading products</Text>
+            <Text className="text-gray-500 text-center">Please try again later.</Text>
+          </View>
+        ) : (
+          <View className="pb-40">
+          <FlatList
+            data={products}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            scrollEnabled={false}
+            contentContainerStyle={{ paddingHorizontal: 12, gap: 8, marginTop: 10 }}
+            columnWrapperStyle={{ gap: 8 }}
+            renderItem={({ item }) => (
+              <ProductCard
+                layoutMode="vertical"
+                item={item}
+                wishlist={wishlist}
+                cart={cart}
+                toggleWishlist={toggleWishlist}
+                updateQuantity={updateQuantity}
+                addToCart={addToCart}
+              />
+            )}
+            />
+          </View>
+        )}
+        {/* Floating Cart Bar */}
+      </ScrollView>
       <FloatingCartBar totalItems={totalItems} totalPrice={totalPrice} />
-    </View>
+    </>
   )
 }

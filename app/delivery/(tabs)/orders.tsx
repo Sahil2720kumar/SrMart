@@ -9,7 +9,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   RefreshControl,
   Linking,
@@ -26,17 +25,18 @@ import {
   useCompleteDelivery,
 } from '@/hooks/queries/useDeliveryOrders';
 import { DeliveryOrder } from '@/types/delivery-orders.types';
+import Toast from 'react-native-toast-message';
 
 /* ---------------- MAIN COMPONENT ---------------- */
 const DeliveryOrderScreen = () => {
-  
+
   const router = useRouter();
   const store = useDeliveryStore();
-  const { partner,setPartner, isKycCompleted,setKycCompleted,setAdminVerificationStatus, adminVerificationStatus ,toggleOnline} = store;
+  const { partner, setPartner, isKycCompleted, setKycCompleted, setAdminVerificationStatus, adminVerificationStatus, toggleOnline } = store;
   const isVerified = adminVerificationStatus === 'approved' && isKycCompleted;
 
   const [activeTab, setActiveTab] = useState<'available' | 'active' | 'completed'>('available');
-  
+
   // OTP Modal State
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [selectedOrderForOtp, setSelectedOrderForOtp] = useState<DeliveryOrder | null>(null);
@@ -51,29 +51,27 @@ const DeliveryOrderScreen = () => {
   const [selectedOrderForPickup, setSelectedOrderForPickup] = useState<DeliveryOrder | null>(null);
 
   // Queries
-  const { 
-    data: availableOrders = [], 
+  const {
+    data: availableOrders = [],
     isLoading: loadingAvailable,
     refetch: refetchAvailable,
     isRefetching: refetchingAvailable,
   } = useAvailableDeliveryOrders();
 
-
-  
-  const { 
-    data: activeOrders = [], 
+  const {
+    data: activeOrders = [],
     isLoading: loadingActive,
     refetch: refetchActive,
     isRefetching: refetchingActive,
   } = useActiveDeliveryOrders();
-  
-  const { 
-    data: completedOrders = [], 
+
+  const {
+    data: completedOrders = [],
     isLoading: loadingCompleted,
     refetch: refetchCompleted,
     isRefetching: refetchingCompleted,
   } = useCompletedDeliveryOrders();
-  
+
   const { data: stats } = useDeliveryBoyStats();
 
   // Mutations
@@ -100,11 +98,20 @@ const DeliveryOrderScreen = () => {
       await acceptOrderMutation.mutateAsync(selectedOrderForAccept.id);
       setShowAcceptModal(false);
       setSelectedOrderForAccept(null);
-      Alert.alert('Success', 'Order accepted successfully! 🎉');
+      Toast.show({
+        type: 'success',
+        text1: 'Order accepted successfully! 🎉',
+        position: 'top',
+      });
       setActiveTab('active');
     } catch (error: any) {
       setShowAcceptModal(false);
-      Alert.alert('Error', error.message || 'Failed to accept order');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to accept order',
+        position: 'top',
+      });
     }
   };
 
@@ -121,10 +128,19 @@ const DeliveryOrderScreen = () => {
       await markPickedUpMutation.mutateAsync(selectedOrderForPickup.id);
       setShowPickupModal(false);
       setSelectedOrderForPickup(null);
-      Alert.alert('Success', 'Order marked as picked up! 📦');
+      Toast.show({
+        type: 'success',
+        text1: 'Order marked as picked up! 📦',
+        position: 'top',
+      });
     } catch (error: any) {
       setShowPickupModal(false);
-      Alert.alert('Error', error.message || 'Failed to mark order as picked up');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to mark order as picked up',
+        position: 'top',
+      });
     }
   };
 
@@ -143,20 +159,26 @@ const DeliveryOrderScreen = () => {
         orderId: selectedOrderForOtp.id,
         otp: otpInput,
       });
-      
+
       setShowOtpModal(false);
       setOtpInput('');
       setSelectedOrderForOtp(null);
-      
-      Alert.alert(
-        'Success!',
-        'Order delivered successfully! 🎉',
-        [{ text: 'OK', onPress: () => setActiveTab('completed') }]
-      );
+
+      Toast.show({
+        type: 'success',
+        text1: 'Order delivered successfully! 🎉',
+        position: 'top',
+        onPress: () => setActiveTab('completed'),
+      });
+      setActiveTab('completed');
     } catch (error: any) {
       console.log(error);
-      
-      Alert.alert('Error', error.message || 'Invalid OTP. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Invalid OTP. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -170,14 +192,10 @@ const DeliveryOrderScreen = () => {
 
   const getOrdersForTab = () => {
     switch (activeTab) {
-      case 'available':
-        return availableOrders;
-      case 'active':
-        return activeOrders;
-      case 'completed':
-        return completedOrders;
-      default:
-        return [];
+      case 'available': return availableOrders;
+      case 'active': return activeOrders;
+      case 'completed': return completedOrders;
+      default: return [];
     }
   };
 
@@ -187,7 +205,7 @@ const DeliveryOrderScreen = () => {
 
   const isLoading = loadingAvailable || loadingActive || loadingCompleted;
   const isRefreshing = refetchingAvailable || refetchingActive || refetchingCompleted;
-  
+
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
       <View className="px-4 pt-4 pb-2">
@@ -213,33 +231,18 @@ const DeliveryOrderScreen = () => {
 
         {/* Tab Bar */}
         <View className="bg-indigo-500 rounded-2xl p-1 flex-row">
-          <TouchableOpacity
-            onPress={() => setActiveTab('available')}
-            className={`flex-1 py-3 rounded-xl ${activeTab === 'available' ? 'bg-white' : 'bg-transparent'}`}
-            activeOpacity={0.8}
-          >
-            <Text className={`text-center font-bold text-sm ${activeTab === 'available' ? 'text-indigo-600' : 'text-white/70'}`}>
-              Available
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('active')}
-            className={`flex-1 py-3 rounded-xl ${activeTab === 'active' ? 'bg-white' : 'bg-transparent'}`}
-            activeOpacity={0.8}
-          >
-            <Text className={`text-center font-bold text-sm ${activeTab === 'active' ? 'text-indigo-600' : 'text-white/70'}`}>
-              Active ({activeOrders.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('completed')}
-            className={`flex-1 py-3 rounded-xl ${activeTab === 'completed' ? 'bg-white' : 'bg-transparent'}`}
-            activeOpacity={0.8}
-          >
-            <Text className={`text-center font-bold text-sm ${activeTab === 'completed' ? 'text-indigo-600' : 'text-white/70'}`}>
-              Completed
-            </Text>
-          </TouchableOpacity>
+          {(['available', 'active', 'completed'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              className={`flex-1 py-3 rounded-xl ${activeTab === tab ? 'bg-white' : 'bg-transparent'}`}
+              activeOpacity={0.8}
+            >
+              <Text className={`text-center font-bold text-sm ${activeTab === tab ? 'text-indigo-600' : 'text-white/70'}`}>
+                {tab === 'available' ? 'Available' : tab === 'active' ? `Active (${activeOrders.length})` : 'Completed'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -264,8 +267,8 @@ const DeliveryOrderScreen = () => {
           <Text className="text-white mt-4">Loading orders...</Text>
         </View>
       ) : (
-        <ScrollView 
-          className="flex-1 px-4 pt-4" 
+        <ScrollView
+          className="flex-1 px-4 pt-4"
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -305,17 +308,14 @@ const DeliveryOrderScreen = () => {
                     </View>
                     <View className={`px-4 py-2 rounded-full ${
                       order.status === 'ready_for_pickup' ? 'bg-yellow-100' :
-                      order.status === 'out_for_delivery' ? 'bg-blue-100' :
-                      'bg-green-100'
+                      order.status === 'out_for_delivery' ? 'bg-blue-100' : 'bg-green-100'
                     }`}>
                       <Text className={`font-bold text-sm ${
                         order.status === 'ready_for_pickup' ? 'text-yellow-700' :
-                        order.status === 'out_for_delivery' ? 'text-blue-700' :
-                        'text-green-700'
+                        order.status === 'out_for_delivery' ? 'text-blue-700' : 'text-green-700'
                       }`}>
                         {order.status === 'ready_for_pickup' ? 'Ready' :
-                         order.status === 'out_for_delivery' ? 'Delivering' :
-                         'Completed'}
+                         order.status === 'out_for_delivery' ? 'Delivering' : 'Completed'}
                       </Text>
                     </View>
                   </View>
@@ -324,9 +324,7 @@ const DeliveryOrderScreen = () => {
                   {order.status !== 'delivered' && activeTab === 'active' && (
                     <View className="mb-4">
                       <View className="flex-row items-center justify-between mb-2">
-                        <Text className="text-xs font-semibold text-gray-600">
-                          Pickup Progress
-                        </Text>
+                        <Text className="text-xs font-semibold text-gray-600">Pickup Progress</Text>
                         <Text className="text-xs font-bold text-indigo-600">
                           {getCollectedVendorsCount(order)}/{order.vendors.length} vendors
                         </Text>
@@ -348,9 +346,7 @@ const DeliveryOrderScreen = () => {
                         {order.vendors.length} Vendor{order.vendors.length > 1 ? 's' : ''}
                       </Text>
                     </View>
-                    <Text className="text-xs text-gray-500">
-                      {order.totalItems} items
-                    </Text>
+                    <Text className="text-xs text-gray-500">{order.totalItems} items</Text>
                   </View>
 
                   {/* Customer Delivery */}
@@ -404,7 +400,7 @@ const DeliveryOrderScreen = () => {
                         <Feather name="navigation" size={18} color="white" />
                         <Text className="text-white font-bold ml-2">Navigate</Text>
                       </TouchableOpacity>
-                      
+
                       {order.status === 'ready_for_pickup' ? (
                         <TouchableOpacity
                           onPress={() => handleMarkPickedUpPress(order)}
@@ -492,7 +488,7 @@ const DeliveryOrderScreen = () => {
         otpInput={otpInput}
         setOtpInput={setOtpInput}
         handleVerifyOtp={handleVerifyOtp}
-      /> 
+      />
     </SafeAreaView>
   );
 };

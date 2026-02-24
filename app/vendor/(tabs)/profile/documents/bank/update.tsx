@@ -7,20 +7,25 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  useVendorBankDetails, 
-  useUpdateVendorBankDetails 
+import Toast from 'react-native-toast-message';
+import {
+  useVendorBankDetails,
+  useUpdateVendorBankDetails,
 } from '@/hooks/queries';
 import { useAuthStore } from '@/store/authStore';
 import { FullPageError } from '@/components/ErrorComp';
-import { BankAccountType } from '@/types/payments-wallets.types'; 
+import { BankAccountType } from '@/types/payments-wallets.types';
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 type AccountTypeOption = {
   value: BankAccountType;
   label: string;
@@ -31,24 +36,98 @@ const ACCOUNT_TYPES: AccountTypeOption[] = [
   { value: 'current', label: 'Current Account' },
 ];
 
+// ---------------------------------------------------------------------------
+// Reusable Confirm Modal
+// ---------------------------------------------------------------------------
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  confirmStyle?: 'danger' | 'primary';
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  confirmStyle = 'primary',
+  onConfirm,
+  onCancel,
+  loading = false,
+}: ConfirmModalProps) {
+  const confirmBg = confirmStyle === 'danger' ? 'bg-red-500' : 'bg-emerald-500';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable className="w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+          <View
+            className={`h-1 w-full ${
+              confirmStyle === 'danger' ? 'bg-red-500' : 'bg-emerald-500'
+            }`}
+          />
+          <View className="p-6">
+            <Text className="text-gray-900 text-lg font-bold mb-2">{title}</Text>
+            <Text className="text-gray-600 text-sm leading-6">{message}</Text>
+          </View>
+          <View className="flex-row border-t border-gray-100">
+            <TouchableOpacity
+              onPress={onCancel}
+              disabled={loading}
+              className="flex-1 py-4 items-center border-r border-gray-100"
+            >
+              <Text className="text-gray-600 font-semibold text-sm">Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onConfirm}
+              disabled={loading}
+              className={`flex-1 py-4 items-center ${confirmBg} ${loading ? 'opacity-60' : ''}`}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text className="text-white font-bold text-sm">{confirmLabel}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Screen
+// ---------------------------------------------------------------------------
 export default function UpdateBankAccountScreen() {
-  const {vendorBankId}=useLocalSearchParams()
+  const { vendorBankId } = useLocalSearchParams();
   const { session } = useAuthStore();
 
- 
-  // Fetch existing bank details
-  const { 
+  const {
     data: existingBankDetails,
     isLoading: isLoadingBank,
     isError,
     error,
-    refetch
+    refetch,
   } = useVendorBankDetails(session?.user.id!);
 
-  
   const updateBankMutation = useUpdateVendorBankDetails();
 
-  // Form states
+  // Form state
   const [accountHolder, setAccountHolder] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -59,6 +138,9 @@ export default function UpdateBankAccountScreen() {
   const [upiId, setUpiId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAccountTypeDropdown, setShowAccountTypeDropdown] = useState(false);
+
+  // Modal state
+  const [submitModalVisible, setSubmitModalVisible] = useState(false);
 
   const isEditMode = !!existingBankDetails;
 
@@ -76,38 +158,36 @@ export default function UpdateBankAccountScreen() {
     }
   }, [existingBankDetails]);
 
+  // ---------------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------------
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Account Holder Name
     if (!accountHolder.trim()) {
       newErrors.accountHolder = 'Account holder name is required';
     } else if (accountHolder.trim().length < 3) {
       newErrors.accountHolder = 'Name must be at least 3 characters';
     }
 
-    // Bank Name
     if (!bankName.trim()) {
       newErrors.bankName = 'Bank name is required';
     }
 
-    // Account Number
     if (!accountNumber.trim()) {
       newErrors.accountNumber = 'Account number is required';
     } else if (accountNumber.length < 9 || accountNumber.length > 18) {
-      newErrors.accountNumber = 'Account number must be 9-18 digits';
+      newErrors.accountNumber = 'Account number must be 9–18 digits';
     } else if (!/^\d+$/.test(accountNumber)) {
       newErrors.accountNumber = 'Account number must contain only digits';
     }
 
-    // Confirm Account Number
     if (!confirmAccountNumber.trim()) {
       newErrors.confirmAccountNumber = 'Please confirm account number';
     } else if (accountNumber !== confirmAccountNumber) {
       newErrors.confirmAccountNumber = 'Account numbers do not match';
     }
 
-    // IFSC Code
     if (!ifscCode.trim()) {
       newErrors.ifscCode = 'IFSC code is required';
     } else if (ifscCode.length !== 11) {
@@ -116,7 +196,6 @@ export default function UpdateBankAccountScreen() {
       newErrors.ifscCode = 'Invalid IFSC code format';
     }
 
-    // UPI ID (optional but validate format if provided)
     if (upiId.trim() && !upiId.includes('@')) {
       newErrors.upiId = 'Invalid UPI ID format (should contain @)';
     }
@@ -125,20 +204,38 @@ export default function UpdateBankAccountScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async () => {
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+  const handleSubmitPress = () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix all errors before submitting');
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: 'Please fix all errors before submitting.',
+        position: 'top',
+      });
       return;
     }
 
     if (!session?.user?.id) {
-      Alert.alert('Error', 'Vendor information not found');
+      Toast.show({
+        type: 'error',
+        text1: 'Session Error',
+        text2: 'Vendor information not found. Please log in again.',
+        position: 'top',
+      });
       return;
     }
 
+    // Show confirmation modal before submitting
+    setSubmitModalVisible(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     try {
       const bankDetails = {
-        vendor_id: session.user.id,
+        vendor_id: session!.user.id,
         account_holder_name: accountHolder.trim(),
         account_number: accountNumber.trim(),
         bank_name: bankName.trim(),
@@ -149,21 +246,33 @@ export default function UpdateBankAccountScreen() {
       };
 
       if (isEditMode && existingBankDetails) {
-        // Update existing bank details
         await updateBankMutation.mutateAsync({
           id: existingBankDetails.id,
           ...bankDetails,
         });
-
-        Alert.alert(
-          'Success',
-          'Bank details updated successfully!\n\nYour updated information will be re-verified by our team within 24 hours.',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
       }
-    } catch (error: any) {
-      console.error('Bank account submission error:', error);
-      Alert.alert('Error', error.message || 'Failed to save bank details. Please try again.');
+
+      setSubmitModalVisible(false);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Bank Details Updated',
+        text2: 'Your information will be re-verified within 24 hours.',
+        position: 'top',
+        visibilityTime: 3500,
+      });
+
+      // Brief delay so the toast is visible before navigating back
+      setTimeout(() => router.back(), 1200);
+    } catch (err: any) {
+      console.error('Bank account submission error:', err);
+      setSubmitModalVisible(false);
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: err?.message || 'Failed to save bank details. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -171,7 +280,9 @@ export default function UpdateBankAccountScreen() {
     router.back();
   };
 
-  // Loading state
+  // ---------------------------------------------------------------------------
+  // Render states
+  // ---------------------------------------------------------------------------
   if (isLoadingBank) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
@@ -181,29 +292,31 @@ export default function UpdateBankAccountScreen() {
     );
   }
 
-  // Error state
   if (isError) {
     return (
-      <FullPageError 
-        code='500'
-        message={error?.message || "Failed to load bank details"}
+      <FullPageError
+        code="500"
+        message={error?.message || 'Failed to load bank details'}
         onActionPress={refetch}
       />
     );
   }
 
-  const isLoading =  updateBankMutation.isPending;
+  const isLoading = updateBankMutation.isPending;
 
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center gap-3">
           <TouchableOpacity onPress={handleGoBack} className="p-2 -ml-2">
-            <Feather name='chevron-left' size={24} color="#1f2937" />
+            <Feather name="chevron-left" size={24} color="#1f2937" />
           </TouchableOpacity>
           <View>
             <Text className="text-2xl font-bold text-gray-900">
@@ -213,8 +326,8 @@ export default function UpdateBankAccountScreen() {
           </View>
         </View>
 
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
         >
@@ -228,7 +341,8 @@ export default function UpdateBankAccountScreen() {
                     Secure & Encrypted
                   </Text>
                   <Text className="text-emerald-800 text-xs">
-                    Your bank details are encrypted and stored securely using industry-standard protocols.
+                    Your bank details are encrypted and stored securely using
+                    industry-standard protocols.
                   </Text>
                 </View>
               </View>
@@ -271,7 +385,7 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.accountHolder && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.accountHolder}</Text>
                 </View>
               )}
@@ -291,7 +405,7 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.bankName && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.bankName}</Text>
                 </View>
               )}
@@ -308,12 +422,12 @@ export default function UpdateBankAccountScreen() {
                   className="bg-white border border-gray-300 rounded-xl px-4 py-3 flex-row items-center justify-between"
                 >
                   <Text className="text-gray-900 font-medium">
-                    {ACCOUNT_TYPES.find(t => t.value === accountType)?.label}
+                    {ACCOUNT_TYPES.find((t) => t.value === accountType)?.label}
                   </Text>
-                  <Feather 
-                    name={showAccountTypeDropdown ? 'chevron-up' : 'chevron-down'} 
-                    size={20} 
-                    color="#6b7280" 
+                  <Feather
+                    name={showAccountTypeDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color="#6b7280"
                   />
                 </TouchableOpacity>
 
@@ -330,9 +444,13 @@ export default function UpdateBankAccountScreen() {
                           accountType === type.value ? 'bg-emerald-50' : ''
                         }`}
                       >
-                        <Text className={`font-medium ${
-                          accountType === type.value ? 'text-emerald-700' : 'text-gray-900'
-                        }`}>
+                        <Text
+                          className={`font-medium ${
+                            accountType === type.value
+                              ? 'text-emerald-700'
+                              : 'text-gray-900'
+                          }`}
+                        >
                           {type.label}
                         </Text>
                       </TouchableOpacity>
@@ -359,7 +477,7 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.accountNumber && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.accountNumber}</Text>
                 </View>
               )}
@@ -381,8 +499,10 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.confirmAccountNumber && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
-                  <Text className="text-red-600 text-xs font-medium">{errors.confirmAccountNumber}</Text>
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
+                  <Text className="text-red-600 text-xs font-medium">
+                    {errors.confirmAccountNumber}
+                  </Text>
                 </View>
               )}
             </View>
@@ -394,7 +514,7 @@ export default function UpdateBankAccountScreen() {
               </Text>
               <TextInput
                 value={ifscCode}
-                onChangeText={text => setIfscCode(text.toUpperCase())}
+                onChangeText={(text) => setIfscCode(text.toUpperCase())}
                 placeholder="e.g., HDFC0001234"
                 maxLength={11}
                 autoCapitalize="characters"
@@ -403,12 +523,12 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.ifscCode && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.ifscCode}</Text>
                 </View>
               )}
               <Text className="text-gray-500 text-xs mt-1">
-                You can find IFSC code on your cheque or passbook
+                You can find the IFSC code on your cheque or passbook
               </Text>
             </View>
 
@@ -442,7 +562,7 @@ export default function UpdateBankAccountScreen() {
               />
               {errors.upiId && (
                 <View className="flex-row items-center gap-2 mt-2">
-                  <Feather name='alert-circle' size={16} color="#dc2626" />
+                  <Feather name="alert-circle" size={16} color="#dc2626" />
                   <Text className="text-red-600 text-xs font-medium">{errors.upiId}</Text>
                 </View>
               )}
@@ -468,10 +588,10 @@ export default function UpdateBankAccountScreen() {
           </View>
         </ScrollView>
 
-        {/* Submit Button */}
+        {/* ── Submit Button ── */}
         <View className="bg-white px-4 py-4 border-t border-gray-100">
           <TouchableOpacity
-            onPress={handleSubmit}
+            onPress={handleSubmitPress}
             disabled={isLoading}
             className={`bg-emerald-500 rounded-xl py-4 items-center justify-center ${
               isLoading ? 'opacity-50' : ''
@@ -490,6 +610,22 @@ export default function UpdateBankAccountScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Submit Confirmation Modal ── */}
+      <ConfirmModal
+        visible={submitModalVisible}
+        title={isEditMode ? 'Update Bank Account?' : 'Submit Bank Account?'}
+        message={
+          isEditMode
+            ? 'Your bank details will be updated and sent for re-verification. Payouts may be paused until the review is complete.'
+            : 'Your bank details will be submitted for admin verification. This usually takes up to 24 hours.'
+        }
+        confirmLabel={isEditMode ? 'Update' : 'Submit'}
+        confirmStyle="primary"
+        loading={updateBankMutation.isPending}
+        onConfirm={handleConfirmSubmit}
+        onCancel={() => setSubmitModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

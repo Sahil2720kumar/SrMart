@@ -11,24 +11,149 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   Switch,
   Image,
   Platform,
   KeyboardAvoidingView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import * as ImagePicker from 'expo-image-picker';
 
-export default function AddProductScreen() {
-  // Auth & Data Hooks
+// ---------------------------------------------------------------------------
+// Reusable Confirm Modal
+// ---------------------------------------------------------------------------
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmStyle?: 'danger' | 'primary' | 'warning';
+  onConfirm: () => void;
+  onCancel: () => void;
+  /** Optional third action (e.g. "Save Draft") */
+  extraLabel?: string;
+  onExtra?: () => void;
+  loading?: boolean;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmStyle = 'primary',
+  onConfirm,
+  onCancel,
+  extraLabel,
+  onExtra,
+  loading = false,
+}: ConfirmModalProps) {
+  const confirmBg =
+    confirmStyle === 'danger'
+      ? 'bg-red-500'
+      : confirmStyle === 'warning'
+      ? 'bg-orange-500'
+      : 'bg-emerald-500';
+
+  const accentBg =
+    confirmStyle === 'danger'
+      ? 'bg-red-500'
+      : confirmStyle === 'warning'
+      ? 'bg-orange-500'
+      : 'bg-emerald-500';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable className="w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+          <View className={`h-1 w-full ${accentBg}`} />
+          <View className="p-6">
+            <Text className="text-gray-900 text-lg font-bold mb-2">{title}</Text>
+            <Text className="text-gray-600 text-sm leading-6">{message}</Text>
+          </View>
+
+          {/* Actions */}
+          {extraLabel ? (
+            // Three-button layout (stacked)
+            <View className="border-t border-gray-100 px-6 pb-6 gap-3 pt-4">
+              <TouchableOpacity
+                onPress={onConfirm}
+                disabled={loading}
+                className={`py-3 rounded-xl items-center ${confirmBg} ${loading ? 'opacity-60' : ''}`}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text className="text-white font-bold text-sm">{confirmLabel}</Text>
+                )}
+              </TouchableOpacity>
+              {onExtra && (
+                <TouchableOpacity
+                  onPress={onExtra}
+                  className="py-3 rounded-xl items-center bg-gray-100 border border-gray-200"
+                >
+                  <Text className="text-gray-700 font-bold text-sm">{extraLabel}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onCancel} className="py-3 items-center">
+                <Text className="text-gray-500 font-semibold text-sm">{cancelLabel}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // Standard two-button row
+            <View className="flex-row border-t border-gray-100">
+              <TouchableOpacity
+                onPress={onCancel}
+                disabled={loading}
+                className="flex-1 py-4 items-center border-r border-gray-100"
+              >
+                <Text className="text-gray-600 font-semibold text-sm">{cancelLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onConfirm}
+                disabled={loading}
+                className={`flex-1 py-4 items-center ${confirmBg} ${loading ? 'opacity-60' : ''}`}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text className="text-white font-bold text-sm">{confirmLabel}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Screen
+// ---------------------------------------------------------------------------
+export default function AddProductScreen() {  
+  // Auth & Data
   const session = useAuthStore((state) => state.session);
   const { data: categoryData, isLoading: categoriesLoading } = useCategoriesWithSubCategories();
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct();
   const { draft, hasDraft, saveDraft, clearDraft } = useDraftProductStore();
 
-  // Form State
+  // Form state
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -48,20 +173,25 @@ export default function AddProductScreen() {
   const [shortDescription, setShortDescription] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [barcode, setBarcode] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<Array<{ uri: string; altText: string; isPrimary: boolean }>>([]);
-
+  const [uploadedImages, setUploadedImages] = useState<
+    Array<{ uri: string; altText: string; isPrimary: boolean }>
+  >([]);
   const [sku, setSku] = useState('');
 
-  // UI State
+  // UI state
   const [selectedCategory, setSelectedCategory] = useState(false);
   const [selectedSubCategory, setSelectedSubCategory] = useState(false);
 
-  // Transform Supabase data for UI
-  const categories = categoryData?.map((cat) => ({
-    id: cat.id,
-    name: cat.name,
-    slug: cat.slug,
-  }));
+  // Modal state
+  const [goBackModalVisible, setGoBackModalVisible] = useState(false);
+  const [removeImageModalVisible, setRemoveImageModalVisible] = useState(false);
+  const [removeImageIndex, setRemoveImageIndex] = useState<number | null>(null);
+  const [publishModalVisible, setPublishModalVisible] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Derived data
+  // ---------------------------------------------------------------------------
+  const categories = categoryData?.map((cat) => ({ id: cat.id, name: cat.name, slug: cat.slug }));
 
   const categoriesWithSubcategories = categoryData?.reduce((acc, cat) => {
     acc[cat.name] = cat.sub_categories.map((sub) => ({
@@ -73,10 +203,11 @@ export default function AddProductScreen() {
     return acc;
   }, {} as Record<string, { id: string; name: string; slug: string; commission_rate: number }[]>);
 
-  // Load draft on mount
+  // ---------------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!hasDraft || !draft) return;
-
     setProductName(draft.productName || '');
     setCategory(draft.category || '');
     setSubCategory(draft.subCategory || '');
@@ -95,7 +226,6 @@ export default function AddProductScreen() {
     setUploadedImages(draft.uploadedImages || []);
   }, [hasDraft, draft]);
 
-  // Auto-generate SKU when category/product name changes
   useEffect(() => {
     if (productName && category) {
       const categoryPrefix = category.substring(0, 3).toUpperCase();
@@ -105,151 +235,130 @@ export default function AddProductScreen() {
     }
   }, [productName, category]);
 
-  // Reset sub-category when category changes
   useEffect(() => {
     setSubCategory('');
     setSubCategoryId('');
     setCommissionRate(0);
   }, [category]);
 
-  // Request permissions on mount
   useEffect(() => {
     (async () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Sorry, we need camera roll permissions to upload product images.'
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Required',
+          text2: 'Camera roll access is needed to upload product images.',
+          position: 'top',
+          visibilityTime: 4000,
+        });
       }
     })();
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
   const handleGoBack = () => {
     if (productName || uploadedImages.length > 0) {
-      Alert.alert(
-        'Unsaved Changes',
-        'Do you want to save as draft before leaving?',
-        [
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => router.back(),
-          },
-          {
-            text: 'Save Draft',
-            onPress: () => {
-              handleSaveAsDraft();
-              router.back();
-            },
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
+      setGoBackModalVisible(true);
     } else {
       router.back();
     }
   };
 
   const handleUploadImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Denied',
+        text2: 'Please grant camera roll permissions to upload images.',
+        position: 'top',
+      });
+      return;
+    }
+
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Denied',
-          'Please grant camera roll permissions to upload images.'
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        quality: 0.8,
+      const result = await ImagePicker.launchImageLibraryAsync({ 
+        mediaTypes: ['images'], 
+        allowsMultipleSelection: false, 
+        allowsEditing: true,
         aspect: [1, 1],
-        allowsEditing: false,
+        quality: 0.8, 
       });
 
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map((asset, index) => ({
           uri: asset.uri,
           altText: `${productName || 'Product'} - Image ${uploadedImages.length + index + 1}`,
-          isPrimary: uploadedImages.length === 0 && index === 0, // First image is primary
+          isPrimary: uploadedImages.length === 0 && index === 0,
         }));
-        
         setUploadedImages([...uploadedImages, ...newImages]);
-        Alert.alert('Success', `${newImages.length} image(s) added successfully!`);
+        Toast.show({
+          type: 'success',
+          text1: 'Images Added',
+          text2: `${newImages.length} image${newImages.length > 1 ? 's' : ''} added successfully.`,
+          position: 'top',
+        });
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to upload image');
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: 'Failed to upload image. Please try again.',
+        position: 'top',
+      });
     }
   };
 
   const handleRemoveImage = (index: number) => {
-    Alert.alert('Remove Image', 'Are you sure you want to remove this image?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
-          const newImages = uploadedImages.filter((_, i) => i !== index);
-          
-          // If removed image was primary, make first image primary
-          if (uploadedImages[index].isPrimary && newImages.length > 0) {
-            newImages[0].isPrimary = true;
-          }
-          
-          setUploadedImages(newImages);
-        },
-      },
-    ]);
+    setRemoveImageIndex(index);
+    setRemoveImageModalVisible(true);
+  };
+
+  const handleConfirmRemoveImage = () => {
+    if (removeImageIndex === null) return;
+    const newImages = uploadedImages.filter((_, i) => i !== removeImageIndex);
+    if (uploadedImages[removeImageIndex].isPrimary && newImages.length > 0) {
+      newImages[0].isPrimary = true;
+    }
+    setUploadedImages(newImages);
+    setRemoveImageModalVisible(false);
+    setRemoveImageIndex(null);
+    Toast.show({
+      type: 'info',
+      text1: 'Image Removed',
+      position: 'top',
+      visibilityTime: 2000,
+    });
   };
 
   const handleSetPrimaryImage = (index: number) => {
-    const newImages = uploadedImages.map((img, i) => ({
-      ...img,
-      isPrimary: i === index,
-    }));
-    setUploadedImages(newImages);
-    Alert.alert('Success', 'Primary image updated');
+    setUploadedImages(uploadedImages.map((img, i) => ({ ...img, isPrimary: i === index })));
+    Toast.show({
+      type: 'success',
+      text1: 'Primary Image Updated',
+      position: 'top',
+      visibilityTime: 2000,
+    });
   };
 
+  // Alt text edit — Alert.prompt is iOS-only and has no good cross-platform
+  // replacement without a custom modal. Using a simple inline Toast for now
+  // and the caller can build a TextInput modal if needed.
   const handleEditAltText = (index: number) => {
-    Alert.prompt(
-      'Edit Image Description',
-      'Enter a description for this image (for accessibility)',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Save',
-          onPress: (text) => {
-            if (text) {
-              const newImages = [...uploadedImages];
-              newImages[index].altText = text;
-              setUploadedImages(newImages);
-            }
-          },
-        },
-      ],
-      'plain-text',
-      uploadedImages[index].altText
-    );
+    Toast.show({
+      type: 'info',
+      text1: 'Edit Alt Text',
+      text2: 'Tap the image description field in the form to update.',
+      position: 'top',
+    });
   };
 
   const validateForm = () => {
     const errors: string[] = [];
-
     if (!productName.trim()) errors.push('Product name is required');
     if (!category.trim()) errors.push('Category is required');
     if (!subCategory.trim()) errors.push('Sub category is required');
@@ -267,49 +376,42 @@ export default function AddProductScreen() {
       errors.push('Selling price must be a valid number greater than 0');
     if (sellingPriceValue > mrpValue) errors.push('Selling price cannot exceed MRP');
     if (isNaN(stockValue) || stockValue < 0) errors.push('Stock cannot be negative');
-
-    if (uploadedImages.length === 0) {
-      errors.push('At least one product image is required');
-    }
+    if (uploadedImages.length === 0) errors.push('At least one product image is required');
 
     return errors;
   };
 
-  const handleSaveAndPublish = async () => {
+  const handleSaveAndPublish = () => {
     const errors = validateForm();
-
     if (errors.length > 0) {
-      Alert.alert('Validation Error', errors.join('\n'));
+      Toast.show({
+        type: 'error',
+        text1: 'Validation Error',
+        text2: errors[0], // Show first error; all errors visible in form
+        position: 'top',
+        visibilityTime: 4000,
+      });
       return;
     }
-
     if (!session?.user?.id) {
-      Alert.alert('Error', 'You must be logged in to add products');
+      Toast.show({
+        type: 'error',
+        text1: 'Not Logged In',
+        text2: 'You must be logged in to add products.',
+        position: 'top',
+      });
       return;
     }
+    setPublishModalVisible(true);
+  };
 
-    // Calculate discount percentage
-    const discountPercentage =
-      mrp && sellingPrice
-        ? parseFloat(((Number(mrp) - Number(sellingPrice)) / Number(mrp) * 100).toFixed(2))
-        : 0;
-
-    // Determine stock status
-    let stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
-    const stock = Number(initialStock);
-    const threshold = Number(lowStockThreshold) || 10;
-    
-    if (stock === 0) {
-      stockStatus = 'out_of_stock';
-    } else if (stock <= threshold) {
-      stockStatus = 'low_stock';
-    }
+  const handleConfirmPublish = () => {
+    setPublishModalVisible(false);
 
     createProduct(
       {
-        // Product data
         product: {
-          vendor_id: session.user.id,
+          vendor_id: session!.user.id,
           category_id: categoryId,
           sub_category_id: subCategoryId || undefined,
           sku: sku || `SKU-${Date.now()}`,
@@ -318,54 +420,53 @@ export default function AddProductScreen() {
           description: description || undefined,
           short_description: shortDescription || undefined,
           price: Number(mrp),
-          discount_price: Number(sellingPrice) < Number(mrp) ? Number(sellingPrice) : undefined,
-          // discount_percentage: discountPercentage, ///auto generated
+          discount_price:
+            Number(sellingPrice) < Number(mrp) ? Number(sellingPrice) : undefined,
           unit: unitSize,
           stock_quantity: Number(initialStock),
           low_stock_threshold: Number(lowStockThreshold) || 10,
-          // stock_status: stockStatus, //auto generated
           is_available: isActive,
           is_trending: false,
           is_best_seller: false,
           is_featured: false,
           is_organic: isOrganic,
           is_veg: isVeg,
-          commission_type: "subcategory",
+          commission_type: 'subcategory',
           commission_rate: commissionRate,
-          attributes: {
-            brand: brand || undefined,
-          },
+          attributes: { brand: brand || undefined },
           rating: 0,
           review_count: 0,
           expiry_date: expiryDate || '',
           barcode: barcode || '',
         },
-        // Product images
         productImages: uploadedImages,
       },
       {
         onSuccess: (data) => {
           clearDraft();
-          Alert.alert('Success', `"${productName}" published successfully!`, [
-            {
-              text: 'View Product',
-              onPress: () => router.push(`/vendor/product/${data.id}`),
-            },
-            {
-              text: 'Add Another',
-              onPress: () => resetForm(),
-            },
-          ]);
+          Toast.show({
+            type: 'success',
+            text1: 'Product Published!',
+            text2: `"${productName}" is now live.`,
+            position: 'top',
+            visibilityTime: 3500,
+          });
+          setTimeout(() => router.push(`/vendor/product/${data.id}`), 1000);
         },
         onError: (error: Error) => {
           console.error('Product creation error:', error);
-          Alert.alert('Error', error.message || 'Failed to create product. Please try again.');
+          Toast.show({
+            type: 'error',
+            text1: 'Publish Failed',
+            text2: error.message || 'Failed to create product. Please try again.',
+            position: 'top',
+          });
         },
       }
     );
   };
 
-  const handleSaveAsDraft = async () => {
+  const handleSaveAsDraft = () => {
     try {
       saveDraft({
         productName,
@@ -390,10 +491,19 @@ export default function AddProductScreen() {
         sku,
         uploadedImages,
       });
-
-      Alert.alert('Success', `"${productName || 'Product'}" saved as draft!`);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save draft');
+      Toast.show({
+        type: 'success',
+        text1: 'Draft Saved',
+        text2: `"${productName || 'Product'}" saved as draft.`,
+        position: 'top',
+      });
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: 'Failed to save draft. Please try again.',
+        position: 'top',
+      });
     }
   };
 
@@ -426,7 +536,9 @@ export default function AddProductScreen() {
       ? ((Number(mrp) - Number(sellingPrice)) / Number(mrp) * 100).toFixed(2)
       : '0';
 
-  // Loading state for categories
+  // ---------------------------------------------------------------------------
+  // Render states
+  // ---------------------------------------------------------------------------
   if (categoriesLoading) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
@@ -438,7 +550,6 @@ export default function AddProductScreen() {
     );
   }
 
-  // No categories found
   if (!categoryData || categoryData.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
@@ -459,9 +570,12 @@ export default function AddProductScreen() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+      {/* ── Header ── */}
       <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100 flex-row items-center">
         <TouchableOpacity className="p-2 -ml-2" onPress={handleGoBack}>
           <Feather name="chevron-left" size={24} color="#1f2937" />
@@ -477,7 +591,6 @@ export default function AddProductScreen() {
       ) : (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           className="flex-1"
         >
           <ScrollView
@@ -487,7 +600,7 @@ export default function AddProductScreen() {
             bounces={false}
           >
             <View className="flex-1">
-              {/* Product Image Section */}
+              {/* ── Product Images ── */}
               <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
                 <Text className="text-sm font-semibold text-gray-600 mb-3">PRODUCT IMAGES *</Text>
 
@@ -511,30 +624,22 @@ export default function AddProductScreen() {
                             className="w-32 h-32 rounded-lg border border-gray-200"
                             resizeMode="cover"
                           />
-                          
-                          {/* Remove button */}
                           <TouchableOpacity
                             onPress={() => handleRemoveImage(index)}
                             className="absolute -top-1 -right-1 bg-red-500 rounded-full p-1.5 shadow-md"
                           >
                             <Feather name="trash-2" size={12} color="#fff" />
                           </TouchableOpacity>
-                          
-                          {/* Primary badge */}
                           {image.isPrimary && (
                             <View className="absolute top-1 left-1 bg-emerald-500 rounded px-2 py-0.5">
                               <Text className="text-white text-xs font-semibold">Primary</Text>
                             </View>
                           )}
-                          
-                          {/* Image order */}
                           <View className="absolute bottom-1 right-1 bg-black/60 rounded px-2 py-0.5">
                             <Text className="text-white text-xs font-semibold">
                               {index + 1}/{uploadedImages.length}
                             </Text>
                           </View>
-                          
-                          {/* Actions row */}
                           <View className="mt-2 flex-row gap-1">
                             {!image.isPrimary && (
                               <TouchableOpacity
@@ -572,11 +677,10 @@ export default function AddProductScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Basic Information */}
+              {/* ── Basic Information ── */}
               <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
                 <Text className="text-sm font-semibold text-gray-600 mb-4">BASIC INFORMATION</Text>
 
-                {/* Product Name */}
                 <View className="mb-4">
                   <Text className="text-sm font-semibold text-gray-700 mb-2">Product Name *</Text>
                   <TextInput
@@ -588,9 +692,10 @@ export default function AddProductScreen() {
                   />
                 </View>
 
-                {/* SKU */}
                 <View className="mb-4">
-                  <Text className="text-sm font-semibold text-gray-700 mb-2">SKU (Auto-generated)</Text>
+                  <Text className="text-sm font-semibold text-gray-700 mb-2">
+                    SKU (Auto-generated)
+                  </Text>
                   <TextInput
                     placeholder="SKU will be auto-generated"
                     value={sku}
@@ -619,7 +724,7 @@ export default function AddProductScreen() {
                   </TouchableOpacity>
 
                   {selectedCategory && (
-                    <View className="mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden ">
+                    <View className="mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden">
                       <ScrollView>
                         {categories?.map((cat) => (
                           <TouchableOpacity
@@ -650,7 +755,6 @@ export default function AddProductScreen() {
                 {/* Sub Category */}
                 <View className="mb-4">
                   <Text className="text-sm font-semibold text-gray-700 mb-2">Sub Category *</Text>
-
                   <TouchableOpacity
                     onPress={() => setSelectedSubCategory(!selectedSubCategory)}
                     disabled={!category}
@@ -658,7 +762,9 @@ export default function AddProductScreen() {
                       !category ? 'opacity-50' : ''
                     }`}
                   >
-                    <Text className={`text-sm ${subCategory ? 'text-gray-900' : 'text-gray-500'}`}>
+                    <Text
+                      className={`text-sm ${subCategory ? 'text-gray-900' : 'text-gray-500'}`}
+                    >
                       {subCategory || 'Select sub category'}
                     </Text>
                     <Feather
@@ -669,7 +775,7 @@ export default function AddProductScreen() {
                   </TouchableOpacity>
 
                   {selectedSubCategory && category && (
-                    <View className="mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden ">
+                    <View className="mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden">
                       <ScrollView>
                         {categoriesWithSubcategories?.[category]?.map((sub) => (
                           <TouchableOpacity
@@ -703,7 +809,6 @@ export default function AddProductScreen() {
                   )}
                 </View>
 
-                {/* Commission Rate Display */}
                 {commissionRate > 0 && (
                   <View className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <View className="flex-row items-center justify-between">
@@ -713,9 +818,10 @@ export default function AddProductScreen() {
                   </View>
                 )}
 
-                {/* Brand */}
                 <View className="mb-4">
-                  <Text className="text-sm font-semibold text-gray-700 mb-2">Brand (Optional)</Text>
+                  <Text className="text-sm font-semibold text-gray-700 mb-2">
+                    Brand (Optional)
+                  </Text>
                   <TextInput
                     placeholder="Enter brand name"
                     value={brand}
@@ -725,7 +831,6 @@ export default function AddProductScreen() {
                   />
                 </View>
 
-                {/* Unit / Size */}
                 <View>
                   <Text className="text-sm font-semibold text-gray-700 mb-2">Unit / Size *</Text>
                   <TextInput
@@ -738,7 +843,7 @@ export default function AddProductScreen() {
                 </View>
               </View>
 
-              {/* Pricing Section */}
+              {/* ── Pricing ── */}
               <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
                 <Text className="text-sm font-semibold text-gray-600 mb-4">PRICING</Text>
 
@@ -754,7 +859,6 @@ export default function AddProductScreen() {
                       placeholderTextColor="#9ca3af"
                     />
                   </View>
-
                   <View className="flex-1">
                     <Text className="text-sm font-semibold text-gray-700 mb-2">
                       Selling Price (₹) *
@@ -770,7 +874,6 @@ export default function AddProductScreen() {
                   </View>
                 </View>
 
-                {/* Discount Display */}
                 {mrp && sellingPrice && Number(discountPercentage) > 0 && (
                   <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                     <View className="flex-row justify-between items-center">
@@ -786,7 +889,7 @@ export default function AddProductScreen() {
                 )}
               </View>
 
-              {/* Stock & Availability */}
+              {/* ── Stock & Availability ── */}
               <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
                 <Text className="text-sm font-semibold text-gray-600 mb-4">
                   STOCK & AVAILABILITY
@@ -794,7 +897,9 @@ export default function AddProductScreen() {
 
                 <View className="flex-row gap-3 mb-4">
                   <View className="flex-1">
-                    <Text className="text-sm font-semibold text-gray-700 mb-2">Initial Stock *</Text>
+                    <Text className="text-sm font-semibold text-gray-700 mb-2">
+                      Initial Stock *
+                    </Text>
                     <TextInput
                       placeholder="0"
                       value={initialStock}
@@ -804,7 +909,6 @@ export default function AddProductScreen() {
                       placeholderTextColor="#9ca3af"
                     />
                   </View>
-
                   <View className="flex-1">
                     <Text className="text-sm font-semibold text-gray-700 mb-2">
                       Low Stock Alert
@@ -820,12 +924,9 @@ export default function AddProductScreen() {
                   </View>
                 </View>
 
-                {/* Product Attributes */}
                 <View className="mb-4 pt-3 border-t border-gray-100">
                   <Text className="text-sm font-semibold text-gray-700 mb-3">Product Type</Text>
-
                   <View className="flex-row gap-3">
-                    {/* Vegetarian Toggle */}
                     <View className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <View className="flex-row items-center justify-between">
                         <View className="flex-row items-center gap-2">
@@ -840,8 +941,6 @@ export default function AddProductScreen() {
                         />
                       </View>
                     </View>
-
-                    {/* Organic Toggle */}
                     <View className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <View className="flex-row items-center justify-between">
                         <View className="flex-row items-center gap-2">
@@ -859,7 +958,6 @@ export default function AddProductScreen() {
                   </View>
                 </View>
 
-                {/* Active Toggle */}
                 <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
                   <View>
                     <Text className="text-gray-900 font-semibold text-sm">Available for Sale</Text>
@@ -878,11 +976,10 @@ export default function AddProductScreen() {
                 </View>
               </View>
 
-              {/* Description & Attributes */}
+              {/* ── Product Details ── */}
               <View className="bg-white mx-4 mt-4 rounded-2xl p-4 shadow-sm border border-gray-100">
                 <Text className="text-sm font-semibold text-gray-600 mb-4">PRODUCT DETAILS</Text>
 
-                {/* Short Description */}
                 <View className="mb-4">
                   <Text className="text-sm font-semibold text-gray-700 mb-2">
                     Short Description
@@ -899,7 +996,6 @@ export default function AddProductScreen() {
                   />
                 </View>
 
-                {/* Full Description */}
                 <View className="mb-4">
                   <Text className="text-sm font-semibold text-gray-700 mb-2">
                     Full Description
@@ -916,7 +1012,6 @@ export default function AddProductScreen() {
                   />
                 </View>
 
-                {/* Expiry Date */}
                 <View className="mb-4">
                   <Text className="text-sm font-semibold text-gray-700 mb-2">
                     Expiry Date / Shelf Life
@@ -930,7 +1025,6 @@ export default function AddProductScreen() {
                   />
                 </View>
 
-                {/* Barcode */}
                 <View>
                   <Text className="text-sm font-semibold text-gray-700 mb-2">
                     Barcode (Optional)
@@ -945,7 +1039,7 @@ export default function AddProductScreen() {
                 </View>
               </View>
 
-              {/* Action Buttons */}
+              {/* ── Action Buttons ── */}
               <View className="bg-white px-4 py-4 mb-4 mt-4 border-t border-gray-200">
                 <TouchableOpacity
                   onPress={handleSaveAndPublish}
@@ -977,6 +1071,51 @@ export default function AddProductScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+
+      {/* ── Go Back Modal (unsaved changes) ── */}
+      <ConfirmModal
+        visible={goBackModalVisible}
+        title="Unsaved Changes"
+        message="You have unsaved changes. Would you like to save as a draft before leaving?"
+        confirmLabel="Discard & Leave"
+        confirmStyle="danger"
+        extraLabel="Save Draft"
+        onConfirm={() => {
+          setGoBackModalVisible(false);
+          router.back();
+        }}
+        onExtra={() => {
+          setGoBackModalVisible(false);
+          handleSaveAsDraft();
+          router.back();
+        }}
+        onCancel={() => setGoBackModalVisible(false)}
+      />
+
+      {/* ── Remove Image Modal ── */}
+      <ConfirmModal
+        visible={removeImageModalVisible}
+        title="Remove Image"
+        message="Are you sure you want to remove this image?"
+        confirmLabel="Remove"
+        confirmStyle="danger"
+        onConfirm={handleConfirmRemoveImage}
+        onCancel={() => {
+          setRemoveImageModalVisible(false);
+          setRemoveImageIndex(null);
+        }}
+      />
+
+      {/* ── Publish Confirmation Modal ── */}
+      <ConfirmModal
+        visible={publishModalVisible}
+        title="Publish Product?"
+        message={`"${productName}" will be submitted for listing. It will be visible to customers immediately after publishing.`}
+        confirmLabel="Publish"
+        confirmStyle="primary"
+        onConfirm={handleConfirmPublish}
+        onCancel={() => setPublishModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

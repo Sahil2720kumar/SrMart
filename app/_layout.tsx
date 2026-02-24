@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message'
 // Run this ONCE in your app to clear old data
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// AsyncStorage.removeItem('active-discount-store').then(() => {
+// AsyncStorage.removeItem('onboarding_done').then(() => {
 //   console.log('Cart store cleared!');
 // });
 

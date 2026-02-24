@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -6,43 +6,152 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-
-  Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
+// ─── Reusable Confirmation Modal ─────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmDestructive?: boolean;
+  icon?: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmDestructive = false,
+  icon,
+  onConfirm,
+  onCancel,
+}: ConfirmModalProps) {
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <Pressable
+        className="flex-1 bg-black/50 items-center justify-center px-6"
+        onPress={onCancel}
+      >
+        <Pressable className="bg-white w-full rounded-2xl overflow-hidden" onPress={() => {}}>
+          <View className="items-center pt-6 pb-2">
+            <View
+              className={`w-14 h-14 rounded-full items-center justify-center mb-3 ${
+                confirmDestructive ? 'bg-red-100' : 'bg-emerald-100'
+              }`}
+            >
+              {icon ?? (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={28}
+                  color={confirmDestructive ? '#dc2626' : '#10b981'}
+                />
+              )}
+            </View>
+            <Text className="text-lg font-bold text-gray-900 text-center px-4">{title}</Text>
+          </View>
+
+          <Text className="text-sm text-gray-500 text-center px-6 pb-6 mt-1">{message}</Text>
+
+          <View className="border-t border-gray-100 flex-row">
+            <TouchableOpacity
+              onPress={onCancel}
+              className="flex-1 py-4 items-center border-r border-gray-100"
+            >
+              <Text className="text-base font-semibold text-gray-600">{cancelLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onConfirm} className="flex-1 py-4 items-center">
+              <Text
+                className={`text-base font-bold ${
+                  confirmDestructive ? 'text-red-600' : 'text-emerald-600'
+                }`}
+              >
+                {confirmLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function VendorTermsConditionsScreen() {
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreeModalVisible, setAgreeModalVisible] = useState(false);
   const lastUpdated = '15 January 2025';
 
   const handleGoBack = () => {
-    console.log('[v0] Going back to settings');
-    router.back()
+    router.back();
   };
 
   const handleDownload = () => {
-    Alert.alert('Download', 'Downloading Terms & Conditions PDF...');
+    Toast.show({
+      type: 'info',
+      text1: 'Downloading...',
+      text2: 'Terms & Conditions PDF is being prepared.',
+      position: 'top',
+    });
+    // TODO: trigger actual download
   };
 
   const handleShare = () => {
-    Alert.alert('Share', 'Sharing Terms & Conditions...');
+    Toast.show({
+      type: 'info',
+      text1: 'Share',
+      text2: 'Opening share options...',
+      position: 'top',
+    });
+    // TODO: trigger Share API
   };
 
   const handleAgreeTerms = () => {
     if (!agreedToTerms) {
-      Alert.alert('Agreement Required', 'Please read and agree to the terms before proceeding.');
+      Toast.show({
+        type: 'error',
+        text1: 'Agreement Required',
+        text2: 'Please read and check the box to agree before proceeding.',
+        position: 'top',
+      });
       return;
     }
-    Alert.alert('Success', 'You have agreed to the Terms & Conditions.');
+    // Show confirmation modal before finalising
+    setAgreeModalVisible(true);
+  };
+
+  const confirmAgree = () => {
+    setAgreeModalVisible(false);
+    Toast.show({
+      type: 'success',
+      text1: 'Terms Accepted',
+      text2: 'You have agreed to the Terms & Conditions.',
+      position: 'top',
+    });
+    // TODO: persist agreement to backend / navigate forward
   };
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev =>
-      prev.includes(sectionId)
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
+      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId],
     );
   };
 
@@ -123,12 +232,24 @@ export default function VendorTermsConditionsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
+      {/* Agree Confirmation Modal */}
+      <ConfirmModal
+        visible={agreeModalVisible}
+        title="Confirm Agreement"
+        message="By confirming, you acknowledge that you have read and agree to all Terms & Conditions of the SrMart Vendor platform."
+        confirmLabel="I Agree"
+        cancelLabel="Review Again"
+        icon={<Ionicons name="document-text-outline" size={28} color="#10b981" />}
+        onConfirm={confirmAgree}
+        onCancel={() => setAgreeModalVisible(false)}
+      />
+
       {/* Header */}
       <View className="bg-white px-4 pt-4 pb-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between mb-3">
           <View className="flex-row items-center gap-3 flex-1">
             <TouchableOpacity onPress={handleGoBack} className="p-2 -ml-2">
-              <Feather name='chevron-left' size={24} color="#1f2937" />
+              <Feather name="chevron-left" size={24} color="#1f2937" />
             </TouchableOpacity>
             <View className="flex-1">
               <Text className="text-2xl font-bold text-gray-900">Terms & Conditions</Text>
@@ -144,7 +265,7 @@ export default function VendorTermsConditionsScreen() {
             className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg py-2 items-center justify-center active:opacity-70"
           >
             <View className="flex-row items-center gap-1">
-              <Feather name='download' size={16} color="#059669" />
+              <Feather name="download" size={16} color="#059669" />
               <Text className="text-emerald-700 font-semibold text-xs">Download</Text>
             </View>
           </TouchableOpacity>
@@ -153,7 +274,7 @@ export default function VendorTermsConditionsScreen() {
             className="flex-1 bg-blue-50 border border-blue-200 rounded-lg py-2 items-center justify-center active:opacity-70"
           >
             <View className="flex-row items-center gap-1">
-              <Feather name='share-2' size={16} color="#2563eb" />
+              <Feather name="share-2" size={16} color="#2563eb" />
               <Text className="text-blue-700 font-semibold text-xs">Share</Text>
             </View>
           </TouchableOpacity>
@@ -163,43 +284,47 @@ export default function VendorTermsConditionsScreen() {
       {/* Content */}
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         {/* Intro Banner */}
-        <View className="bg-gradient-to-r from-emerald-50 to-teal-50 mx-4 mt-4 rounded-2xl p-5 border border-emerald-200">
+        <View className="bg-emerald-50 mx-4 mt-4 rounded-2xl p-5 border border-emerald-200">
           <Text className="text-gray-900 font-semibold text-sm leading-6">
-            These Terms & Conditions govern your use of SrMart as a vendor. By using our platform, you agree to comply with these terms. Please read carefully, as they outline your responsibilities and rights.
+            These Terms & Conditions govern your use of SrMart as a vendor. By using our platform,
+            you agree to comply with these terms. Please read carefully, as they outline your
+            responsibilities and rights.
           </Text>
         </View>
 
         {/* Sections */}
         <View className="px-4 py-6 gap-3">
-          {sections.map(section => (
-            <View key={section.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              {/* Section Header */}
-              <TouchableOpacity
-                onPress={() => toggleSection(section.id)}
-                className="px-5 py-4 flex-row items-center justify-between active:bg-gray-50"
+          {sections.map(section => {
+            const isExpanded = expandedSections.includes(section.id);
+            return (
+              <View
+                key={section.id}
+                className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
               >
-                <Text className="text-gray-900 font-bold text-base flex-1 pr-3">
-                  {section.title}
-                </Text>
-                <View
-                  className={`transform transition-transform ${
-                    expandedSections.includes(section.id) ? 'rotate-180' : 'rotate-0'
-                  }`}
+                <TouchableOpacity
+                  onPress={() => toggleSection(section.id)}
+                  className="px-5 py-4 flex-row items-center justify-between active:bg-gray-50"
                 >
-                  <Feather name='chevron-left' size={20} color="#059669" style={{ transform: [{ rotateY: '180deg' }] }} />
-                </View>
-              </TouchableOpacity>
-
-              {/* Section Content */}
-              {expandedSections.includes(section.id) && (
-                <View className="px-5 py-4 bg-gray-50 border-t border-gray-200">
-                  <Text className="text-gray-700 text-sm leading-6 font-medium">
-                    {section.content}
+                  <Text className="text-gray-900 font-bold text-base flex-1 pr-3">
+                    {section.title}
                   </Text>
-                </View>
-              )}
-            </View>
-          ))}
+                  <Feather
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color="#059669"
+                  />
+                </TouchableOpacity>
+
+                {isExpanded && (
+                  <View className="px-5 py-4 bg-gray-50 border-t border-gray-200">
+                    <Text className="text-gray-700 text-sm leading-6 font-medium">
+                      {section.content}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
 
         {/* Footer */}
@@ -207,15 +332,16 @@ export default function VendorTermsConditionsScreen() {
           <View className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
             <Text className="text-orange-900 font-bold text-sm mb-2">Pilot Phase Notice</Text>
             <Text className="text-orange-800 text-xs leading-5">
-              SrMart is in pilot phase. These terms may change significantly as we scale. Commission rates, policies, and features may evolve. You will be notified of major changes with 30 days advance notice.
+              SrMart is in pilot phase. These terms may change significantly as we scale. Commission
+              rates, policies, and features may evolve. You will be notified of major changes with
+              30 days advance notice.
             </Text>
           </View>
         </View>
       </ScrollView>
 
       {/* Bottom Sticky Section */}
-      <View className="bg-white px-4 py-4 border-t border-gray-200 safe-area-bottom gap-3">
-        {/* Agree Checkbox */}
+      <View className="bg-white px-4 py-4 border-t border-gray-200 gap-3">
         <TouchableOpacity
           onPress={() => setAgreedToTerms(!agreedToTerms)}
           className="flex-row items-center gap-3 active:opacity-70"
@@ -232,7 +358,6 @@ export default function VendorTermsConditionsScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Agree Button */}
         <TouchableOpacity
           onPress={handleAgreeTerms}
           disabled={!agreedToTerms}

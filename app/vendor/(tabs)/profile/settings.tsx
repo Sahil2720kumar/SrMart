@@ -39,8 +39,8 @@ export default function SettingsScreen() {
 
   const handleLanguageChange = (language: string) => {
     setSelectedLanguage(language);
-    console.log('[v0] Language changed to:', language);
-    Alert.alert('Language Changed', `App language changed to ${language}`);
+    // console.log('[v0] Language changed to:', language);
+    // Alert.alert('Language Changed', `App language changed to ${language}`);
   };
 
   return (
