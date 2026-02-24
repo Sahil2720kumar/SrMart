@@ -107,7 +107,7 @@ export default function SignupScreen() {
             </View>
 
             {/* Progress */}
-            <View className="flex-row items-center justify-center mb-8">
+            {/* <View className="flex-row items-center justify-center mb-8">
               <View className="flex-row items-center">
                 <View className="bg-emerald-500 w-8 h-8 rounded-full items-center justify-center">
                   <Text className="text-white font-bold text-sm">1</Text>
@@ -117,7 +117,7 @@ export default function SignupScreen() {
                   <Text className="text-gray-600 font-bold text-sm">2</Text>
                 </View>
               </View>
-            </View>
+            </View> */}
 
             <View className="space-y-4">
               {/* Vendor Name */}
@@ -190,7 +190,7 @@ export default function SignupScreen() {
                     {agreeToTerms && <Feather name="check" size={14} color="#fff" />}
                   </View>
                   <Text className="flex-1 text-gray-700 text-sm leading-5">
-                    I agree to the <Text className="text-emerald-600 font-semibold">Terms & Conditions</Text> and <Text className="text-emerald-600 font-semibold">Privacy Policy</Text>
+                    I agree to the <Text onPress={()=>router.push("/vendor/auth/terms-and-conditions")} className="text-emerald-600 font-semibold">Terms & Conditions</Text> and <Text onPress={()=>router.push("/vendor/auth/privacy-policy")} className="text-emerald-600 font-semibold">Privacy Policy</Text>
                   </Text>
                 </TouchableOpacity>
                 {errors.terms && <View className="flex-row items-center gap-2 mt-2"><Feather name="alert-circle" size={16} color="#dc2626" /><Text className="text-red-600 text-xs font-medium">{errors.terms}</Text></View>}

@@ -375,8 +375,8 @@ export default function SignUpScreen() {
             >
               <CheckIcon checked={agreeToTerms} />
               <Text className="text-emerald-300 text-sm ml-3 flex-1 leading-5">
-                I agree to the <Text className="text-green-400 font-medium">Terms of Service</Text> and{" "}
-                <Text className="text-green-400 font-medium">Privacy Policy</Text>
+                I agree to the <Text onPress={()=>router.push("/auth/terms-and-conditions")} className="text-green-400 font-medium">Terms of Service</Text> and{" "}
+                <Text onPress={()=>router.push("/auth/privacy-policy")} className="text-green-400 font-medium">Privacy Policy</Text>
               </Text>
             </TouchableOpacity>
             {errors.terms && <Text className="text-red-400 text-xs -mt-4 mb-4 ml-1">{errors.terms}</Text>}

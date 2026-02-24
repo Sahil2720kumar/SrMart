@@ -166,7 +166,22 @@ export default function DeliverySignupScreen() {
                   <View className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${termsAccepted ? 'bg-[#4f46e5] border-[#4f46e5]' : 'border-gray-400'}`}>
                     {termsAccepted && <Feather name="check" size={14} color="white" />}
                   </View>
-                  <Text className="text-gray-600 text-sm">I agree to Terms & Privacy Policy</Text>
+                  <Text className="text-[#000] text-sm leading-5">
+                    I agree to the{" "}
+                    <Text
+                      onPress={() => router.push("/delivery/auth/terms-and-conditions")}
+                      className="text-[#4f46e5] font-medium"
+                    >
+                      Terms of Service
+                    </Text>{" "}
+                    and{" "}
+                    <Text
+                      onPress={() => router.push("/delivery/auth/privacy-policy")}
+                      className="text-[#4f46e5] font-medium"
+                    >
+                      Privacy Policy
+                    </Text>
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
