@@ -1,94 +1,83 @@
 import { StatusBar } from 'expo-status-bar';
 import '../global.css';
-
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
-import { useProfileStore } from '@/store/profileStore';
-import { ActivityIndicator, Text } from 'react-native';
-import Toast from 'react-native-toast-message'
+import Toast from 'react-native-toast-message';
+import * as Sentry from '@sentry/react-native';
 
-// Run this ONCE in your app to clear old data
-// import AsyncStorage from '@react-native-async-storage/async-storage';
+Sentry.init({
+  dsn: 'https://fc55274d0c42d1a57af8a2a0ce9a0056@o4510942569037824.ingest.us.sentry.io/4510942570414080',
+  environment: __DEV__ ? 'development' : 'production',
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
 
-// AsyncStorage.removeItem('onboarding_done').then(() => {
-//   console.log('Cart store cleared!');
-// });
+  // Enable Logs
+  enableLogs: true,
 
-export default function Layout() {
-  const { initialize, initialized, loading } = useAuthStore();
-  const { getUserRole } = useProfileStore();
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [
+    Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration(),
+    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }), // 👈 this too
+  ],
 
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
+export default Sentry.wrap(function Layout() {
+  const { initialize, initialized } = useAuthStore();
+
+  // Kick off auth initialization — index.tsx waits for `initialized` via authReady prop
   useEffect(() => {
     if (!initialized) {
       initialize();
     }
   }, [initialized, initialize]);
 
-  // ⏳ wait until auth is ready
-  if (loading || !initialized) {
-    return (
-      <GestureHandlerRootView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16a34a' }}>
-        <StatusBar style="light" />
-        <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>FreshMart</Text>
-        <ActivityIndicator size="large" color="white" style={{ marginTop: 20 }} />
-      </GestureHandlerRootView>
-    );
-  }
 
-
+  // ✅ No early return here — index.tsx SplashScreen handles the wait for auth
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <BottomSheetModalProvider>
           <StatusBar style="auto" />
-          <Stack >
+          <Stack>
             <Stack.Screen
-              name='index'
-              options={{
-                headerShown: true
-              }}
+              name="index"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name='(tabs)/customer'
-              options={{
-                headerShown: false
-              }}
+              name="(tabs)/customer"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name='auth'
-              options={{
-                headerShown: false
-              }}
+              name="auth"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name='products'
-              options={{
-                headerShown: false
-              }}
+              name="products"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name='vendor'
-              options={{
-                headerShown: false,
-              }}
+              name="vendor"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name='delivery'
-              options={{
-                headerShown: false,
-              }}
+              name="delivery"
+              options={{ headerShown: false }}
             />
           </Stack>
           <Toast />
         </BottomSheetModalProvider>
-      </GestureHandlerRootView >
+      </GestureHandlerRootView>
     </QueryClientProvider>
-  )
-}
+  );
+});

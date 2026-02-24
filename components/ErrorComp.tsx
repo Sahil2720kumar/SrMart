@@ -95,7 +95,6 @@ interface ErrorProps {
 // Full Page Error Component
 export const FullPageError = ({ code, title, message, action = 'Try Again', onActionPress }: ErrorProps) => {
   const iconName = iconMap[code] || iconMap.default;
-  console.log(code);
   
   return (
     <View className="bg-emerald-500 flex-1 p-12 shadow-lg">
@@ -432,7 +431,6 @@ const ErrorComponents = () => {
                 title={selectedError.title}
                 message={selectedError.message}
                 action={selectedError.action}
-                onActionPress={() => console.log('Action pressed')}
               />
             </View>
 
@@ -443,7 +441,6 @@ const ErrorComponents = () => {
                 title={selectedError.title}
                 message={selectedError.message}
                 action={selectedError.action}
-                onActionPress={() => console.log('Action pressed')}
               />
             </View>
 
@@ -453,7 +450,6 @@ const ErrorComponents = () => {
                 code={selectedError.code}
                 title={selectedError.title}
                 message={selectedError.message}
-                onDismiss={() => console.log('Dismissed')}
               />
             </View>
 
@@ -464,7 +460,6 @@ const ErrorComponents = () => {
                 title={selectedError.title}
                 message={selectedError.message}
                 action={selectedError.action}
-                onActionPress={() => console.log('Action pressed')}
               />
             </View>
 
@@ -475,7 +470,6 @@ const ErrorComponents = () => {
                 title={selectedError.title}
                 message={selectedError.message}
                 action={selectedError.action}
-                onActionPress={() => console.log('Action pressed')}
               />
             </View>
 
@@ -486,7 +480,6 @@ const ErrorComponents = () => {
                 title={selectedError.title}
                 message={selectedError.message}
                 action={selectedError.action}
-                onActionPress={() => console.log('Action pressed')}
               />
             </View>
           </View>

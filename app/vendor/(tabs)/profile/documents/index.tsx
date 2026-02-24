@@ -240,12 +240,9 @@ export default function VendorDocumentsKYCScreen() {
       const existingDoc = getDocumentByType(documentType);
       const config = DOCUMENT_CONFIGS[documentType];
 
-      console.log('Converting image to base64...');
       const base64 = await convertImageToBase64(imageUri);
-      console.log('Base64 conversion successful, length:', base64.length);
 
       if (existingDoc) {
-        console.log('Replacing document:', documentType);
         await replaceMutation.mutateAsync({
           documentId: existingDoc.id,
           userId: userId,
@@ -271,7 +268,6 @@ export default function VendorDocumentsKYCScreen() {
           position: 'top',
         });
       } else {
-        console.log('Uploading new document:', documentType);
         await uploadMutation.mutateAsync({
           document: {
             user_id: userId,

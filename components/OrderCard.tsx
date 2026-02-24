@@ -12,7 +12,6 @@ const OrderCard = ({ item,getStatusColor,getStatusText }: OrderCardProps) => (
   <TouchableOpacity
     onPress={() => {
       // Navigate to order details - in your app: navigation?.navigate("OrderDetails", { orderId: item.id })
-      console.log("Navigate to order:", item.id)
       router.push(`/(tabs)/customer/order/orders/${item.id}`)
     }}
     className="bg-white rounded-2xl p-4 mb-3 mx-4"

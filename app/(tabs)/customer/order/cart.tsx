@@ -51,7 +51,6 @@ export default function CartScreen() {
     freeDeliveryMinimum: 499
   })
 
-  // console.log(activeDiscount);
 
 
   const itemTotal = totalPrice

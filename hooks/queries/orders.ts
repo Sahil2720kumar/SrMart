@@ -760,11 +760,6 @@ export function useVendorAcceptOrder() {
       return data as VendorAcceptOrderResponse;
     },
     onSuccess: (data, orderId) => {
-      console.log('Order accepted successfully:', {
-        orderId: data.order_id,
-        vendorPayout: data.vendor_payout,
-        commission: data.total_commission,
-      });
 
       // Invalidate queries to refresh the UI
       queryClient.invalidateQueries({ 
@@ -813,10 +808,7 @@ export function useVendorRejectOrder() {
       return data as VendorRejectOrderResponse;
     },
     onSuccess: (data, variables) => {
-      console.log('Order rejected successfully:', {
-        orderId: data.order_id,
-        reason: data.reason,
-      });
+      
 
       // Invalidate queries
       queryClient.invalidateQueries({ 
@@ -854,10 +846,7 @@ export function useMarkOrderReady() {
       return data as MarkOrderReadyResponse;
     },
     onSuccess: (data, orderId) => {
-      console.log('Order marked as ready:', {
-        orderId: data.order_id,
-        status: data.status,
-      });
+     
 
       // Invalidate queries
       queryClient.invalidateQueries({ 
@@ -902,11 +891,7 @@ export function useAssignDeliveryPartner() {
       return data as AssignDeliveryPartnerResponse;
     },
     onSuccess: (data, variables) => {
-      console.log('Delivery partner assigned:', {
-        orderId: data.order_id,
-        deliveryBoyId: data.delivery_boy_id,
-        deliveryBoyName: data.delivery_boy_name,
-      });
+  
 
       // Invalidate queries
       queryClient.invalidateQueries({ 

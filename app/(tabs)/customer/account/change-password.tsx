@@ -65,7 +65,6 @@ export default function UpdatePasswordScreen() {
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500))
-      console.log("Password updated successfully")
       // Show success message or navigate back
       router.back()
     } catch (error) {

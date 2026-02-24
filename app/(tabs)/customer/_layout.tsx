@@ -163,7 +163,6 @@ export default function TabLayout() {
   const { session } = useAuthStore()
   const { getUserRole } = useProfileStore()
   const pathname = usePathname();
-  console.log(pathname);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -178,7 +177,6 @@ export default function TabLayout() {
     if (session.user.id !== userId) {
       clearCart();
       setUserId(session.user.id);
-      console.log('Cart cleared due to user change');
     }
   }, [session?.user?.id,userId]);
 

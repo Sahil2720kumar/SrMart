@@ -66,15 +66,6 @@ export const useDeliveryFees = ({
   // Calculate how much more to spend for free delivery
   const amountToFreeDelivery = Math.max(0, freeDeliveryMinimum - subtotal);
 
-  // console.log('Delivery Status:', {
-  //   subtotal,
-  //   freeDeliveryMinimum,
-  //   hasFreeDelivery,
-  //   qualifiesForFreeDeliveryByAmount,
-  //   isFreeDelivery,
-  //   freeDeliveryReason,
-  //   amountToFreeDelivery
-  // });
 
   // Haversine formula to calculate distance between two coordinates
   const calculateDistance = (

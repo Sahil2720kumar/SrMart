@@ -108,7 +108,6 @@ export default function VendorOrdersScreen() {
 
   const { data: stats } = useVendorOrderStats(vendorId || '');
 
-  // console.log(stats);
   const verificationStatus = useMemo(() => {
     if (!vendorData) return { isAdminVerified: false, isKycVerified: false };
     return {
@@ -125,7 +124,6 @@ export default function VendorOrdersScreen() {
     const statusesToFilter = statusConfig[activeTab].dbStatus;
 
     return orders.filter((order) => {
-      // console.log(order.status,statusConfig[activeTab].dbStatus);
       return statusesToFilter.includes(order.status)
     });
   }, [orders, activeTab]);

@@ -158,7 +158,6 @@ function TabButton({
 
 export default function TabLayout() {
   const pathname = usePathname();
-  // console.log(pathname);
 
   return (
     <Tabs >

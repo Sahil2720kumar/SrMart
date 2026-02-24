@@ -18,28 +18,23 @@ export default function SettingsScreen() {
   const [selectedLanguage, setSelectedLanguage] = useState('english');
 
   const handleGoBack = () => {
-    console.log('[v0] Going back to profile overview');
     router.back()
   };
 
   const handleOrderNotificationsChange = (value: boolean) => {
     setOrderNotifications(value);
-    console.log('[v0] Order notifications:', value);
   };
 
   const handleSettlementNotificationsChange = (value: boolean) => {
     setSettlementNotifications(value);
-    console.log('[v0] Settlement notifications:', value);
   };
 
   const handlePromotionalNotificationsChange = (value: boolean) => {
     setPromotionalNotifications(value);
-    console.log('[v0] Promotional notifications:', value);
   };
 
   const handleLanguageChange = (language: string) => {
     setSelectedLanguage(language);
-    // console.log('[v0] Language changed to:', language);
     // Alert.alert('Language Changed', `App language changed to ${language}`);
   };
 

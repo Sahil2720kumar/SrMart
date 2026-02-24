@@ -145,7 +145,6 @@ export const useFilteredCoupons = (
         categories
       );
 
-      // console.log(eligibility);
       
 
       const discount = calculateDiscount(coupon, totalPrice);

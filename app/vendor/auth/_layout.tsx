@@ -5,7 +5,6 @@ import { useAuthStore } from '@/store/authStore'
 import { useProfileStore } from '@/store/profileStore'
 
 const VendorAuthLayout = () => {
-  console.log("vendor auth layout");
   
   const {session}=useAuthStore()
   const {getUserRole}=useProfileStore()

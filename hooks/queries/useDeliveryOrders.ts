@@ -226,14 +226,6 @@ export function useAvailableDeliveryOrders() {
           // Calculate platform net revenue
           const platformRevenue = calculatePlatformRevenue(order);
 
-          console.log('📊 Order payout:', {
-            order_number: order.order_number,
-            is_free_delivery: order.is_free_delivery,
-            commission: order.total_commission,
-            delivery_fee: deliveryFee,
-            payout: payout,
-            platform_revenue: platformRevenue,
-          });
 
           return {
             id: order.id,

@@ -81,7 +81,6 @@ export default function VerifyOTPScreen() {
     setIsLoading(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      console.log('[v0] OTP verification:', { phone, otp: otpCode, type });
 
       Toast.show({
         type: 'success',
@@ -118,7 +117,6 @@ export default function VerifyOTPScreen() {
     setIsLoading(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('[v0] Resending OTP to:', phone);
 
       Toast.show({
         type: 'success',

@@ -155,7 +155,6 @@ export default function SupportScreen() {
       text2: 'Calling support team...',
       position: 'top',
     });
-    console.log('Calling support');
   };
 
   const handleConfirmEmergency = () => {
@@ -166,7 +165,6 @@ export default function SupportScreen() {
       text2: 'Connecting to emergency team...',
       position: 'top',
     });
-    console.log('Emergency call');
   };
 
   const handleSubmitTicketPress = () => {

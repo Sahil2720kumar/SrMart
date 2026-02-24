@@ -6,7 +6,6 @@ import { ChevronDownIcon } from "@/assets/svgs/ChevronDownIcon"
 import { BagIcon } from "@/assets/svgs/BagIcon"
 import { SearchIcon } from "@/assets/svgs/SearchIcon"
 import { router } from "expo-router"
-
 import SkeletonImage from "@/components/SkeletonImage"
 import useWishlistStore from "@/store/wishlistStore"
 import useCartStore from "@/store/cartStore"

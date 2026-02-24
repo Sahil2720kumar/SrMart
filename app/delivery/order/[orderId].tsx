@@ -154,7 +154,6 @@ const OrderDetailScreen = () => {
       refetch();
     } catch (error: any) {
       setShowPickupModal(false);
-      console.log(error.message);
       Toast.show({
         type: 'error',
         text1: 'Error',

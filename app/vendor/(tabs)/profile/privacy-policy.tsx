@@ -16,7 +16,6 @@ export default function VendorPrivacyPolicyScreen() {
   const lastUpdated = '15 January 2025';
 
   const handleGoBack = () => {
-    console.log('[v0] Going back to settings');
     router.back()
   };
 

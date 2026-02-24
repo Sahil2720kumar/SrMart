@@ -30,7 +30,6 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
   const { data: customerProfile } = useCustomerProfile()
 
   const handleLogout = async () => {
-    console.log("Logout pressed")
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
@@ -45,7 +44,6 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
   }
 
   const handleMenuPress = (route?: string) => {
-    console.log("Navigate to:", route)
     if (route === "Orders") {
       router.navigate("/(tabs)/customer/order/orders")
       return;

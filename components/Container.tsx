@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 
 export const Container = memo(({ children }: { children: React.ReactNode }) => {
-  console.log("Rendering Container"); // Debugging log
 
   return (
     <View className={styles.container}>

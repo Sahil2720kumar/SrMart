@@ -204,7 +204,6 @@ const ProfileScreen = () => {
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
-    console.log("Logout pressed");
 
     try {
       const { error } = await supabase.auth.signOut();

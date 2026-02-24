@@ -27,9 +27,16 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location for accurate delivery addresses."
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "sahil-kumar-sah"
+        }
       ]
     ],
-    
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true

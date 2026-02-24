@@ -59,7 +59,6 @@ export function useCustomerProfile(userId?: string) {
         .eq('auth_id', id)
         .single();
 
-      console.log('userData', userData);
 
       if (error || userError) throw error || userError;
       return { ...data, phone: userData?.phone };
@@ -204,7 +203,6 @@ export function useUpdateCustomerProfile() {
         .select('*')
         .single();
     
-      // console.log("userData", userData);
       setUser(userData)
       
       if (error) throw error;
@@ -373,7 +371,6 @@ export function useCreateAddress() {
       if (!session?.user?.id) throw new Error('User not authenticated');
 
 
-      console.log("address",address);
       
       const customerId = await getCustomerId(session.user.id);
 
@@ -420,7 +417,6 @@ export function useUpdateAddress() {
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
 
-      console.log("address",updates);
       const customerId = await getCustomerId(session.user.id);
 
       // If setting as default, unset all other defaults first
@@ -804,7 +800,7 @@ export function useProductDetail(productId: string) {
 }
 
 
-const limit = 8;
+const limit = 500;
 export function useInfiniteProducts(filters?: {
   categoryId?: string;
   subCategoryId?: string;
@@ -953,7 +949,6 @@ export function useCreateProduct() {
       }
 
       // Step 1: Upload all images
-      console.log('Uploading images...');
       const uploadedImageUrls = await Promise.all(
         productImages.map((img, index) => uploadImage(img.uri, index, product.sku))
       );
@@ -967,7 +962,6 @@ export function useCreateProduct() {
         uploadedImageUrls[productImages.findIndex((img) => img.isPrimary)] || uploadedImageUrls[0];
 
       // Step 2: Create product record
-      console.log('Creating product...');
       const productData = {
         vendor_id: product.vendor_id,
         category_id: product.category_id,
@@ -1012,7 +1006,6 @@ export function useCreateProduct() {
       }
 
       // Step 3: Create product_images records
-      console.log('Creating product images...');
       const imageRecords = productImages.map((img, index) => ({
         product_id: createdProduct.id,
         image_url: uploadedImageUrls[index],
@@ -1035,7 +1028,6 @@ export function useCreateProduct() {
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['vendor-products'] });
-      console.log('Product created successfully:', data.id);
     },
     onError: (error: Error) => {
       console.error('Product creation failed:', error);
@@ -2017,15 +2009,11 @@ export function useUploadKycDocument() {
         let documentUrl = input.document.document_url;
 
         // Upload image to storage
-        console.log('Starting upload process...');
 
         // Extract file extension from URI
         const fileExt = input.imageUri.split('.').pop() || 'jpg';
         const fileName = `${randomUUID()}.${fileExt}`;
         const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
-
-        console.log('Uploading to path:', filePath);
-        console.log('File extension:', fileExt);
 
         // Upload to Supabase Storage using base64
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -2040,7 +2028,6 @@ export function useUploadKycDocument() {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        console.log('Upload successful:', uploadData);
 
         // Get public URL
         const {
@@ -2048,7 +2035,6 @@ export function useUploadKycDocument() {
         } = supabase.storage.from('vendors').getPublicUrl(filePath);
 
         documentUrl = publicUrl;
-        console.log('Public URL:', publicUrl);
 
         // Check if document already exists for this user and type
         const { data: existing } = await supabase
@@ -2233,7 +2219,6 @@ export function useReplaceKycDocument() {
         const fileName = `${randomUUID()}.${fileExt}`;
         const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
 
-        console.log('Replacing document at path:', filePath);
 
         // Upload to Supabase Storage using base64
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -2248,7 +2233,6 @@ export function useReplaceKycDocument() {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        console.log('Replace upload successful:', uploadData);
 
         const {
           data: { publicUrl },

@@ -172,7 +172,7 @@ const DeliveryOrderScreen = () => {
       });
       setActiveTab('completed');
     } catch (error: any) {
-      console.log(error);
+      console.error(error);
       Toast.show({
         type: 'error',
         text1: 'Error',

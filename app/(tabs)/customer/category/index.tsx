@@ -24,7 +24,6 @@ export default function AllCategoriesScreen() {
   const handleCategoryPress = (categoryId: string) => {
     // Navigate to category detail screen
     router.push(`/(tabs)/customer/category/${categoryId}`)
-    console.log("Navigate to category:", categoryId)
   }
 
   if (isLoading) {

@@ -285,13 +285,11 @@ export function useUploadDeliveryBoyKycDocument() {
         let documentUrl = input.document.document_url;
 
         // Upload image to storage
-        console.log('Starting upload process...');
 
         const fileExt = input.imageUri.split('.').pop() || 'jpg';
         const fileName = `${randomUUID()}.${fileExt}`;
         const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
 
-        console.log('Uploading to path:', filePath);
 
         // Upload to Supabase Storage - delivery_boys bucket
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -306,7 +304,6 @@ export function useUploadDeliveryBoyKycDocument() {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        console.log('Upload successful:', uploadData);
 
         // Get public URL
         const {
@@ -314,7 +311,6 @@ export function useUploadDeliveryBoyKycDocument() {
         } = supabase.storage.from('delivery_boys').getPublicUrl(filePath);
 
         documentUrl = publicUrl;
-        console.log('Public URL:', publicUrl);
 
         // Check if document already exists
         const { data: existing } = await supabase
@@ -409,7 +405,6 @@ export function useReplaceDeliveryBoyKycDocument() {
         const fileName = `${randomUUID()}.${fileExt}`;
         const filePath = `${session?.user.id}/kycDocuments/${fileName}`;
 
-        // console.log('Replacing document at path:', filePath);
 
         // Upload new file
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -719,7 +714,6 @@ export function useUploadBankProof() {
           .eq('document_type', 'bank_passbook')
           .maybeSingle();
 
-        console.log('Existing bank passbook:', existing);
 
         // Determine storage bucket based on user type
         const storageBucket = input.userType === 'vendor' ? 'vendors' : 'delivery_boys';
@@ -729,7 +723,6 @@ export function useUploadBankProof() {
           const urlParts = existing.document_url.split(`/${storageBucket}/`);
           if (urlParts.length > 1) {
             const oldFilePath = urlParts[1];
-            console.log('Deleting old file:', oldFilePath);
 
             const { error: deleteError } = await supabase.storage
               .from(storageBucket)
@@ -747,7 +740,6 @@ export function useUploadBankProof() {
         const fileName = `bank_proof_${Date.now()}.${fileExt}`;
         const filePath = `${input.userId}/kycDocuments/${fileName}`;
 
-        console.log('Uploading bank proof to:', filePath);
 
         // Upload to Supabase Storage using base64
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -762,14 +754,12 @@ export function useUploadBankProof() {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        console.log('Upload successful:', uploadData);
 
         // Get public URL
         const {
           data: { publicUrl },
         } = supabase.storage.from(storageBucket).getPublicUrl(filePath);
 
-        console.log('Public URL:', publicUrl);
 
         // Update or create KYC document
         let kycDocument;
