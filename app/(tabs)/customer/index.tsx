@@ -1,5 +1,15 @@
+// app/(tabs)/customer/home/index.tsx
 import { useEffect, useState } from "react"
-import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StatusBar, ActivityIndicator } from "react-native"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  FlatList,
+  StatusBar,
+  ActivityIndicator,
+} from "react-native"
 
 import { LocationIcon } from "@/assets/svgs/LocationIcon"
 import { ChevronDownIcon } from "@/assets/svgs/ChevronDownIcon"
@@ -17,12 +27,34 @@ import { FullPageError } from "@/components/ErrorComp"
 import { Image } from "expo-image"
 import { blurhash } from "@/types/categories-products.types"
 import { useBestSellerProducts, useTrendingProducts } from "@/hooks/queries/useDeals"
+import { useOffers } from "@/hooks/queries"
+import PromoBanner from "@/components/PromoBanner"             // ← new
 
 export default function HomeScreen() {
-  const { data: categories = [], isLoading: isLoadingCategories, isError: isErrorCategories } = useCategories()
-  const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
-  const { data: bestSellerProducts = [], isLoading: isLoadingBestSellers, isError: isErrorBestSellers } = useBestSellerProducts()
-  const { data: trendingProducts = [], isLoading: isLoadingTrending, isError: isErrorTrending } = useTrendingProducts()
+  const {
+    data: categories = [],
+    isLoading: isLoadingCategories,
+    isError: isErrorCategories,
+  } = useCategories()
+  const {
+    data: addresses = [],
+    isLoading: isLoadingAddresses,
+    isError: isErrorAddresses,
+  } = useCustomerAddresses()
+  const {
+    data: bestSellerProducts = [],
+    isLoading: isLoadingBestSellers,
+    isError: isErrorBestSellers,
+  } = useBestSellerProducts()
+  const {
+    data: trendingProducts = [],
+    isLoading: isLoadingTrending,
+    isError: isErrorTrending,
+  } = useTrendingProducts()
+  const {
+    data: offers = [],
+    isLoading: isLoadingOffers,   // ← new
+  } = useOffers()           // ← new  (non-blocking — banner degrades gracefully)
 
   const [searchQuery, setSearchQuery] = useState("")
   const { cart, addToCart, updateQuantity, totalItems } = useCartStore()
@@ -32,13 +64,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!selectedAddress && addresses.length > 0) {
-      const defaultAddress = addresses.find(a => a.is_default) || addresses[0]
+      const defaultAddress = addresses.find((a) => a.is_default) || addresses[0]
       setSelectedAddress(defaultAddress)
     }
   }, [addresses])
 
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
-    <TouchableOpacity onPress={() => router.push(`/customer/category/${item.id}`)} className="items-center w-[80px] mr-2 mb-4">
+    <TouchableOpacity
+      onPress={() => router.push(`/customer/category/${item.id}`)}
+      className="items-center w-[80px] mr-2 mb-4"
+    >
       <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
         {item.image ? (
           <Image
@@ -46,7 +81,7 @@ export default function HomeScreen() {
             placeholder={{ blurhash }}
             contentFit="cover"
             transition={1000}
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: "100%", height: "100%" }}
           />
         ) : (
           <SkeletonImage size="small" />
@@ -62,8 +97,11 @@ export default function HomeScreen() {
     }
   }
 
-  const isLoading = isLoadingAddresses || isLoadingCategories || isLoadingBestSellers || isLoadingTrending
-  const isError = isErrorAddresses || isErrorCategories || isErrorBestSellers || isErrorTrending
+  // Core data must load before showing the screen
+  const isLoading =
+    isLoadingAddresses || isLoadingCategories || isLoadingBestSellers || isLoadingTrending
+  const isError =
+    isErrorAddresses || isErrorCategories || isErrorBestSellers || isErrorTrending
 
   if (isLoading) {
     return (
@@ -88,16 +126,26 @@ export default function HomeScreen() {
           <View className="flex-row items-center">
             <LocationIcon />
             <View className="ml-2">
-              <TouchableOpacity onPress={() => setShowAddressSheet(!showAddressSheet)} className="flex-row items-center">
-                <Text className="text-md font-medium text-gray-900">{selectedAddress?.label || ""}</Text>
+              <TouchableOpacity
+                onPress={() => setShowAddressSheet(!showAddressSheet)}
+                className="flex-row items-center"
+              >
+                <Text className="text-md font-medium text-gray-900">
+                  {selectedAddress?.label || ""}
+                </Text>
                 <View className="ml-1">
                   <ChevronDownIcon />
                 </View>
               </TouchableOpacity>
-              <Text className="text-sm text-gray-500 mt-0.5">{selectedAddress?.address_line1 || ""}</Text>
+              <Text className="text-sm text-gray-500 mt-0.5">
+                {selectedAddress?.address_line1 || ""}
+              </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/order/cart")} className="w-10 h-10 items-center justify-center">
+          <TouchableOpacity
+            onPress={() => router.navigate("/(tabs)/customer/order/cart")}
+            className="w-10 h-10 items-center justify-center"
+          >
             <BagIcon itemCount={totalItems} />
           </TouchableOpacity>
         </View>
@@ -136,28 +184,14 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Promotional Banner */}
-        <View className="px-4 mb-6">
-          <View className="bg-green-50 rounded-2xl p-5 flex-row items-center overflow-hidden">
-            <View className="flex-1 pr-4">
-              <Text className="text-xl font-bold text-gray-900 mb-1">World Food Festival,</Text>
-              <Text className="text-xl font-bold text-gray-900 mb-1">Bring the world to</Text>
-              <Text className="text-xl font-bold text-gray-900 mb-4">your Kitchen!</Text>
-              <TouchableOpacity className="bg-green-500 px-5 py-3 rounded-xl self-start">
-                <Text className="text-white font-semibold">Shop Now</Text>
-              </TouchableOpacity>
-            </View>
-            <View className="w-[120px] h-[100px]">
-              <SkeletonImage size="large" />
-            </View>
-          </View>
-        </View>
+        {/* ── Promotional Banner (dynamic, auto-scrolls, degrades gracefully) ── */}
+        <PromoBanner offers={offers} isLoading={isLoadingOffers} />
 
         {/* Best Deals — from v_best_seller_products */}
         <View className="mb-6">
           <View className="flex-row items-center justify-between px-4 mb-4">
             <Text className="text-lg font-bold text-gray-900">Best Deal</Text>
-            <TouchableOpacity onPress={() => router.navigate('/(tabs)/customer/offers/1')}>
+            <TouchableOpacity onPress={() => router.navigate("/(tabs)/customer/offers/1")}>
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
@@ -220,7 +254,7 @@ export default function HomeScreen() {
         {showAddressSheet && (
           <BlurView
             intensity={10}
-            experimentalBlurMethod='dimezisBlurView'
+            experimentalBlurMethod="dimezisBlurView"
             style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
           />
         )}
