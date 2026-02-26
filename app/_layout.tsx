@@ -25,7 +25,7 @@ Sentry.init({
   replaysOnErrorSampleRate: 1,
   integrations: [
     Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration(),
-    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }), // 👈 this too
+    Sentry.consoleLoggingIntegration({ levels: ['error'] }), // 👈 this too
   ],
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)

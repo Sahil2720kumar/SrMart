@@ -185,7 +185,6 @@ export default function SignUpScreen() {
   
       router.replace(`/${userData.role}` as any);
     } catch (error: any) {
-      console.error('Signup error:', error?.message);
   
       Toast.show({
         type: "error",

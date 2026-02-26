@@ -163,7 +163,6 @@ function recalcAndSet(cart: Map<string, CartProduct>, set: (state: Partial<CartS
 
   const discountStore = useDiscountStore.getState();
   
-  console.log(discountStore.validateDiscount(totalPrice, cartItems));
   
   if (discountStore.validateDiscount(totalPrice, cartItems)) {
     discountStore.recalculateDiscount(totalPrice, cartItems);

@@ -86,7 +86,6 @@ export default function SignupScreen() {
 
       router.replace('/vendor/(tabs)/dashboard')
     } catch (err: any) {
-      console.error('Signup error:', err?.message)
       Toast.show({ type: 'error', text1: 'Signup Failed', text2: err?.message || 'Something went wrong. Please try again.', position: 'top' })
     } finally {
       setIsLoading(false)

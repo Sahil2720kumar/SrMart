@@ -61,7 +61,6 @@ export default function LoginScreen() {
 
       router.replace('/vendor/dashboard')
     } catch (error: any) {
-      console.error('Vendor login error:', error?.message)
       Toast.show({ type: 'error', text1: 'Login Failed', text2: error?.message || 'Invalid email or password.', position: 'top' })
     } finally {
       setIsLoading(false)

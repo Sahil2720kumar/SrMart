@@ -42,11 +42,9 @@ export const useAuthStore = create<AuthState>()(
 
         // Prevent multiple initializations
         if (state.initialized) {
-          console.log('Auth already initialized');
           return;
         }
 
-        console.log('Initializing auth...');
         set({ loading: true });
 
         try {
@@ -58,11 +56,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set({ session, loading: false, initialized: true });
-          console.log('Auth initialized, session:', session ? 'Found' : 'None');
 
           // Listen for auth changes
           supabase.auth.onAuthStateChange((event, session) => {
-            console.log('Auth event:', event);
 
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
               set({ session });

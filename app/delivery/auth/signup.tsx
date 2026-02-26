@@ -116,7 +116,6 @@ export default function DeliverySignupScreen() {
 
       router.replace('/delivery/profile');
     } catch (error: any) {
-      console.error('Delivery signup error:', error?.message);
       Toast.show({
         type: 'error',
         text1: 'Signup Failed',

@@ -31,8 +31,6 @@ const { width } = Dimensions.get('window');
 
 const BRAND_LETTERS = 'SrMart'.split('');
 const TAGLINE = 'Your groceries, delivered fresh';
-
-// Must be >= total animation duration (~1800ms) + buffer
 const MIN_SPLASH_DURATION = 2000;
 
 const onboardingData = [
@@ -53,21 +51,14 @@ const onboardingData = [
   },
 ];
 
-// ─── Single letter: slide-up + fade ──────────────────────────────────────────
 function RevealLetter({ char, index }: { char: string; index: number }) {
   const translateY = useSharedValue(40);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
     const delay = index * 80;
-    translateY.value = withDelay(
-      delay,
-      withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) })
-    );
-    opacity.value = withDelay(
-      delay,
-      withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) })
-    );
+    translateY.value = withDelay(delay, withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) }));
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -76,15 +67,12 @@ function RevealLetter({ char, index }: { char: string; index: number }) {
   }));
 
   return (
-    <Animated.Text
-      style={[animStyle, { fontSize: 40, fontWeight: '800', color: 'white', letterSpacing: 0.5 }]}
-    >
+    <Animated.Text style={[animStyle, { fontSize: 40, fontWeight: '800', color: 'white', letterSpacing: 0.5 }]}>
       {char}
     </Animated.Text>
   );
 }
 
-// ─── Tagline: word-by-word fade-in ───────────────────────────────────────────
 function RevealTagline() {
   const words = TAGLINE.split(' ');
   return (
@@ -102,7 +90,6 @@ function RevealTagline() {
   );
 }
 
-// ─── Progress bar: fills left→right, fires onComplete at the end ─────────────
 function LoadingBar({ onComplete }: { onComplete: () => void }) {
   const progress = useSharedValue(0);
 
@@ -118,9 +105,7 @@ function LoadingBar({ onComplete }: { onComplete: () => void }) {
     );
   }, []);
 
-  const fillStyle = useAnimatedStyle(() => ({
-    width: `${progress.value * 100}%` as any,
-  }));
+  const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` as any }));
 
   return (
     <Animated.View
@@ -134,14 +119,11 @@ function LoadingBar({ onComplete }: { onComplete: () => void }) {
         overflow: 'hidden',
       }}
     >
-      <Animated.View
-        style={[fillStyle, { height: '100%', backgroundColor: 'white', borderRadius: 99 }]}
-      />
+      <Animated.View style={[fillStyle, { height: '100%', backgroundColor: 'white', borderRadius: 99 }]} />
     </Animated.View>
   );
 }
 
-// ─── Splash: receives all readiness flags, exits only when everything is ready ─
 function SplashScreen({
   dataReady,
   authReady,
@@ -156,13 +138,11 @@ function SplashScreen({
   const [exiting, setExiting] = useState(false);
   const opacity = useSharedValue(1);
 
-  // Minimum display timer — ensures animation plays fully
   useEffect(() => {
     const timer = setTimeout(() => setMinTimeElapsed(true), MIN_SPLASH_DURATION);
     return () => clearTimeout(timer);
   }, []);
 
-  // Gate: all four conditions must be true before we fade out
   useEffect(() => {
     if (barComplete && minTimeElapsed && dataReady && authReady && !exiting) {
       setExiting(true);
@@ -178,42 +158,28 @@ function SplashScreen({
   const wrapStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
-    <Animated.View
-      style={[
-        wrapStyle,
-        { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16a34a' },
-      ]}
-    >
+    <Animated.View style={[wrapStyle, { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16a34a' }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
 
-      {/* Icon pops in */}
       <Animated.View
         entering={FadeInDown.delay(0).duration(500).easing(Easing.out(Easing.back(1.4)))}
         style={{
-          width: 72,
-          height: 72,
-          borderRadius: 36,
+          width: 72, height: 72, borderRadius: 36,
           backgroundColor: 'rgba(255,255,255,0.2)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          marginBottom: 20,
+          justifyContent: 'center', alignItems: 'center', marginBottom: 20,
         }}
       >
         <Feather name="shopping-bag" size={36} color="white" />
       </Animated.View>
 
-      {/* Letter-by-letter brand name */}
       <View style={{ flexDirection: 'row', overflow: 'hidden' }}>
         {BRAND_LETTERS.map((char, i) => (
           <RevealLetter key={i} char={char} index={i} />
         ))}
       </View>
 
-      {/* Tagline */}
       <RevealTagline />
-
-      {/* Bar — signals animation completion */}
       <LoadingBar onComplete={() => setBarComplete(true)} />
     </Animated.View>
   );
@@ -221,7 +187,7 @@ function SplashScreen({
 
 // ─── Root component ───────────────────────────────────────────────────────────
 export default function Index() {
-  const { initialized } = useAuthStore();
+  const { session, initialized } = useAuthStore(); // ✅ use session directly
   const { user } = useProfileStore();
 
   const [splashDone, setSplashDone] = useState(false);
@@ -232,7 +198,6 @@ export default function Index() {
   const scrollRef = useRef<ScrollView>(null);
   const lottieRefs = useRef<(LottieView | null)[]>([]);
 
-  // Fetch onboarding flag — splash stays visible regardless of how fast this resolves
   useEffect(() => {
     AsyncStorage.getItem('onboarding_done').then(value => {
       setOnboardingDone(value === 'true');
@@ -244,10 +209,7 @@ export default function Index() {
     lottieRefs.current[slideIndex]?.play();
   }, [slideIndex]);
 
-  // ── Always render SplashScreen until it signals onDone ──────────────────────
-  // This replaces the old conditional that caused the double-splash:
-  // Previously: `if (loading || !initialized) return <ActivityIndicator ...>`
-  // Now: SplashScreen is always rendered first and waits for authReady itself.
+  // ── Splash ──────────────────────────────────────────────────────────────────
   if (!splashDone) {
     return (
       <SplashScreen
@@ -258,14 +220,22 @@ export default function Index() {
     );
   }
 
-  // ── Post-splash redirects ────────────────────────────────────────────────────
+  // ── Post-splash redirects ───────────────────────────────────────────────────
   if (onboardingDone) {
-    if (!user) return <Redirect href="/auth/login" />;
-    if (user.role === 'customer') return <Redirect href="/(tabs)/customer" />;
-    if (user.role === 'vendor') return <Redirect href="/vendor/dashboard" />;
-    if (user.role === 'delivery_boy') return <Redirect href="/delivery/home" />;
+    // No session → login
+    if (!session) return <Redirect href="/auth/login" />;
+
+    // Session exists, check profile role
+    if (user?.role === 'customer') return <Redirect href="/(tabs)/customer" />;
+    if (user?.role === 'vendor') return <Redirect href="/vendor/dashboard" />;
+    if (user?.role === 'delivery_boy') return <Redirect href="/delivery/(tabs)/home" />;
+
+    // ✅ Session exists but profile not yet loaded — don't flash wrong screen
+    // profileStore should be fetching; render nothing while it resolves
+    return null;
   }
 
+  // ── Onboarding ──────────────────────────────────────────────────────────────
   const next = async () => {
     if (slideIndex < onboardingData.length - 1) {
       const nextIndex = slideIndex + 1;
@@ -277,13 +247,11 @@ export default function Index() {
     }
   };
 
-  // 👋 ONBOARDING
   if (!onboardingDone) {
     return (
       <LinearGradient colors={['#f0fdf4', '#ffffff']} className="flex-1">
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar style="dark" />
-
         <SafeAreaView className="flex-1">
           <ScrollView
             ref={scrollRef}
@@ -314,7 +282,6 @@ export default function Index() {
             ))}
           </ScrollView>
 
-          {/* Dots */}
           <View className="flex-row justify-center mb-6">
             {onboardingData.map((_, i) => (
               <View
@@ -324,7 +291,6 @@ export default function Index() {
             ))}
           </View>
 
-          {/* CTA */}
           <View className="px-6 pb-10">
             <TouchableOpacity
               onPress={next}
@@ -341,7 +307,7 @@ export default function Index() {
     );
   }
 
-  // 👇 WELCOME SCREEN
+  // ── Welcome screen (onboarding done but no redirect yet) ───────────────────
   return (
     <SafeAreaView className="flex-1 bg-green-600 justify-between px-6 py-12">
       <Stack.Screen options={{ headerShown: false }} />
@@ -351,7 +317,7 @@ export default function Index() {
         <View className="bg-white/20 p-6 rounded-full mb-6">
           <Feather name="shopping-bag" size={48} color="white" />
         </View>
-        <Text className="text-5xl font-extrabold text-white mb-3 text-center">FreshMart</Text>
+        <Text className="text-5xl font-extrabold text-white mb-3 text-center">SrMart</Text>
         <Text className="text-green-100 text-center max-w-xs text-base leading-6">
           Groceries delivered fresh & fast, straight to your door
         </Text>

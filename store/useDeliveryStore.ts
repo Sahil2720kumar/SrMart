@@ -82,7 +82,6 @@ export const useDeliveryStore = create<DeliveryState>()(
         set({ adminVerificationStatus: status }),
     
       toggleOnline: () => {
-        console.log("Called");
 
         const { adminVerificationStatus, isKycCompleted } = get();
         if (adminVerificationStatus !== 'approved' || !isKycCompleted) {

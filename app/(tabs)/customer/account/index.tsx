@@ -53,22 +53,22 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
 
   // Get user initials
   const getInitials = () => {
-    if (!customerProfile) return "SM"
+    if (!customerProfile) return ""
     const firstName = customerProfile.first_name?.[0] || ""
     const lastName = customerProfile.last_name?.[0] || ""
-    return (firstName + lastName).toUpperCase() || "SM"
+    return (firstName + lastName).toUpperCase() || ""
   }
 
   // Get full name
   const getFullName = () => {
-    if (!customerProfile) return "Smith Mate"
+    if (!customerProfile) return ""
     return `${customerProfile.first_name || ""} ${customerProfile.last_name || ""}`.trim() || "User"
   }
 
   // Get email from auth or profile
   const getEmail = () => {
     const session = useAuthStore.getState().session
-    return session?.user?.email || "user@example.com"
+    return session?.user?.email || ""
   }
 
   return (

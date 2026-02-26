@@ -1,16 +1,18 @@
 import type React from "react"
 import { Tabs, TabList, TabTrigger, TabSlot } from "expo-router/ui"
-import { View, Text, Pressable } from "react-native"
+import { View, Text, Pressable, ActivityIndicator, StatusBar, ScrollView } from "react-native"
 import { Svg, Path, Circle } from "react-native-svg"
-import { Redirect, usePathname } from "expo-router"
+import { usePathname, useRouter } from "expo-router"
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Foundation from '@expo/vector-icons/Foundation';
 import { useProfileStore } from "@/store/profileStore"
 import useCartStore from "@/store/cartStore"
 import { useAuthStore } from "@/store/authStore"
 import { useEffect } from "react"
+import { useCustomerDefaultAddresses } from "@/hooks/queries"
+import { getServiceableRegion, SERVICE_REGIONS } from "@/utils/regionCheck"
+import NotServiceableScreen from "@/components/NotServiceableScreen"
 
-// Tab Icons
 function HomeIcon({ focused = false }: { focused?: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -158,34 +160,45 @@ function TabButton({
   )
 }
 
+// ─── Main Layout ───
 export default function TabLayout() {
   const { userId, setUserId, clearCart } = useCartStore()
   const { session } = useAuthStore()
-  const { getUserRole } = useProfileStore()
-  const pathname = usePathname();
+  const pathname = usePathname()
+  const router = useRouter()
+
+  const { data: defaultAddress, isLoading: addressLoading } = useCustomerDefaultAddresses()
 
   useEffect(() => {
     if (!session?.user?.id) return;
-  
-    // First login → just set userId
-    if (!userId) {
-      setUserId(session.user.id);
-      return;
-    }
-  
-    // User changed → clear cart
-    if (session.user.id !== userId) {
-      clearCart();
-      setUserId(session.user.id);
-    }
-  }, [session?.user?.id,userId]);
+    if (!userId) { setUserId(session.user.id); return; }
+    if (session.user.id !== userId) { clearCart(); setUserId(session.user.id); }
+  }, [session?.user?.id, userId]);
 
+  // ── Loading state ──
+  if (addressLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text className="mt-3 text-gray-500 text-sm">Checking service availability...</Text>
+      </View>
+    );
+  }
+
+  // ── No default address set → let them in, they can add one ──
+  // ── Has address but outside region → show inline screen ──
+  const isOutsideRegion =
+    defaultAddress != null &&
+    !getServiceableRegion(defaultAddress.latitude, defaultAddress.longitude);
+
+  if (isOutsideRegion) {
+    return <NotServiceableScreen serviceRegions={SERVICE_REGIONS} />;
+  }
+
+  // ── Serviceable or no address yet → show normal tabs ──
   return (
     <Tabs>
-      {/* Main content area */}
       <TabSlot />
-
-      {/* Bottom Tab Bar */}
       <TabList
         style={{
           backgroundColor: "#ffffff",
@@ -216,7 +229,6 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger>
 
-
         <TabTrigger name="offers" href='/customer/offers' asChild>
           <Pressable className="flex-1">
             <TabButton label="offers" focused={pathname.startsWith("/customer/offers")}>
@@ -233,7 +245,6 @@ export default function TabLayout() {
           </Pressable>
         </TabTrigger>
 
-
         <TabTrigger name="search" href="/customer/search" asChild>
           <Pressable className="flex-1 hidden">
             <TabButton label="Search" focused={pathname.startsWith("/customer/search")}>
@@ -241,14 +252,6 @@ export default function TabLayout() {
             </TabButton>
           </Pressable>
         </TabTrigger>
-
-        {/* <TabTrigger name="cart" href="/customer/order/cart" asChild>
-          <Pressable className="flex-1">
-            <TabButton label="Cart" focused={pathname === "/customer/order/cart"}>
-              <CartIcon focused={pathname === "/customer/order/cart"} itemCount={3} />
-            </TabButton>
-          </Pressable>
-        </TabTrigger> */}
 
         <TabTrigger name="orders" href="/customer/order/order-groups/" asChild>
           <Pressable className="flex-1">
@@ -265,7 +268,6 @@ export default function TabLayout() {
             </TabButton>
           </Pressable>
         </TabTrigger>
-
       </TabList>
     </Tabs>
   )

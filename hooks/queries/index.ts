@@ -319,23 +319,20 @@ const getCustomerId = async (userId: string) => {
   return data.user_id;
 };
 
-// Fetch all addresses for the current user
+// Fetch ALL addresses — returns array
 export function useCustomerAddresses() {
   const session = useAuthStore((state) => state.session);
 
   return useQuery({
-    queryKey: addressQueryKeys.byCustomer(session?.user?.id!),
+    queryKey: [...addressQueryKeys.byCustomer(session?.user?.id!), 'all'], // 👈 distinct key
     queryFn: async () => {
       if (!session?.user?.id) throw new Error('User not authenticated');
-
       const customerId = await getCustomerId(session.user.id);
-
       const { data, error } = await supabase
         .from('customer_addresses')
         .select('*')
         .eq('customer_id', customerId)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       return data as CustomerAddress[];
     },
@@ -343,6 +340,28 @@ export function useCustomerAddresses() {
   });
 }
 
+// Fetch DEFAULT address only — returns single object
+export function useCustomerDefaultAddresses() {
+  const session = useAuthStore((state) => state.session);
+
+  return useQuery({
+    queryKey: [...addressQueryKeys.byCustomer(session?.user?.id!), 'default'], // 👈 distinct key
+    queryFn: async () => {
+      if (!session?.user?.id) throw new Error('User not authenticated');
+      const customerId = await getCustomerId(session.user.id);
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .select('*')
+        .eq('customer_id', customerId)
+        .eq('is_default', true)
+        .maybeSingle(); // returns object | null, never array
+      if (error) throw error;
+      return data as CustomerAddress | null;
+    },
+    enabled: !!session?.user?.id,
+  });
+}
+ 
 // Fetch single address by ID
 export function useCustomerAddress(addressId: string) {
   return useQuery({
@@ -1018,7 +1037,7 @@ export function useCreateProduct() {
 
       if (imagesError) {
         console.error('Product images error:', imagesError);
-        // Product is already created, so we log but don't throw
+        // Product is already createt don't throw
         console.warn('Product created but images failed to save');
       }
 

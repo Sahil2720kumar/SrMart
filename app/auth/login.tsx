@@ -126,7 +126,6 @@ export default function LoginScreen() {
   
       router.replace('/customer');
     } catch (error: any) {
-      console.error('Sign in error:', error?.message);
   
       Toast.show({
         type: "error",
