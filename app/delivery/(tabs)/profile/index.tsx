@@ -27,6 +27,7 @@ import {
 import { useDeliveryBoyStats } from '@/hooks/queries/useDeliveryOrders';
 import { Image } from 'expo-image';
 import { blurhash } from '@/types/categories-products.types';
+import { clearOneSignalUser } from '@/services/onesignal';
 
 // ==========================================
 // KYC DOCUMENT TYPES (matching documents screen)
@@ -214,6 +215,7 @@ const ProfileScreen = () => {
       setSession(null);
       setDeliveryBoyProfile(null);
       setUser(null);
+      clearOneSignalUser()
       router.replace('/auth/login');
     }
   };

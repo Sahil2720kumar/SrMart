@@ -25,6 +25,7 @@ import { useCustomerProfile } from "@/hooks/queries"
 import { User } from "@/types/users.types"
 import { useProfileStore } from "@/store/profileStore"
 import Toast from "react-native-toast-message"
+import { setupOneSignalUser } from "@/services/onesignal"
 
 
 export default function LoginScreen() {
@@ -61,6 +62,10 @@ export default function LoginScreen() {
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
+
+  const handleLoginSuccess = (user) => {
+    setupOneSignalUser({ id: user.auth_id, role: user.role });
+  };
 
 
   const handleEmailSignIn = async () => {
@@ -116,7 +121,7 @@ export default function LoginScreen() {
       setSession(signInData.session);
       setUser(userData);
       setCustomerProfile(customerData);
-
+      handleLoginSuccess(userData)
       Toast.show({
         type: "success",
         text1: "Welcome back! 👋",

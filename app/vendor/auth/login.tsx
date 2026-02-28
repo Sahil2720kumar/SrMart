@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { setupOneSignalUser } from '@/services/onesignal'
 import { useAuthStore } from '@/store/authStore'
 import { useProfileStore } from '@/store/profileStore'
 import { Feather } from '@expo/vector-icons'
@@ -31,6 +32,10 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0
   }
 
+  const handleLoginSuccess = (user) => {
+    setupOneSignalUser({ id: user.auth_id, role: user.role });
+  };
+
   const handleLogin = async () => {
     if (!validateForm()) return
     setIsLoading(true)
@@ -56,7 +61,7 @@ export default function LoginScreen() {
       setSession(signInData.session)
       setUser(userData)
       setVendorProfile(vendorData)
-
+      handleLoginSuccess(userData)
       Toast.show({ type: 'success', text1: 'Welcome back! 👋', text2: 'Signed in successfully.', position: 'top' })
 
       router.replace('/vendor/dashboard')

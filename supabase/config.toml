@@ -404,3 +404,47 @@ entrypoint = "./functions/create-razorpay-order/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/create-razorpay-order/*.html" ]
+
+[functions.send-promo-notification]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-promo-notification/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-promo-notification/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-promo-notification/*.html" ]
+
+[functions.notify-customer-order-status]
+enabled = true
+verify_jwt = true
+import_map = "./functions/notify-customer-order-status/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/notify-customer-order-status/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/notify-customer-order-status/*.html" ]
+
+[functions.notify-vendor-new-order]
+enabled = true
+verify_jwt = true
+import_map = "./functions/notify-vendor-new-order/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/notify-vendor-new-order/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/notify-vendor-new-order/*.html" ]
+
+[functions.notify-delivery-assigned]
+enabled = true
+verify_jwt = true
+import_map = "./functions/notify-delivery-assigned/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/notify-delivery-assigned/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/notify-delivery-assigned/*.html" ]

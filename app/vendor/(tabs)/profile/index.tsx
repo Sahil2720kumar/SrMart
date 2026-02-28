@@ -1,6 +1,7 @@
 import { FullPageError } from '@/components/ErrorComp';
 import { useVendorDetail } from '@/hooks/queries';
 import { supabase } from '@/lib/supabase';
+import { clearOneSignalUser } from '@/services/onesignal';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -177,6 +178,7 @@ export default function ProfileOverviewScreen() {
       setSession(null);
       setVendorProfile(null);
       setUser(null);
+      clearOneSignalUser()
       router.replace('/auth/login');
       setLogoutLoading(false);
     }

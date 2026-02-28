@@ -5,6 +5,7 @@ import Feather from "@expo/vector-icons/Feather"
 import { RelativePathString, router } from "expo-router"
 import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native"
 import { useCustomerProfile } from "@/hooks/queries"
+import { clearOneSignalUser } from "@/services/onesignal"
 
 type MenuItem = {
   id: string
@@ -39,6 +40,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
       setSession(null)
       setCustomerProfile(null)
       setUser(null)
+      clearOneSignalUser()
       router.replace('/auth/login')
     }
   }

@@ -35,6 +35,12 @@
           "project": "react-native",
           "organization": "sahil-kumar-sah"
         }
+      ],
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
       ]
     ],
     "experiments": {
@@ -54,6 +60,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.sahilkr2909.SrMart",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We need your location to help you add accurate delivery addresses.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to help you add accurate delivery addresses."
@@ -66,8 +73,9 @@
       },
       "package": "com.sahilkr2909.SrMart",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "extra": {
@@ -75,6 +83,7 @@
       "eas": {
         "projectId": "5e214a97-7507-42c8-9e0b-0000ac92477e"
       }
-    }
+    },
+    "owner": "sahilkr2909"
   }
 }

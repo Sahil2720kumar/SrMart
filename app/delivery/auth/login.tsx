@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 import Toast from 'react-native-toast-message';
+import { setupOneSignalUser } from '@/services/onesignal';
 
 export default function DeliveryLoginScreen() {
   const router = useRouter();
@@ -28,6 +29,10 @@ export default function DeliveryLoginScreen() {
 
   const isValidEmail = /^\S+@\S+\.\S+$/.test(email);
   const canLogin = isValidEmail && password.length >= 6;
+
+  const handleLoginSuccess = (user) => {
+    setupOneSignalUser({ id: user.auth_id, role: user.role });
+  };
 
   const handleLogin = async () => {
     if (!canLogin) {
@@ -72,7 +77,7 @@ export default function DeliveryLoginScreen() {
       setSession(data.session);
       setUser(userData);
       setDeliveryBoyProfile(deliveryProfile);
-
+      handleLoginSuccess(userData)
       Toast.show({
         type: 'success',
         text1: 'Welcome back! 👋',

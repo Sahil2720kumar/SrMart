@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import '../global.css';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -9,6 +9,8 @@ import { useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
+import { OneSignal } from 'react-native-onesignal';
+import * as Device from "expo-device"
 
 Sentry.init({
   dsn: 'https://fc55274d0c42d1a57af8a2a0ce9a0056@o4510942569037824.ingest.us.sentry.io/4510942570414080',
@@ -41,6 +43,95 @@ export default Sentry.wrap(function Layout() {
       initialize();
     }
   }, [initialized, initialize]);
+
+
+  useEffect(() => {
+    console.log("useEffect Called");
+    
+    const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+
+    if (!appId) {
+      console.error("EXPO_PUBLIC_ONESIGNAL_APP_ID Not found");
+      return;
+    }
+
+    if (!Device.isDevice) {
+      console.log("Push notifications require physical device");
+      return;
+    }
+
+    OneSignal.initialize(appId);
+
+    OneSignal.Notifications.requestPermission(true);
+
+    const handleClick = (event: any) => {
+      console.log("click");
+      
+      const data = event.notification.additionalData as {
+        type: string;
+        orderId?: string;
+        orderGroupId?: string;
+        offerId?: string;
+        screen: string;
+      };
+
+      
+      if (!data) return;
+      handleNotificationNavigation(data);
+    };
+
+    OneSignal.Notifications.addEventListener("click", handleClick);
+
+    return () => {
+      OneSignal.Notifications.removeEventListener("click", handleClick);
+    };
+  }, []);
+
+  const handleNotificationNavigation = (data: any) => {
+    switch (data.type) {
+
+      // Customer taps order notification
+      // → app/(tabs)/customer/order/order-groups/orders/[orderId].tsx
+      case 'order':
+        router.push({
+          pathname: '/(tabs)/customer/order/order-groups/orders/[orderId]',
+          params: { orderId: data.orderId },
+        });
+        break;
+
+      // Customer taps offer/promo notification
+      // → app/(tabs)/customer/offers/[offerId].tsx
+      case 'offer':
+        if (data.offerId) {
+          router.push({
+            pathname: '/(tabs)/customer/offers/[offerId]',
+            params: { offerId: data.offerId },
+          });
+        } else {
+          // No specific offer → go to offers list
+          router.push('/(tabs)/customer/offers');
+        }
+        break;
+
+      // Vendor taps new order notification
+      // → you need to add this route in vendor section
+      case 'vendor_order':
+        router.push({
+          pathname: '/vendor/orders',
+          params: { orderId: data.orderId },
+        });
+        break;
+
+      // Delivery boy taps assigned order
+      // → app/delivery/order/[orderId].tsx
+      case 'delivery_order':
+        router.push({
+          pathname: '/delivery/order/[orderId]',
+          params: { orderId: data.orderId },
+        });
+        break;
+    }
+  };
 
 
   // ✅ No early return here — index.tsx SplashScreen handles the wait for auth
