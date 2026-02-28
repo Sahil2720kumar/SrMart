@@ -19,7 +19,7 @@ const CartItemComp = ({ item, cart, wishlist, toggleWishlist, updateQuantity, ad
   return (
     <View className="flex-row items-center bg-white p-4 border-b border-gray-100">
       {/* Product Image Skeleton */}
-      <View className="w-16 h-16  rounded-lg mr-3" >
+      <View className="w-16 h-16  rounded-[5] mr-3 overflow-hidden" >
         <Image
           source={item.product?.image}
           placeholder={{ blurhash: blurhash }}

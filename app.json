@@ -3,7 +3,7 @@
     "name": "SrMart",
     "slug": "SrMart",
     "version": "1.0.0",
-    "scheme": "SrMart",
+    "scheme": "srmart",
     "platforms": [
       "ios",
       "android"
@@ -41,7 +41,8 @@
         {
           "mode": "development"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1119,25 +1119,32 @@ export function useVendorOrderStats(vendorId: string) {
 }
 
 // ==========================================
-// COUPON & OFFER HOOKS
+// COUPON & OFFER HOOKS — FIXED
 // ==========================================
 
-// Query keys
+// ==========================================
+// COUPON HOOKS
+// ==========================================
+//
+// FLOW:
+//  1. useMyAllCouponUsage  — fetches all per-user usage counts in one query on screen mount
+//  2. useValidateCoupon    — READ ONLY check before applying (nothing written to DB)
+//  3. useRecordCouponUsage — INSERT into coupon_usage AFTER order is created
+//                            DB trigger auto-increments coupons.usage_count
+
 export const couponQueryKeys = {
   all: ['coupons'] as const,
   active: () => ['coupons', 'active'] as const,
   byCode: (code: string) => ['coupons', 'code', code] as const,
-  usage: (userId: string) => ['coupon-usage', userId] as const,
-  userUsage: (userId: string, couponId: string) => ['coupon-usage', userId, couponId] as const,
+  myUsage: (userId: string) => ['coupon-usage', 'mine', userId] as const,
 };
 
-// Fetch all active coupons
+// ─── Fetch all active coupons ─────────────────────────────────────────────
 export function useActiveCoupons() {
   return useQuery({
     queryKey: couponQueryKeys.active(),
     queryFn: async () => {
       const now = new Date().toISOString();
-
       const { data, error } = await supabase
         .from('coupons')
         .select('*')
@@ -1145,55 +1152,45 @@ export function useActiveCoupons() {
         .lte('start_date', now)
         .gte('end_date', now)
         .order('discount_value', { ascending: false });
-
       if (error) throw error;
       return data as Coupon[];
     },
   });
 }
 
-// Fetch coupon by code
-export function useCouponByCode(code: string) {
-  return useQuery({
-    queryKey: couponQueryKeys.byCode(code),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('coupons')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .eq('is_active', true)
-        .single();
-
-      if (error) throw error;
-      return data as Coupon;
-    },
-    enabled: !!code && code.length > 0,
-  });
-}
-
-// Check user's coupon usage count for a specific coupon
-export function useUserCouponUsage(couponId: string) {
+// ─── Fetch current user's usage count for ALL coupons in one query ────────
+// Returns { [couponId]: number } — used by the coupon screen to split
+// eligible coupons into "within limit" vs "limit exceeded" without N+1 queries.
+export function useMyAllCouponUsage() {
   const session = useAuthStore((state) => state.session);
 
   return useQuery({
-    queryKey: couponQueryKeys.userUsage(session?.user?.id!, couponId),
+    queryKey: couponQueryKeys.myUsage(session?.user?.id ?? ''),
     queryFn: async () => {
-      if (!session?.user?.id) throw new Error('User not authenticated');
+      if (!session?.user?.id) return {} as Record<string, number>;
 
       const { data, error } = await supabase
         .from('coupon_usage')
-        .select('*')
-        .eq('coupon_id', couponId)
+        .select('coupon_id')
         .eq('customer_id', session.user.id);
 
       if (error) throw error;
-      return data as CouponUsage[];
+
+      // Build count map: { couponId -> times used by this user }
+      const usageMap: Record<string, number> = {};
+      for (const row of data ?? []) {
+        usageMap[row.coupon_id] = (usageMap[row.coupon_id] ?? 0) + 1;
+      }
+      return usageMap;
     },
-    enabled: !!session?.user?.id && !!couponId,
+    enabled: !!session?.user?.id,
   });
 }
 
-// Validate coupon eligibility
+// ─── Validate coupon — READ ONLY, nothing written to DB ──────────────────
+// Call when user selects or manually enters a coupon.
+// coupon_usage.order_id is NOT NULL so we cannot write usage until
+// a real order exists — this hook only validates eligibility.
 export function useValidateCoupon() {
   const session = useAuthStore((state) => state.session);
 
@@ -1201,15 +1198,13 @@ export function useValidateCoupon() {
     mutationFn: async ({
       couponCode,
       orderAmount,
-      cartItems,
     }: {
       couponCode: string;
       orderAmount: number;
-      cartItems?: any[];
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
 
-      // Fetch coupon
+      // 1. Fetch coupon
       const { data: coupon, error: couponError } = await supabase
         .from('coupons')
         .select('*')
@@ -1217,67 +1212,61 @@ export function useValidateCoupon() {
         .eq('is_active', true)
         .single();
 
-      if (couponError || !coupon) {
-        throw new Error('Invalid coupon code');
-      }
+      if (couponError || !coupon) throw new Error('Invalid coupon code');
 
-      // Check date validity
+      // 2. Date validity
       const now = new Date();
-      const startDate = new Date(coupon.start_date);
-      const endDate = new Date(coupon.end_date);
+      if (now < new Date(coupon.start_date)) throw new Error('Coupon is not active yet');
+      if (now > new Date(coupon.end_date)) throw new Error('Coupon has expired');
 
-      if (now < startDate) {
-        throw new Error('Coupon not yet valid');
+      // 3. Minimum order amount
+      if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) {
+        throw new Error(`Minimum order of ₹${coupon.min_order_amount} required`);
       }
 
-      if (now > endDate) {
-        throw new Error('Coupon has expired');
+      // 4. Global usage limit
+      if (coupon.usage_limit != null && (coupon.usage_count ?? 0) >= coupon.usage_limit) {
+        throw new Error('This coupon is no longer available');
       }
 
-      // Check minimum order amount
-      if (orderAmount < coupon.min_order_amount) {
-        throw new Error(`Minimum order amount of ₹${coupon.min_order_amount} required`);
-      }
+      // 5. Per-user usage limit — single COUNT query, no row fetching
+      const perUserLimit = coupon.usage_limit_per_user ?? 1;
 
-      // Check total usage limit
-      if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
-        throw new Error('Coupon usage limit reached');
-      }
-
-      // Check user usage limit
-      const { data: userUsages, error: usageError } = await supabase
+      const { count: usedCount, error: usageError } = await supabase
         .from('coupon_usage')
-        .select('*')
+        .select('id', { count: 'exact', head: true })
         .eq('coupon_id', coupon.id)
         .eq('customer_id', session.user.id);
 
       if (usageError) throw usageError;
 
-      if (userUsages && userUsages.length >= coupon.usage_limit_per_user) {
-        throw new Error('You have already used this coupon maximum times');
-      }
+      const used = usedCount ?? 0;
 
-      // Calculate discount
-      let discountAmount = 0;
-      if (coupon.discount_type === 'percentage') {
-        discountAmount = (orderAmount * coupon.discount_value) / 100;
-        if (coupon.max_discount_amount) {
-          discountAmount = Math.min(discountAmount, coupon.max_discount_amount);
-        }
-      } else if (coupon.discount_type === 'fixed_amount') {
-        discountAmount = coupon.discount_value;
+      if (used >= perUserLimit) {
+        throw new Error(
+          perUserLimit === 1
+            ? 'You have already used this coupon'
+            : `You've reached the limit for this coupon (used ${used}/${perUserLimit} times)`,
+        );
       }
 
       return {
         coupon,
-        discountAmount,
-        finalAmount: Math.max(orderAmount - discountAmount, 0),
+        discountAmount: calculateCouponDiscount(coupon, orderAmount),
+        finalAmount: Math.max(orderAmount - calculateCouponDiscount(coupon, orderAmount), 0),
+        usedCount: used,
+        perUserLimit,
       };
     },
   });
 }
 
-// Record coupon usage (call this when order is placed)
+// ─── Record coupon usage — call AFTER order is successfully created ───────
+// The DB trigger `trigger_update_coupon_usage_count` fires on INSERT and
+// auto-increments coupons.usage_count. Do NOT increment it manually.
+//
+// Called in PaymentScreen inside handleOrderSuccess(groupId):
+//   await recordCouponUsage.mutateAsync({ couponId, orderId, discountAmount })
 export function useRecordCouponUsage() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -1286,62 +1275,58 @@ export function useRecordCouponUsage() {
     mutationFn: async ({
       couponId,
       orderId,
+      discountAmount,
     }: {
       couponId: string;
-      orderId?: string;
+      orderId: string;       // real orders.id UUID — must exist before calling this
+      discountAmount: number;
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
 
-      // Record usage
-      const { data: usage, error: usageError } = await supabase
+      const { data, error } = await supabase
         .from('coupon_usage')
         .insert({
           coupon_id: couponId,
           customer_id: session.user.id,
           order_id: orderId,
+          discount_amount: discountAmount,
         })
         .select()
         .single();
 
-      if (usageError) throw usageError;
+      if (error) {
+        // 23505 = unique_violation (coupon_id, order_id already exists) — safe to ignore
+        if (error.code === '23505') {
+          console.warn('[coupon] usage already recorded for order', orderId);
+          return null;
+        }
+        throw error;
+      }
 
-      // Increment usage count
-      const { error: updateError } = await supabase.rpc('increment_coupon_usage', {
-        coupon_id: couponId,
-      });
-
-      if (updateError) throw updateError;
-
-      return usage;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: couponQueryKeys.active() });
-      queryClient.invalidateQueries({ queryKey: couponQueryKeys.usage(session?.user?.id!) });
+      queryClient.invalidateQueries({
+        queryKey: couponQueryKeys.myUsage(session?.user?.id ?? ''),
+      });
     },
   });
 }
 
-// Calculate discount helper
-export function calculateCouponDiscount(
-  coupon: Coupon,
-  orderAmount: number
-): number {
-  if (orderAmount < coupon.min_order_amount) {
-    return 0;
-  }
+// ─── Pure discount calculator — no DB calls ──────────────────────────────
+export function calculateCouponDiscount(coupon: Coupon, orderAmount: number): number {
+  if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) return 0;
 
   let discount = 0;
-  
   if (coupon.discount_type === 'percentage') {
     discount = (orderAmount * coupon.discount_value) / 100;
-    if (coupon.max_discount_amount) {
-      discount = Math.min(discount, coupon.max_discount_amount);
-    }
+    if (coupon.max_discount_amount) discount = Math.min(discount, coupon.max_discount_amount);
   } else if (coupon.discount_type === 'flat') {
     discount = coupon.discount_value;
   }
 
-  return discount;
+  return Math.max(discount, 0);
 }
 
 

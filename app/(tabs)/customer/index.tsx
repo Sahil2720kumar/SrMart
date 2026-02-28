@@ -31,30 +31,11 @@ import { useOffers } from "@/hooks/queries"
 import PromoBanner from "@/components/PromoBanner"             // ← new
 
 export default function HomeScreen() {
-  const {
-    data: categories = [],
-    isLoading: isLoadingCategories,
-    isError: isErrorCategories,
-  } = useCategories()
-  const {
-    data: addresses = [],
-    isLoading: isLoadingAddresses,
-    isError: isErrorAddresses,
-  } = useCustomerAddresses()
-  const {
-    data: bestSellerProducts = [],
-    isLoading: isLoadingBestSellers,
-    isError: isErrorBestSellers,
-  } = useBestSellerProducts()
-  const {
-    data: trendingProducts = [],
-    isLoading: isLoadingTrending,
-    isError: isErrorTrending,
-  } = useTrendingProducts()
-  const {
-    data: offers = [],
-    isLoading: isLoadingOffers,   // ← new
-  } = useOffers()           // ← new  (non-blocking — banner degrades gracefully)
+  const { data: categories = [], isLoading: isLoadingCategories, isError: isErrorCategories, error: categoriesError } = useCategories()
+  const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses, error: addressesError } = useCustomerAddresses()
+  const { data: bestSellerProducts = [], isLoading: isLoadingBestSellers, isError: isErrorBestSellers, error: bestSellersError } = useBestSellerProducts()
+  const { data: trendingProducts = [], isLoading: isLoadingTrending, isError: isErrorTrending, error: trendingError } = useTrendingProducts()
+  const { data: offers = [], isLoading: isLoadingOffers, isError: isErrorOffers, error: offersError, } = useOffers()
 
   const [searchQuery, setSearchQuery] = useState("")
   const { cart, addToCart, updateQuantity, totalItems } = useCartStore()
@@ -68,6 +49,14 @@ export default function HomeScreen() {
       setSelectedAddress(defaultAddress)
     }
   }, [addresses])
+
+  useEffect(() => {
+    if (isErrorAddresses) console.error("[HomeScreen] Failed to load addresses:", addressesError)
+    if (isErrorCategories) console.error("[HomeScreen] Failed to load categories:", categoriesError)
+    if (isErrorBestSellers) console.error("[HomeScreen] Failed to load best seller products:", bestSellersError)
+    if (isErrorTrending) console.error("[HomeScreen] Failed to load trending products:", trendingError)
+    if (isErrorOffers) console.error("[HomeScreen] Failed to load offers:", offersError)  
+  }, [isErrorAddresses, isErrorCategories, isErrorBestSellers, isErrorTrending, isErrorOffers])
 
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity

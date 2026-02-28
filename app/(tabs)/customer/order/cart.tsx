@@ -134,11 +134,20 @@ export default function CartScreen() {
           <Text className="text-base font-bold text-gray-900 mb-4">Before you Checkout</Text>
           <FlatList
             data={recommendedProducts}
-            renderItem={({ item }) => <OfferProductCard item={item} wishlist={wishlist} cart={cart} toggleWishlist={toggleWishlist} updateQuantity={updateQuantity} addToCart={addToCart} />}
+            renderItem={({ item }) => (
+              <OfferProductCard
+                item={item}
+                wishlist={wishlist}
+                cart={cart}
+                toggleWishlist={toggleWishlist}
+                updateQuantity={updateQuantity}
+                addToCart={addToCart}
+              />
+            )}
             keyExtractor={(item) => item.id}
-            numColumns={2}
-            scrollEnabled={false}
-            contentContainerClassName="gap-4"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12 }}
           />
         </View>
 

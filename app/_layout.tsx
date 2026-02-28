@@ -11,6 +11,12 @@ import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
 import { OneSignal } from 'react-native-onesignal';
 import * as Device from "expo-device"
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+// AsyncStorage.removeItem('discount-store').then(() => {
+//   console.log('Cart store cleared!');
+// });
 
 Sentry.init({
   dsn: 'https://fc55274d0c42d1a57af8a2a0ce9a0056@o4510942569037824.ingest.us.sentry.io/4510942570414080',

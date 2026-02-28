@@ -8,6 +8,7 @@ import {
 import { WebView } from "react-native-webview";
 import { supabase } from "@/lib/supabase";
 import useDiscountStore from "@/store/useDiscountStore";
+import { useRecordCouponUsage } from "@/hooks/queries/orders";
 import { PaymentMethod } from "@/types/enums.types";
 import { useAuthStore } from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
@@ -64,7 +65,6 @@ const getRazorpayHTML = (
   <div id="loading">Opening payment...</div>
   <script>
     var isTestMode = "${keyId}".startsWith("rzp_test_");
-
     var options = {
       key: "${keyId}",
       amount: ${amount},
@@ -79,7 +79,6 @@ const getRazorpayHTML = (
         vpa: isTestMode ? "success@razorpay" : "",
       },
       theme: { color: "#22c55e" },
-    
       handler: function(response) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: "PAYMENT_SUCCESS",
@@ -96,7 +95,6 @@ const getRazorpayHTML = (
         backdropclose: false,
       }
     };
-
     var rzp = new Razorpay(options);
     rzp.on("payment.failed", function(response) {
       window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -105,7 +103,6 @@ const getRazorpayHTML = (
         code: response.error.code,
       }));
     });
-
     window.onload = function() {
       document.getElementById("loading").style.display = "none";
       rzp.open();
@@ -123,11 +120,7 @@ export default function PaymentScreen() {
   const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
   const [razorpayHTML, setRazorpayHTML] = useState("");
   const [isTestMode, setIsTestMode] = useState(false);
-
-  // ✅ NEW: store razorpay_order_id so we can save it after order group is created
   const [razorpayOrderId, setRazorpayOrderId] = useState<string | null>(null);
-
-  const insets = useSafeAreaInsets();
 
   const [pendingOrderData, setPendingOrderData] = useState<{
     orders: CreateOrderInput[];
@@ -138,9 +131,13 @@ export default function PaymentScreen() {
     couponCode: string | null;
   } | null>(null);
 
+  const insets = useSafeAreaInsets();
   const { session } = useAuthStore();
   const { cartItems, totalPrice, clearCart } = useCartStore();
-  const { activeDiscount, discountAmount } = useDiscountStore();
+  const { activeDiscount, discountAmount, removeDiscount } = useDiscountStore();
+
+  // ← NEW: hook to record coupon usage after order is created
+  const recordCouponUsage = useRecordCouponUsage();
 
   const { data: addresses, isLoading: isLoadingAddresses } = useCustomerAddresses();
   const { data: customerData, isLoading: isLoadingCustomer } = useCustomerProfile();
@@ -165,7 +162,6 @@ export default function PaymentScreen() {
 
   const prepareOrderData = () => {
     const vendorMap = new Map<string, Array<{ productId: string; product: any; quantity: number }>>();
-
     cartItems.forEach((item) => {
       const vendorId = item.product?.vendor_id;
       if (!vendorId) return;
@@ -217,7 +213,42 @@ export default function PaymentScreen() {
     return { orders, groupSubtotal, groupDeliveryFee, groupTax, groupDiscount: 0 };
   };
 
-  // ✅ UPDATED: accepts optional rzpOrderId to save after order group creation
+  // ─── Record coupon usage for all orders in the group ─────────────────────
+  // Called AFTER the order group is successfully created.
+  // The DB trigger auto-increments coupons.usage_count on each insert.
+  const recordCouponUsageForOrders = async (groupId: string) => {
+    if (!activeDiscount?.couponId) return; // no coupon applied
+
+    try {
+      // Fetch all order ids that belong to this group
+      const { data: orders, error } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("order_group_id", groupId);
+
+      if (error || !orders?.length) {
+        console.warn("[coupon] could not fetch orders for group", groupId, error);
+        return;
+      }
+
+      // Record usage once — against the first order in the group.
+      // coupon_usage has a unique constraint on (coupon_id, order_id) so
+      // recording once per group is the correct behaviour.
+      const firstOrderId = orders[0].id;
+
+      await recordCouponUsage.mutateAsync({
+        couponId: activeDiscount.couponId,
+        orderId: firstOrderId,
+        discountAmount: discountAmount,
+      });
+    } catch (err) {
+      // Non-fatal — order is placed, usage recording failed.
+      // Log it; an admin can reconcile manually if needed.
+      console.error("[coupon] failed to record usage:", err);
+    }
+  };
+
+  // ─── Create order in DB ───────────────────────────────────────────────────
   const createOrderInDB = async (
     orderData: typeof pendingOrderData,
     rzpOrderId?: string,
@@ -236,22 +267,31 @@ export default function PaymentScreen() {
 
     if (error || !groupId) throw new Error(error?.message || "Failed to create order");
 
-    // ✅ Save razorpay_order_id to the newly created order group
+    // Save razorpay_order_id to the group (non-fatal if it fails)
     if (rzpOrderId) {
       const { error: updateError } = await supabase
         .from("order_groups")
         .update({ razorpay_order_id: rzpOrderId })
         .eq("id", groupId);
-
-      if (updateError) {
-        // Non-fatal — log but don't throw
-        console.error("Failed to save razorpay_order_id:", updateError);
-      }
+      if (updateError) console.error("Failed to save razorpay_order_id:", updateError);
     }
 
-    return groupId;
+    return groupId as string;
   };
 
+  // ─── COD + Online shared post-order logic ────────────────────────────────
+  const handleOrderSuccess = async (groupId: string) => {
+    // Record coupon usage BEFORE clearing cart/discount so we still have
+    // activeDiscount.couponId and discountAmount in scope
+    await recordCouponUsageForOrders(groupId);
+
+    setOrderGroupId(groupId);
+    clearCart();
+    removeDiscount(); // clear coupon from store after usage is recorded
+    setShowSuccess(true);
+  };
+
+  // ─── Place order ──────────────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!selectedPayment) {
       Toast.show({ type: "error", text1: "Please select a payment method", position: "top" });
@@ -293,9 +333,9 @@ export default function PaymentScreen() {
         });
 
         if (error || !groupId) throw new Error(error?.message || "Failed to create order");
-        setOrderGroupId(groupId);
-        clearCart();
-        setShowSuccess(true);
+
+        // ← Record coupon usage + clear everything
+        await handleOrderSuccess(groupId);
 
       } else if (selectedPayment === "online") {
         const storedOrderData = { ...orderData, couponCode };
@@ -327,8 +367,6 @@ export default function PaymentScreen() {
     }
 
     const { razorpay_order_id, amount, key_id } = data;
-
-    // ✅ Store razorpay_order_id in state to use after payment success
     setRazorpayOrderId(razorpay_order_id);
     setIsTestMode(key_id?.startsWith("rzp_test_") || false);
 
@@ -364,13 +402,12 @@ export default function PaymentScreen() {
         setIsProcessing(true);
 
         try {
-          // ✅ Pass razorpayOrderId (from state) so it gets saved to order_groups after creation
           const groupId = await createOrderInDB(pendingOrderData, razorpayOrderId ?? undefined);
-          setOrderGroupId(groupId);
-          clearCart();
           setPendingOrderData(null);
-          setRazorpayOrderId(null); // cleanup
-          setShowSuccess(true);
+          setRazorpayOrderId(null);
+
+          // ← Record coupon usage + clear everything
+          await handleOrderSuccess(groupId);
         } catch (err: any) {
           Toast.show({
             type: "error",
@@ -386,7 +423,7 @@ export default function PaymentScreen() {
       } else if (data.type === "PAYMENT_DISMISSED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
-        setRazorpayOrderId(null); // cleanup
+        setRazorpayOrderId(null);
         Toast.show({
           type: "info",
           text1: "Payment Cancelled",
@@ -397,7 +434,7 @@ export default function PaymentScreen() {
       } else if (data.type === "PAYMENT_FAILED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
-        setRazorpayOrderId(null); // cleanup
+        setRazorpayOrderId(null);
         Toast.show({
           type: "error",
           text1: "Payment Failed",
@@ -555,7 +592,7 @@ export default function PaymentScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Razorpay WebView Modal — Full Screen */}
+      {/* Razorpay WebView Modal */}
       <Modal
         visible={showRazorpayWebView}
         transparent={false}
@@ -563,7 +600,7 @@ export default function PaymentScreen() {
         onRequestClose={() => {
           setShowRazorpayWebView(false);
           setPendingOrderData(null);
-          setRazorpayOrderId(null); // cleanup
+          setRazorpayOrderId(null);
           Toast.show({
             type: "info",
             text1: "Payment Cancelled",
@@ -573,8 +610,6 @@ export default function PaymentScreen() {
         }}
       >
         <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: insets.top }}>
-
-          {/* Processing overlay */}
           {isProcessing && (
             <View style={{
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
@@ -583,11 +618,8 @@ export default function PaymentScreen() {
               zIndex: 20,
             }}>
               <View style={{
-                backgroundColor: "#fff",
-                borderRadius: 20,
-                padding: 28,
-                alignItems: "center",
-                marginHorizontal: 48,
+                backgroundColor: "#fff", borderRadius: 20, padding: 28,
+                alignItems: "center", marginHorizontal: 48,
               }}>
                 <ActivityIndicator size="large" color="#22c55e" />
                 <Text style={{ fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 14 }}>
@@ -600,17 +632,11 @@ export default function PaymentScreen() {
             </View>
           )}
 
-          {/* Test mode banner */}
           {!isTestMode && (
             <View style={{
-              backgroundColor: "#fef9c3",
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              borderBottomWidth: 1,
-              borderBottomColor: "#fef08a",
+              backgroundColor: "#fef9c3", paddingHorizontal: 16, paddingVertical: 8,
+              flexDirection: "row", alignItems: "center", gap: 8,
+              borderBottomWidth: 1, borderBottomColor: "#fef08a",
             }}>
               <Text style={{ fontSize: 12 }}>⚠️</Text>
               <Text style={{ fontSize: 11, color: "#854d0e", fontWeight: "600", flex: 1 }}>
@@ -619,7 +645,6 @@ export default function PaymentScreen() {
             </View>
           )}
 
-          {/* WebView */}
           <WebView
             source={{ html: razorpayHTML }}
             onMessage={handleWebViewMessage}
@@ -664,7 +689,6 @@ export default function PaymentScreen() {
         </View>
       </Modal>
 
-      {/* COD processing blur */}
       {isProcessing && !showRazorpayWebView && (
         <BlurView
           intensity={10}
