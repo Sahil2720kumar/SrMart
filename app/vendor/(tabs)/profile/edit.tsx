@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as Location from 'expo-location';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -77,6 +78,9 @@ export default function EditProfileScreen() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [businessHours, setBusinessHours] = useState<WeekSchedule>({
     monday: { ...DEFAULT_HOURS },
     tuesday: { ...DEFAULT_HOURS },
@@ -102,6 +106,8 @@ export default function EditProfileScreen() {
       setCity(vendorData.city || '');
       setState(vendorData.state || '');
       setPincode(vendorData.pincode || '');
+      setLatitude(vendorData.latitude?.toString() || '');
+      setLongitude(vendorData.longitude?.toString() || '');
 
       if (vendorData.business_hours && Object.keys(vendorData.business_hours).length > 0) {
         const parsedHours: Partial<WeekSchedule> = {};
@@ -122,6 +128,49 @@ export default function EditProfileScreen() {
     }
   }, [vendorData]);
 
+  const handleGetCurrentLocation = async () => {
+    try {
+      setIsFetchingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Denied',
+          text2: 'Location permission is required to auto-fill coordinates.',
+          position: 'top',
+        });
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLatitude(location.coords.latitude.toFixed(6));
+      setLongitude(location.coords.longitude.toFixed(6));
+      // Clear any existing coordinate errors
+      setErrors((prev) => {
+        const updated = { ...prev };
+        delete updated.latitude;
+        delete updated.longitude;
+        return updated;
+      });
+      Toast.show({
+        type: 'success',
+        text1: 'Location Detected',
+        text2: 'Coordinates updated from your current location.',
+        position: 'top',
+      });
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Location Error',
+        text2: err.message || 'Failed to get current location.',
+        position: 'top',
+      });
+    } finally {
+      setIsFetchingLocation(false);
+    }
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -133,6 +182,24 @@ export default function EditProfileScreen() {
       newErrors.pincode = 'Pincode is required';
     } else if (!/^\d{6}$/.test(pincode)) {
       newErrors.pincode = 'Please enter a valid 6-digit pincode';
+    }
+
+    if (!latitude.trim()) {
+      newErrors.latitude = 'Latitude is required';
+    } else {
+      const latNum = parseFloat(latitude);
+      if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+        newErrors.latitude = 'Please enter a valid latitude (-90 to 90)';
+      }
+    }
+
+    if (!longitude.trim()) {
+      newErrors.longitude = 'Longitude is required';
+    } else {
+      const lngNum = parseFloat(longitude);
+      if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+        newErrors.longitude = 'Please enter a valid longitude (-180 to 180)';
+      }
     }
 
     DAYS.forEach((day) => {
@@ -179,6 +246,8 @@ export default function EditProfileScreen() {
         city: city.trim(),
         state: state.trim(),
         pincode: pincode.trim(),
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
         business_hours: formattedBusinessHours,
         updated_at: new Date().toISOString(),
       };
@@ -408,7 +477,7 @@ export default function EditProfileScreen() {
             </View>
 
             {/* Pincode */}
-            <View className="mb-6">
+            <View className="mb-5">
               <Text className="text-gray-700 font-semibold text-sm mb-2">
                 Pincode <Text className="text-red-500">*</Text>
               </Text>
@@ -427,6 +496,74 @@ export default function EditProfileScreen() {
                   <Text className="text-red-600 text-xs font-medium">{errors.pincode}</Text>
                 </View>
               )}
+            </View>
+
+            {/* Latitude & Longitude Row */}
+            <View className="mb-6">
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="location-outline" size={16} color="#059669" />
+                  <Text className="text-gray-700 font-semibold text-sm">
+                    Store Location Coordinates <Text className="text-red-500">*</Text>
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleGetCurrentLocation}
+                  disabled={isFetchingLocation}
+                  className={`flex-row items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg ${
+                    isFetchingLocation ? 'opacity-60' : ''
+                  }`}
+                >
+                  {isFetchingLocation ? (
+                    <ActivityIndicator size={12} color="#059669" />
+                  ) : (
+                    <Ionicons name="navigate" size={14} color="#059669" />
+                  )}
+                  <Text className="text-emerald-700 text-xs font-semibold">
+                    {isFetchingLocation ? 'Detecting...' : 'Use Current'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Text className="text-gray-600 text-xs mb-1.5 font-medium">Latitude</Text>
+                  <TextInput
+                    value={latitude}
+                    onChangeText={setLatitude}
+                    placeholder="e.g. 28.6139"
+                    keyboardType="decimal-pad"
+                    className="bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 font-medium"
+                    placeholderTextColor="#9ca3af"
+                  />
+                  {errors.latitude && (
+                    <View className="flex-row items-center gap-1 mt-2">
+                      <Feather name="alert-circle" size={14} color="#dc2626" />
+                      <Text className="text-red-600 text-xs font-medium flex-1">{errors.latitude}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View className="flex-1">
+                  <Text className="text-gray-600 text-xs mb-1.5 font-medium">Longitude</Text>
+                  <TextInput
+                    value={longitude}
+                    onChangeText={setLongitude}
+                    placeholder="e.g. 77.2090"
+                    keyboardType="decimal-pad"
+                    className="bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 font-medium"
+                    placeholderTextColor="#9ca3af"
+                  />
+                  {errors.longitude && (
+                    <View className="flex-row items-center gap-1 mt-2">
+                      <Feather name="alert-circle" size={14} color="#dc2626" />
+                      <Text className="text-red-600 text-xs font-medium flex-1">{errors.longitude}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <Text className="text-gray-500 text-xs mt-2">
+                💡 Tap "Use Current" to auto-detect, or enter coordinates manually
+              </Text>
             </View>
 
             {/* Business Hours Section */}
