@@ -46,7 +46,6 @@ export default Sentry.wrap(function Layout() {
 
 
   useEffect(() => {
-    console.log("useEffect Called");
     
     const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
 
@@ -56,7 +55,7 @@ export default Sentry.wrap(function Layout() {
     }
 
     if (!Device.isDevice) {
-      console.log("Push notifications require physical device");
+      console.error("Push notifications require physical device");
       return;
     }
 
@@ -65,7 +64,6 @@ export default Sentry.wrap(function Layout() {
     OneSignal.Notifications.requestPermission(true);
 
     const handleClick = (event: any) => {
-      console.log("click");
       
       const data = event.notification.additionalData as {
         type: string;

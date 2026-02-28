@@ -70,13 +70,9 @@ const checkCategoryEligibility = (
   cartItems: CartItemWithDetails[],
   categories?: Array<{ id: string; name: string; slug: string }>
 ): CouponEligibility => {
-  // console.log(categories);
-  // console.log(coupon);
-   //Note
  
   const targetCategory = categories?.find(c => c.id === coupon.applicable_id);
 
-  console.log("targetCategory",targetCategory);
   
   const categoryName = targetCategory?.name || 'this category';
   const categorySlug = targetCategory?.slug || '';

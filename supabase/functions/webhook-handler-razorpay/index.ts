@@ -188,7 +188,7 @@ serve(async (req) => {
           order_id: orders[0].id, // link to first order
           amount: amountPaid / 100, // convert back to rupees
           payment_method: "upi",
-          status: "paid",
+          status: "success",
           transaction_id: razorpayPaymentId,
           gateway_name: "razorpay",
           gateway_response: paymentEntity,

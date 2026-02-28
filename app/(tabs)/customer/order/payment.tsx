@@ -15,6 +15,7 @@ import { useCustomerAddresses, useCustomerProfile } from "@/hooks/queries";
 import { useDeliveryFees } from "@/hooks/usedeliveryfees";
 import { DeliveryFeeBreakdown } from "@/components/Deliveryfeebreakdown";
 import Toast from "react-native-toast-message";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface CreateOrderInput {
   vendor_id: string;
@@ -123,6 +124,11 @@ export default function PaymentScreen() {
   const [razorpayHTML, setRazorpayHTML] = useState("");
   const [isTestMode, setIsTestMode] = useState(false);
 
+  // ✅ NEW: store razorpay_order_id so we can save it after order group is created
+  const [razorpayOrderId, setRazorpayOrderId] = useState<string | null>(null);
+
+  const insets = useSafeAreaInsets();
+
   const [pendingOrderData, setPendingOrderData] = useState<{
     orders: CreateOrderInput[];
     groupSubtotal: number;
@@ -211,7 +217,11 @@ export default function PaymentScreen() {
     return { orders, groupSubtotal, groupDeliveryFee, groupTax, groupDiscount: 0 };
   };
 
-  const createOrderInDB = async (orderData: typeof pendingOrderData) => {
+  // ✅ UPDATED: accepts optional rzpOrderId to save after order group creation
+  const createOrderInDB = async (
+    orderData: typeof pendingOrderData,
+    rzpOrderId?: string,
+  ) => {
     if (!orderData || !customerData) throw new Error("Missing order data");
 
     const { data: groupId, error } = await supabase.rpc("create_order_group_with_orders", {
@@ -225,6 +235,20 @@ export default function PaymentScreen() {
     });
 
     if (error || !groupId) throw new Error(error?.message || "Failed to create order");
+
+    // ✅ Save razorpay_order_id to the newly created order group
+    if (rzpOrderId) {
+      const { error: updateError } = await supabase
+        .from("order_groups")
+        .update({ razorpay_order_id: rzpOrderId })
+        .eq("id", groupId);
+
+      if (updateError) {
+        // Non-fatal — log but don't throw
+        console.error("Failed to save razorpay_order_id:", updateError);
+      }
+    }
+
     return groupId;
   };
 
@@ -304,6 +328,8 @@ export default function PaymentScreen() {
 
     const { razorpay_order_id, amount, key_id } = data;
 
+    // ✅ Store razorpay_order_id in state to use after payment success
+    setRazorpayOrderId(razorpay_order_id);
     setIsTestMode(key_id?.startsWith("rzp_test_") || false);
 
     const { data: userRecord } = await supabase
@@ -338,10 +364,12 @@ export default function PaymentScreen() {
         setIsProcessing(true);
 
         try {
-          const groupId = await createOrderInDB(pendingOrderData);
+          // ✅ Pass razorpayOrderId (from state) so it gets saved to order_groups after creation
+          const groupId = await createOrderInDB(pendingOrderData, razorpayOrderId ?? undefined);
           setOrderGroupId(groupId);
           clearCart();
           setPendingOrderData(null);
+          setRazorpayOrderId(null); // cleanup
           setShowSuccess(true);
         } catch (err: any) {
           Toast.show({
@@ -358,6 +386,7 @@ export default function PaymentScreen() {
       } else if (data.type === "PAYMENT_DISMISSED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
+        setRazorpayOrderId(null); // cleanup
         Toast.show({
           type: "info",
           text1: "Payment Cancelled",
@@ -368,6 +397,7 @@ export default function PaymentScreen() {
       } else if (data.type === "PAYMENT_FAILED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
+        setRazorpayOrderId(null); // cleanup
         Toast.show({
           type: "error",
           text1: "Payment Failed",
@@ -390,7 +420,7 @@ export default function PaymentScreen() {
   }
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <ScrollView className="flex-1 px-4 py-6" showsVerticalScrollIndicator={false}>
         <Text className="text-lg font-bold text-gray-900 mb-6">Select Payment Method</Text>
 
@@ -533,6 +563,7 @@ export default function PaymentScreen() {
         onRequestClose={() => {
           setShowRazorpayWebView(false);
           setPendingOrderData(null);
+          setRazorpayOrderId(null); // cleanup
           Toast.show({
             type: "info",
             text1: "Payment Cancelled",
@@ -541,7 +572,7 @@ export default function PaymentScreen() {
           });
         }}
       >
-        <View style={{ flex: 1, backgroundColor: "#fff" }}>
+        <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: insets.top }}>
 
           {/* Processing overlay */}
           {isProcessing && (
@@ -692,6 +723,6 @@ export default function PaymentScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
