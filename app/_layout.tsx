@@ -12,6 +12,7 @@ import * as Sentry from '@sentry/react-native';
 import { OneSignal } from 'react-native-onesignal';
 import * as Device from "expo-device"
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCartPriceSync } from '@/hooks/usecartpricesync';
 
 
 // AsyncStorage.removeItem('discount-store').then(() => {
@@ -42,7 +43,7 @@ Sentry.init({
 
 export default Sentry.wrap(function Layout() {
   const { initialize, initialized } = useAuthStore();
-
+  useCartPriceSync();
   // Kick off auth initialization — index.tsx waits for `initialized` via authReady prop
   useEffect(() => {
     if (!initialized) {

@@ -39,13 +39,19 @@ export default function DiscountCouponScreen() {
   const cartItems = useCartStore((s) => s.cartItems);
   const totalPrice = useCartStore((s) => s.totalPrice);
   const { discountAmount, activeDiscount, applyDiscount, removeDiscount } = useDiscountStore();
-  const { totalDeliveryFee } = useDeliveryFees({ selectedAddress });
+
+  // Read syncing flag directly from store — layout already runs the sync
+  const isSyncingPrices = useCartStore((s) => s.isSyncingPrices);
+
+  const { totalDeliveryFee } = useDeliveryFees({
+    subtotal: totalPrice,
+    selectedAddress,
+    hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
+    freeDeliveryMinimum: 499,
+  });
 
   const { data: coupons, isLoading } = useActiveCoupons();
-
-  // One query — fetches all per-user usage counts at once, no N+1
   const { data: myUsageMap = {}, isLoading: isLoadingUsage } = useMyAllCouponUsage();
-
   const validateCoupon = useValidateCoupon();
 
   const { filterCoupons, loadingCategories } = useFilteredCoupons(
@@ -55,7 +61,6 @@ export default function DiscountCouponScreen() {
   );
   const { eligible: eligibleCoupons, ineligible: ineligibleCoupons } = filterCoupons(coupons);
 
-  // Split eligible into: within limit vs limit exceeded
   const eligibleWithinLimit = eligibleCoupons.filter(({ coupon }) => {
     const used = myUsageMap[coupon.id] ?? 0;
     const limit = coupon.usage_limit_per_user ?? 1;
@@ -72,9 +77,7 @@ export default function DiscountCouponScreen() {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-    });
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   const getDiscountLabel = (coupon: Coupon) => {
     if (coupon.includes_free_delivery && coupon.discount_value > 0) {
@@ -83,8 +86,7 @@ export default function DiscountCouponScreen() {
         : `FREE DELIVERY + ₹${coupon.discount_value} OFF`;
     }
     if (coupon.discount_type === 'percentage') return `${coupon.discount_value}% OFF`;
-    if (coupon.discount_type === 'flat' && coupon.discount_value > 0)
-      return `₹${coupon.discount_value} OFF`;
+    if (coupon.discount_type === 'flat' && coupon.discount_value > 0) return `₹${coupon.discount_value} OFF`;
     if (coupon.includes_free_delivery) return 'FREE DELIVERY';
     return 'FREE SHIPPING';
   };
@@ -101,13 +103,7 @@ export default function DiscountCouponScreen() {
   const handleApplyCoupon = async (coupon: Coupon) => {
     try {
       setError('');
-      await validateCoupon.mutateAsync({
-        couponCode: coupon.code,
-        orderAmount: totalPrice,
-      });
-
-      // coupon.id is the first arg — stored in discount store so
-      // PaymentScreen can call useRecordCouponUsage after order creation
+      await validateCoupon.mutateAsync({ couponCode: coupon.code, orderAmount: totalPrice });
       applyDiscount(
         coupon.id,
         coupon.code,
@@ -129,10 +125,7 @@ export default function DiscountCouponScreen() {
     if (!couponCode.trim()) return;
     try {
       setError('');
-      const result = await validateCoupon.mutateAsync({
-        couponCode,
-        orderAmount: totalPrice,
-      });
+      const result = await validateCoupon.mutateAsync({ couponCode, orderAmount: totalPrice });
       const coupon = result.coupon;
       applyDiscount(
         coupon.id,
@@ -155,8 +148,7 @@ export default function DiscountCouponScreen() {
   // ─── Card renderers ───────────────────────────────────────────────────────
   const renderEligibleCard = (coupon: Coupon, discount: number) => {
     const isSelected = activeDiscount?.code === coupon.code;
-    const remainingUses =
-      coupon.usage_limit != null ? coupon.usage_limit - (coupon.usage_count ?? 0) : null;
+    const remainingUses = coupon.usage_limit != null ? coupon.usage_limit - (coupon.usage_count ?? 0) : null;
     const { icon, color, bg, text } = getCouponStyle(coupon);
 
     return (
@@ -172,9 +164,7 @@ export default function DiscountCouponScreen() {
           </View>
           <View className="flex-1 ml-3">
             <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-base font-bold text-gray-900 flex-1">
-                {getDiscountLabel(coupon)}
-              </Text>
+              <Text className="text-base font-bold text-gray-900 flex-1">{getDiscountLabel(coupon)}</Text>
               {remainingUses != null && remainingUses < 10 && (
                 <View className="bg-orange-100 px-2 py-0.5 rounded-full">
                   <Text className="text-orange-700 text-xs font-semibold">{remainingUses} left</Text>
@@ -190,15 +180,12 @@ export default function DiscountCouponScreen() {
               </View>
               <View className="flex-row items-center">
                 <Feather name="clock" size={12} color="#9ca3af" />
-                <Text className="text-xs text-gray-500 ml-1">
-                  Valid till {formatDate(coupon.end_date)}
-                </Text>
+                <Text className="text-xs text-gray-500 ml-1">Valid till {formatDate(coupon.end_date)}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Save + Apply row */}
         <View className={`flex-row items-center justify-between px-4 py-3 border-t ${
           isSelected ? 'border-green-200 bg-green-100' : 'border-gray-100 bg-gray-50'
         }`}>
@@ -228,7 +215,6 @@ export default function DiscountCouponScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Terms */}
         <View className="px-4 pb-3 pt-2">
           <View className="flex-row items-start">
             <Feather name="info" size={12} color="#9ca3af" />
@@ -249,18 +235,13 @@ export default function DiscountCouponScreen() {
     const { icon } = getCouponStyle(coupon);
 
     return (
-      <View
-        key={coupon.id}
-        className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50 opacity-80"
-      >
+      <View key={coupon.id} className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50 opacity-80">
         <View className="flex-row items-start p-4">
           <View className="w-14 h-14 rounded-xl items-center justify-center bg-gray-100">
             <Feather name={icon} size={24} color="#9ca3af" />
           </View>
           <View className="flex-1 ml-3">
-            <Text className="text-base font-bold text-gray-500 mb-1">
-              {getDiscountLabel(coupon)}
-            </Text>
+            <Text className="text-base font-bold text-gray-500 mb-1">{getDiscountLabel(coupon)}</Text>
             {coupon.description && (
               <Text className="text-sm text-gray-400 mb-2">{coupon.description}</Text>
             )}
@@ -270,15 +251,11 @@ export default function DiscountCouponScreen() {
               </View>
               <View className="flex-row items-center">
                 <Feather name="clock" size={12} color="#9ca3af" />
-                <Text className="text-xs text-gray-400 ml-1">
-                  Valid till {formatDate(coupon.end_date)}
-                </Text>
+                <Text className="text-xs text-gray-400 ml-1">Valid till {formatDate(coupon.end_date)}</Text>
               </View>
             </View>
           </View>
         </View>
-
-        {/* Limit exceeded banner */}
         <View className="mx-4 mb-4 bg-red-50 border border-red-100 rounded-xl px-3 py-3">
           <View className="flex-row items-center mb-1">
             <Feather name="slash" size={14} color="#dc2626" />
@@ -303,18 +280,13 @@ export default function DiscountCouponScreen() {
     const { icon } = getCouponStyle(coupon);
 
     return (
-      <View
-        key={coupon.id}
-        className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50 opacity-75"
-      >
+      <View key={coupon.id} className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50 opacity-75">
         <View className="flex-row items-start p-4">
           <View className="w-14 h-14 rounded-xl items-center justify-center bg-gray-100">
             <Feather name={icon} size={24} color="#9ca3af" />
           </View>
           <View className="flex-1 ml-3">
-            <Text className="text-base font-bold text-gray-600 mb-1">
-              {getDiscountLabel(coupon)}
-            </Text>
+            <Text className="text-base font-bold text-gray-600 mb-1">{getDiscountLabel(coupon)}</Text>
             {coupon.description && (
               <Text className="text-sm text-gray-500 mb-2">{coupon.description}</Text>
             )}
@@ -324,14 +296,11 @@ export default function DiscountCouponScreen() {
               </View>
               <View className="flex-row items-center">
                 <Feather name="clock" size={12} color="#9ca3af" />
-                <Text className="text-xs text-gray-500 ml-1">
-                  Valid till {formatDate(coupon.end_date)}
-                </Text>
+                <Text className="text-xs text-gray-500 ml-1">Valid till {formatDate(coupon.end_date)}</Text>
               </View>
             </View>
           </View>
         </View>
-
         <View className="px-4 py-3 bg-amber-50 border-t border-amber-100">
           <View className="flex-row items-start">
             <Feather name="alert-circle" size={14} color="#f59e0b" />
@@ -339,21 +308,16 @@ export default function DiscountCouponScreen() {
           </View>
           {conflictingItems && conflictingItems.length > 0 && (
             <View className="mt-2 bg-white rounded-lg p-2">
-              <Text className="text-xs text-amber-600 font-semibold mb-1">
-                Remove these items to apply:
-              </Text>
+              <Text className="text-xs text-amber-600 font-semibold mb-1">Remove these items to apply:</Text>
               {conflictingItems.map((item) => (
                 <View key={item.id} className="flex-row items-center mt-1">
                   <Feather name="x" size={12} color="#f59e0b" />
-                  <Text className="text-xs text-amber-700 ml-1 flex-1" numberOfLines={1}>
-                    {item.name}
-                  </Text>
+                  <Text className="text-xs text-amber-700 ml-1 flex-1" numberOfLines={1}>{item.name}</Text>
                 </View>
               ))}
             </View>
           )}
         </View>
-
         <View className="px-4 pb-3 pt-2">
           <View className="flex-row items-start">
             <Feather name="info" size={12} color="#9ca3af" />
@@ -367,7 +331,7 @@ export default function DiscountCouponScreen() {
     );
   };
 
-  const isPageLoading = isLoading || loadingCategories || isLoadingUsage;
+  const isPageLoading = isLoading || loadingCategories || isLoadingUsage || isSyncingPrices;
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -380,10 +344,7 @@ export default function DiscountCouponScreen() {
         }}
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Manual entry */}
         <View className="bg-white px-4 py-5 mb-2">
           <Text className="text-base font-bold text-gray-900 mb-3">Enter Coupon Code</Text>
@@ -435,9 +396,7 @@ export default function DiscountCouponScreen() {
             <Text className="text-base font-bold text-gray-900">Available Coupons</Text>
             {eligibleWithinLimit.length > 0 && (
               <View className="bg-green-50 px-3 py-1 rounded-full">
-                <Text className="text-green-600 text-xs font-semibold">
-                  {eligibleWithinLimit.length} Applicable
-                </Text>
+                <Text className="text-green-600 text-xs font-semibold">{eligibleWithinLimit.length} Applicable</Text>
               </View>
             )}
           </View>
@@ -449,9 +408,7 @@ export default function DiscountCouponScreen() {
             </View>
           ) : eligibleWithinLimit.length > 0 ? (
             <View className="gap-3">
-              {eligibleWithinLimit.map(({ coupon, discount }) =>
-                renderEligibleCard(coupon, discount),
-              )}
+              {eligibleWithinLimit.map(({ coupon, discount }) => renderEligibleCard(coupon, discount))}
             </View>
           ) : (
             <View className="py-12 items-center justify-center">
@@ -468,7 +425,7 @@ export default function DiscountCouponScreen() {
           )}
         </View>
 
-        {/* Already used (limit exceeded) */}
+        {/* Already used */}
         {!isPageLoading && limitExceededCoupons.length > 0 && (
           <View className="px-4 py-5 bg-white mt-2">
             <View className="flex-row items-center justify-between mb-4">
@@ -498,9 +455,7 @@ export default function DiscountCouponScreen() {
             </View>
             <View className="gap-3">
               {ineligibleCoupons.map(({ coupon, eligibility, discount }) =>
-                renderIneligibleCard(
-                  coupon, discount, eligibility.reason, eligibility.conflictingItems,
-                ),
+                renderIneligibleCard(coupon, discount, eligibility.reason, eligibility.conflictingItems),
               )}
             </View>
           </View>

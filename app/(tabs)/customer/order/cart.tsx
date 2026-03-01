@@ -19,23 +19,20 @@ export default function CartScreen() {
   const { data: addresses = [], isLoading: isLoadingAddresses, isError: isErrorAddresses } = useCustomerAddresses()
   const { cart, addToCart, updateQuantity, totalItems, totalPrice, cartItems } = useCartStore()
   const { wishlist, toggleWishlist } = useWishlistStore()
-  const {
-    discountAmount,
-    activeDiscount,
-    removeDiscount,
-  } = useDiscountStore()
+  const { discountAmount, activeDiscount, removeDiscount } = useDiscountStore()
+
+  // Layout's useCartPriceSync manages this — just read the flag
+  const isSyncingPrices = useCartStore((s) => s.isSyncingPrices)
 
   const [showAddressSheet, setShowAddressSheet] = useState(false)
   const [selectedAddress, setSelectedAddress] = useState(addresses.find(addr => addr.is_default) || addresses[0])
 
-  // Update selected address when addresses load
   useEffect(() => {
     if (addresses.length > 0 && !selectedAddress) {
       setSelectedAddress(addresses.find(addr => addr.is_default) || addresses[0])
     }
   }, [addresses])
 
-  // Use the delivery fees hook
   const {
     vendorDeliveryFees,
     totalDeliveryFee,
@@ -43,7 +40,6 @@ export default function CartScreen() {
     vendorCount,
     isCalculating: isCalculatingDelivery,
     isFreeDelivery,
-
   } = useDeliveryFees({
     subtotal: totalPrice,
     selectedAddress,
@@ -51,20 +47,18 @@ export default function CartScreen() {
     freeDeliveryMinimum: 499
   })
 
-
-
   const itemTotal = totalPrice
   const grandTotal = Math.max(itemTotal + totalDeliveryFee - discountAmount, 0)
 
   const handlePlaceOrder = useCallback(() => {
     router.navigate("/(tabs)/customer/order/checkout")
-  }, []);
+  }, [])
 
   const handleNavigateToCoupon = useCallback(() => {
     router.push("/customer/order/discount-coupon")
-  }, []);
+  }, [])
 
-  if (isLoadingAddresses || isLoadingRecommendedProducts) {
+  if (isLoadingAddresses || isLoadingRecommendedProducts || isSyncingPrices) {
     return (
       <View className="flex-1 items-center justify-center py-20">
         <ActivityIndicator size="large" color="#22c55e" />
@@ -74,9 +68,7 @@ export default function CartScreen() {
   }
 
   if (isErrorAddresses || isErrorRecommendedProducts) {
-    return (
-      <FullPageError code="500" />
-    )
+    return <FullPageError code="500" />
   }
 
   return (
@@ -86,30 +78,21 @@ export default function CartScreen() {
         {/* Cart Items */}
         <View className="mb-4">
           {cartItems.length === 0 ? (
-            /* ---------- EMPTY CART ---------- */
             <View className="items-center justify-center py-16 px-6 bg-white rounded-2xl border border-gray-100">
               <Feather name="shopping-cart" size={56} color="#9ca3af" />
-
-              <Text className="text-xl font-bold text-gray-900 mt-4">
-                Your cart is empty
-              </Text>
-
+              <Text className="text-xl font-bold text-gray-900 mt-4">Your cart is empty</Text>
               <Text className="text-gray-500 text-sm text-center mt-2">
-                Looks like you haven’t added anything yet.
+                Looks like you haven't added anything yet.
               </Text>
-
               <TouchableOpacity
                 onPress={() => router.push('/customer')}
                 activeOpacity={0.8}
                 className="mt-6 bg-green-500 px-6 py-3 rounded-xl"
               >
-                <Text className="text-white font-semibold text-sm">
-                  Start Shopping
-                </Text>
+                <Text className="text-white font-semibold text-sm">Start Shopping</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            /* ---------- CART ITEMS ---------- */
             <FlatList
               data={cartItems}
               renderItem={({ item }) => (
@@ -127,7 +110,6 @@ export default function CartScreen() {
             />
           )}
         </View>
-
 
         {/* Before You Checkout */}
         <View className="px-4 mt-6 mb-4">
@@ -154,20 +136,19 @@ export default function CartScreen() {
         {/* Apply Coupon */}
         <TouchableOpacity
           onPress={handleNavigateToCoupon}
-          className={`mx-4 mb-4 flex-row items-center rounded-2xl p-4 ${activeDiscount
-            ? 'bg-green-50 border-2 border-green-500'
-            : 'bg-white border border-green-500'
-            }`}
+          className={`mx-4 mb-4 flex-row items-center rounded-2xl p-4 ${
+            activeDiscount ? 'bg-green-50 border-2 border-green-500' : 'bg-white border border-green-500'
+          }`}
         >
-          <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${activeDiscount ? 'bg-green-500' : 'bg-green-100'
-            }`}>
+          <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${
+            activeDiscount ? 'bg-green-500' : 'bg-green-100'
+          }`}>
             {activeDiscount ? (
               <Feather name="check" size={16} color="white" />
             ) : (
               <Feather name="tag" size={16} color="#16a34a" />
             )}
           </View>
-
           <View className="flex-1">
             {activeDiscount ? (
               <>
@@ -178,19 +159,11 @@ export default function CartScreen() {
               <Text className="text-base font-medium text-gray-900">APPLY COUPON</Text>
             )}
           </View>
-
-          {activeDiscount ? (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                removeDiscount();
-              }}
-              className="mr-2"
-            >
+          {activeDiscount && (
+            <TouchableOpacity onPress={(e) => { e.stopPropagation(); removeDiscount(); }} className="mr-2">
               <Feather name="x-circle" size={20} color="#16a34a" />
             </TouchableOpacity>
-          ) : null}
-
+          )}
           <Feather name="chevron-right" size={20} color="#9ca3af" />
         </TouchableOpacity>
 
@@ -213,7 +186,6 @@ export default function CartScreen() {
             </View>
           )}
 
-          {/* Delivery Fee Breakdown Component */}
           <DeliveryFeeBreakdown
             vendorDeliveryFees={vendorDeliveryFees}
             totalDeliveryFee={totalDeliveryFee}
@@ -246,19 +218,24 @@ export default function CartScreen() {
 
         {/* Delivery Address */}
         <View className="px-4 mb-4">
-          <TouchableOpacity onPress={() => setShowAddressSheet(true)} className="flex-row items-center justify-between bg-gray-50 rounded-2xl p-4">
+          <TouchableOpacity
+            onPress={() => setShowAddressSheet(true)}
+            className="flex-row items-center justify-between bg-gray-50 rounded-2xl p-4"
+          >
             <View className="flex-row items-center flex-1">
               <View className="w-8 h-8 rounded-full items-center justify-center mr-3">
                 <Feather name="home" size={24} color="#16a34a" />
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress?.label || 'Home'}</Text>
-                <Text className="text-xs text-gray-500 mt-1">{selectedAddress?.address_line1 || 'Select address'}</Text>
+                <Text className="text-sm font-semibold text-gray-900">
+                  Delivering to {selectedAddress?.label || 'Home'}
+                </Text>
+                <Text className="text-xs text-gray-500 mt-1">
+                  {selectedAddress?.address_line1 || 'Select address'}
+                </Text>
               </View>
             </View>
-            <View>
-              <Text className="text-green-500 text-sm font-medium">Change</Text>
-            </View>
+            <Text className="text-green-500 text-sm font-medium">Change</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -274,9 +251,7 @@ export default function CartScreen() {
           {isCalculatingDelivery ? (
             <>
               <ActivityIndicator color="white" size="small" className="mr-3" />
-              <Text className="text-white font-semibold text-base">
-                Calculating delivery...
-              </Text>
+              <Text className="text-white font-semibold text-base">Calculating delivery...</Text>
             </>
           ) : (
             <>
@@ -292,12 +267,11 @@ export default function CartScreen() {
       {showAddressSheet && (
         <BlurView
           intensity={10}
-          experimentalBlurMethod='dimezisBlurView'
+          experimentalBlurMethod="dimezisBlurView"
           style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
         />
       )}
 
-      {/* Address Selection Bottom Sheet */}
       <SelectAddressBottomSheet
         isVisible={showAddressSheet}
         addresses={addresses}
@@ -307,9 +281,7 @@ export default function CartScreen() {
           setShowAddressSheet(false)
         }}
         onClose={() => setShowAddressSheet(false)}
-        onAddNewAddress={() => {
-          setShowAddressSheet(false)
-        }}
+        onAddNewAddress={() => setShowAddressSheet(false)}
       />
     </View>
   )

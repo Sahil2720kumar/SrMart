@@ -136,7 +136,9 @@ export default function PaymentScreen() {
   const { cartItems, totalPrice, clearCart } = useCartStore();
   const { activeDiscount, discountAmount, removeDiscount } = useDiscountStore();
 
-  // ← NEW: hook to record coupon usage after order is created
+  // Layout's useCartPriceSync manages this — just read the flag
+  const isSyncingPrices = useCartStore((s) => s.isSyncingPrices);
+
   const recordCouponUsage = useRecordCouponUsage();
 
   const { data: addresses, isLoading: isLoadingAddresses } = useCustomerAddresses();
@@ -213,14 +215,9 @@ export default function PaymentScreen() {
     return { orders, groupSubtotal, groupDeliveryFee, groupTax, groupDiscount: 0 };
   };
 
-  // ─── Record coupon usage for all orders in the group ─────────────────────
-  // Called AFTER the order group is successfully created.
-  // The DB trigger auto-increments coupons.usage_count on each insert.
   const recordCouponUsageForOrders = async (groupId: string) => {
-    if (!activeDiscount?.couponId) return; // no coupon applied
-
+    if (!activeDiscount?.couponId) return;
     try {
-      // Fetch all order ids that belong to this group
       const { data: orders, error } = await supabase
         .from("orders")
         .select("id")
@@ -231,24 +228,16 @@ export default function PaymentScreen() {
         return;
       }
 
-      // Record usage once — against the first order in the group.
-      // coupon_usage has a unique constraint on (coupon_id, order_id) so
-      // recording once per group is the correct behaviour.
-      const firstOrderId = orders[0].id;
-
       await recordCouponUsage.mutateAsync({
         couponId: activeDiscount.couponId,
-        orderId: firstOrderId,
+        orderId: orders[0].id,
         discountAmount: discountAmount,
       });
     } catch (err) {
-      // Non-fatal — order is placed, usage recording failed.
-      // Log it; an admin can reconcile manually if needed.
       console.error("[coupon] failed to record usage:", err);
     }
   };
 
-  // ─── Create order in DB ───────────────────────────────────────────────────
   const createOrderInDB = async (
     orderData: typeof pendingOrderData,
     rzpOrderId?: string,
@@ -267,7 +256,6 @@ export default function PaymentScreen() {
 
     if (error || !groupId) throw new Error(error?.message || "Failed to create order");
 
-    // Save razorpay_order_id to the group (non-fatal if it fails)
     if (rzpOrderId) {
       const { error: updateError } = await supabase
         .from("order_groups")
@@ -279,19 +267,14 @@ export default function PaymentScreen() {
     return groupId as string;
   };
 
-  // ─── COD + Online shared post-order logic ────────────────────────────────
   const handleOrderSuccess = async (groupId: string) => {
-    // Record coupon usage BEFORE clearing cart/discount so we still have
-    // activeDiscount.couponId and discountAmount in scope
     await recordCouponUsageForOrders(groupId);
-
     setOrderGroupId(groupId);
     clearCart();
-    removeDiscount(); // clear coupon from store after usage is recorded
+    removeDiscount();
     setShowSuccess(true);
   };
 
-  // ─── Place order ──────────────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!selectedPayment) {
       Toast.show({ type: "error", text1: "Please select a payment method", position: "top" });
@@ -333,8 +316,6 @@ export default function PaymentScreen() {
         });
 
         if (error || !groupId) throw new Error(error?.message || "Failed to create order");
-
-        // ← Record coupon usage + clear everything
         await handleOrderSuccess(groupId);
 
       } else if (selectedPayment === "online") {
@@ -380,15 +361,7 @@ export default function PaymentScreen() {
     const customerPhone = userRecord?.phone || "";
     const customerEmail = userRecord?.email || session!.user.email || "";
 
-    const html = getRazorpayHTML(
-      key_id,
-      razorpay_order_id,
-      amount,
-      customerName,
-      customerPhone,
-      customerEmail,
-    );
-
+    const html = getRazorpayHTML(key_id, razorpay_order_id, amount, customerName, customerPhone, customerEmail);
     setRazorpayHTML(html);
     setShowRazorpayWebView(true);
   };
@@ -400,13 +373,10 @@ export default function PaymentScreen() {
       if (data.type === "PAYMENT_SUCCESS") {
         setShowRazorpayWebView(false);
         setIsProcessing(true);
-
         try {
           const groupId = await createOrderInDB(pendingOrderData, razorpayOrderId ?? undefined);
           setPendingOrderData(null);
           setRazorpayOrderId(null);
-
-          // ← Record coupon usage + clear everything
           await handleOrderSuccess(groupId);
         } catch (err: any) {
           Toast.show({
@@ -424,30 +394,20 @@ export default function PaymentScreen() {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
         setRazorpayOrderId(null);
-        Toast.show({
-          type: "info",
-          text1: "Payment Cancelled",
-          text2: "No order was placed. You can try again anytime.",
-          position: "top",
-        });
+        Toast.show({ type: "info", text1: "Payment Cancelled", text2: "No order was placed. You can try again anytime.", position: "top" });
 
       } else if (data.type === "PAYMENT_FAILED") {
         setShowRazorpayWebView(false);
         setPendingOrderData(null);
         setRazorpayOrderId(null);
-        Toast.show({
-          type: "error",
-          text1: "Payment Failed",
-          text2: data.error || "Payment could not be processed. Please try again.",
-          position: "top",
-        });
+        Toast.show({ type: "error", text1: "Payment Failed", text2: data.error || "Payment could not be processed. Please try again.", position: "top" });
       }
     } catch (e) {
       console.error("WebView message parse error", e);
     }
   };
 
-  if (isLoadingAddresses || isLoadingCustomer) {
+  if (isLoadingAddresses || isLoadingCustomer || isSyncingPrices) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator size="large" color="#22c55e" />
@@ -601,12 +561,7 @@ export default function PaymentScreen() {
           setShowRazorpayWebView(false);
           setPendingOrderData(null);
           setRazorpayOrderId(null);
-          Toast.show({
-            type: "info",
-            text1: "Payment Cancelled",
-            text2: "No order was placed.",
-            position: "top",
-          });
+          Toast.show({ type: "info", text1: "Payment Cancelled", text2: "No order was placed.", position: "top" });
         }}
       >
         <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: insets.top }}>
@@ -614,8 +569,7 @@ export default function PaymentScreen() {
             <View style={{
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
               backgroundColor: "rgba(0,0,0,0.6)",
-              alignItems: "center", justifyContent: "center",
-              zIndex: 20,
+              alignItems: "center", justifyContent: "center", zIndex: 20,
             }}>
               <View style={{
                 backgroundColor: "#fff", borderRadius: 20, padding: 28,
@@ -651,29 +605,15 @@ export default function PaymentScreen() {
             javaScriptEnabled
             domStorageEnabled
             setSupportMultipleWindows={false}
-            originWhitelist={[
-              "https://*", "http://*",
-              "gpay://*", "phonepe://*", "paytmmp://*",
-              "upi://*", "bhim://*", "tez://*",
-            ]}
+            originWhitelist={["https://*", "http://*", "gpay://*", "phonepe://*", "paytmmp://*", "upi://*", "bhim://*", "tez://*"]}
             style={{ flex: 1 }}
             onShouldStartLoadWithRequest={(request) => {
               const url = request.url;
-              const upiSchemes = [
-                "gpay://", "phonepe://", "paytmmp://",
-                "bhim://", "upi://", "tez://",
-                "credpay://", "mobikwik://", "freecharge://",
-              ];
+              const upiSchemes = ["gpay://", "phonepe://", "paytmmp://", "bhim://", "upi://", "tez://", "credpay://", "mobikwik://", "freecharge://"];
               const isUpiLink = upiSchemes.some((scheme) => url.startsWith(scheme));
               if (isUpiLink) {
                 if (isTestMode) {
-                  Toast.show({
-                    type: "info",
-                    text1: "Test Mode",
-                    text2: "UPI apps don't work in test mode. Use UPI ID: success@razorpay",
-                    position: "top",
-                    visibilityTime: 4000,
-                  });
+                  Toast.show({ type: "info", text1: "Test Mode", text2: "UPI apps don't work in test mode. Use UPI ID: success@razorpay", position: "top", visibilityTime: 4000 });
                   return false;
                 }
                 Linking.openURL(url).catch(console.error);
@@ -699,10 +639,7 @@ export default function PaymentScreen() {
 
       {/* Success Modal */}
       <Modal visible={showSuccess} transparent animationType="fade">
-        <View
-          className="flex-1 items-center justify-center px-6"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
+        <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
           <View className="bg-white rounded-3xl p-8 w-full" style={{ maxWidth: 400 }}>
             <View className="items-center mb-6">
               <View className="w-24 h-24 bg-green-100 rounded-full items-center justify-center">
@@ -711,34 +648,22 @@ export default function PaymentScreen() {
                 </View>
               </View>
             </View>
-            <Text className="text-2xl font-bold text-gray-900 text-center mb-2">
-              Order Placed!
-            </Text>
-            <Text className="text-sm text-gray-600 text-center mb-2">
-              Your order has been confirmed
-            </Text>
+            <Text className="text-2xl font-bold text-gray-900 text-center mb-2">Order Placed!</Text>
+            <Text className="text-sm text-gray-600 text-center mb-2">Your order has been confirmed</Text>
             {orderGroupId && (
               <Text className="text-xs text-gray-500 text-center mb-8">
                 Order ID: {orderGroupId.substring(0, 8)}...
               </Text>
             )}
             <TouchableOpacity
-              onPress={() => {
-                setShowSuccess(false);
-                router.dismissAll();
-                router.replace("/(tabs)/customer/order/order-groups");
-              }}
+              onPress={() => { setShowSuccess(false); router.dismissAll(); router.replace("/(tabs)/customer/order/order-groups"); }}
               className="bg-green-500 rounded-2xl py-4 items-center justify-center mb-3"
               activeOpacity={0.8}
             >
               <Text className="text-white font-semibold text-base">View Order Status</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => {
-                setShowSuccess(false);
-                router.dismissAll();
-                router.replace("/customer");
-              }}
+              onPress={() => { setShowSuccess(false); router.dismissAll(); router.replace("/customer"); }}
               className="bg-gray-100 rounded-2xl py-4 items-center justify-center"
               activeOpacity={0.8}
             >
