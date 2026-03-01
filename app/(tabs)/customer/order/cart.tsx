@@ -281,7 +281,10 @@ export default function CartScreen() {
           setShowAddressSheet(false)
         }}
         onClose={() => setShowAddressSheet(false)}
-        onAddNewAddress={() => setShowAddressSheet(false)}
+        onAddNewAddress={() => {
+          setShowAddressSheet(false)
+          router.push("/customer/account/my-addresses")
+        }}
       />
     </View>
   )

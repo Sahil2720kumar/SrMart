@@ -185,13 +185,24 @@ export default function SignUpScreen() {
   
       router.replace(`/${userData.role}` as any);
     } catch (error: any) {
-  
+      if (error?.message?.includes("Database error saving new user")) {
+        Toast.show({
+          type: "error",
+          text1: "Signup Failed",
+          text2: "User already exists. Please login to continue.",
+          position: "top",
+        });
+        router.replace('/auth/login');
+        return;
+      }
+      
       Toast.show({
         type: "error",
         text1: "Signup Failed",
         text2: error?.message || "Something went wrong. Please try again.",
         position: "top",
       });
+      
     } finally {
       setIsLoading(false);
     }

@@ -55,7 +55,7 @@ export default function OrderDetailsScreen() {
 
   const handleCallDeliveryBoy = () => {
     if (order?.delivery_boys) {
-      Linking.openURL(`tel:+91XXXXXXXXXX`); // Replace with actual phone
+      Linking.openURL(`tel:+91${order?.delivery_boys.users.phone}`); // Replace with actual phone
     }
   };
 
@@ -151,6 +151,31 @@ export default function OrderDetailsScreen() {
             </View>
           ))}
         </View>
+
+        {/* Delivery OTP */}
+        {order.delivery_otp && !['delivered', 'cancelled', 'refunded'].includes(order.status) && (
+          <View className="bg-green-50 mx-4 rounded-2xl p-4 mb-3 border border-green-200">
+            <View className="flex-row items-center mb-2">
+              <Feather name="shield" size={16} color="#16a34a" />
+              <Text className="text-sm font-bold text-green-900 ml-2">
+                Delivery OTP
+              </Text>
+            </View>
+            <Text className="text-xs text-green-700 mb-3">
+              Share this OTP with your delivery partner to confirm receipt of your order.
+            </Text>
+            <View className="flex-row justify-center gap-2">
+              {order.delivery_otp.split('').map((digit: string, index: number) => (
+                <View
+                  key={index}
+                  className="w-12 h-14 bg-white rounded-xl border-2 border-green-400 items-center justify-center"
+                >
+                  <Text className="text-2xl font-bold text-green-700">{digit}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Vendor Information */}
         <View className="bg-white mx-4 rounded-2xl p-4 mb-3">

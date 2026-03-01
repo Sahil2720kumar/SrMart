@@ -70,7 +70,7 @@ const getRazorpayHTML = (
       amount: ${amount},
       currency: "INR",
       order_id: "${razorpayOrderId}",
-      name: "Your Store",
+      name: "SrMart",
       description: "Order Payment",
       prefill: {
         name: "${customerName}",

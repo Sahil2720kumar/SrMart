@@ -260,7 +260,10 @@ export default function CheckoutScreen() {
           setShowAddressSheet(false)
         }}
         onClose={() => setShowAddressSheet(false)}
-        onAddNewAddress={() => setShowAddressSheet(false)}
+        onAddNewAddress={() => {
+          setShowAddressSheet(false)
+          router.push("/customer/account/my-addresses")
+        }}
       />
     </View>
   )
