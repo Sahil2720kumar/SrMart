@@ -1,6 +1,5 @@
 import { router, Stack } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCartPriceSync } from "@/hooks/usecartpricesync"
 
 export default function OrderLayout() {
