@@ -1,4 +1,4 @@
-// hooks/queries/useDeliveryOrders.ts - UPDATED WITH CORRECT DELIVERY PAYOUT
+// hooks/queries/useDeliveryOrders.ts - UPDATED WITH CANCELLED ITEMS SUPPORT
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -38,7 +38,7 @@ export const deliveryQueryKeys = {
 // ==========================================
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth's radius in km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -51,72 +51,59 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
-/**
- * Calculate delivery fee using RPC function if not already set
- */
 async function getDeliveryFee(existingFee: string | null, distanceKm: number): Promise<number> {
-  // If delivery fee already exists and is not zero, use it
   if (existingFee && parseFloat(existingFee) > 0) {
     return parseFloat(existingFee);
   }
-
-  // Otherwise, calculate using RPC function
   try {
     const { data, error } = await supabase.rpc('calculate_delivery_fee', {
       p_distance_km: distanceKm,
     });
-
     if (error) {
       console.error('Error calculating delivery fee:', error);
-      // Fallback calculation if RPC fails
       return Math.max(30, Math.min(60, 20 + distanceKm * 5));
     }
-
     return parseFloat(data || '30');
   } catch (err) {
     console.error('Exception calculating delivery fee:', err);
-    // Fallback calculation
     return Math.max(30, Math.min(60, 20 + distanceKm * 5));
   }
 }
 
-/**
- * Calculate delivery boy payout (what they actually receive)
- * Delivery boy ALWAYS gets the full delivery_fee amount, regardless of who pays
- * - Free delivery: Delivery boy gets delivery_fee (platform pays)
- * - Regular delivery: Delivery boy gets delivery_fee_paid_by_customer
- */
 function calculateDeliveryPayout(order: any): number {
-  const deliveryFee = parseFloat(order.delivery_fee || '0');
-
-  // Delivery boy always gets the delivery fee
-  // For free delivery: platform pays this amount
-  // For regular delivery: customer pays this amount
-  return deliveryFee;
+  return parseFloat(order.delivery_fee || '0');
 }
 
-/**
- * Calculate platform net revenue
- * - Regular delivery: Platform gets full commission (customer pays delivery separately)
- * - Free delivery: Platform gets commission minus delivery_fee (platform absorbs delivery cost)
- */
 function calculatePlatformRevenue(order: any): number {
   const commission = parseFloat(order.total_commission || '0');
   const deliveryFee = parseFloat(order.delivery_fee || '0');
-
-  // If NOT free delivery, platform gets entire commission
-  // (customer paid delivery fee separately to delivery boy)
-  if (!order.is_free_delivery) {
-    return commission;
-  }
-
-  // If free delivery, platform pays delivery fee from commission
-  // This can be negative if delivery_fee > commission
+  if (!order.is_free_delivery) return commission;
   return commission - deliveryFee;
 }
 
+// ── Shared order_items select fragment ───────────────────────────────────────
+// status is included so cancelled items are visible to the delivery boy
+const ORDER_ITEMS_SELECT = `
+  id,
+  product_name,
+  quantity,
+  unit,
+  status
+`;
+
+// ── Helper: map a raw order_item row → DeliveryOrderItem ─────────────────────
+function mapItem(item: any, pickedUpAt: string | null) {
+  return {
+    id: item.id,
+    name: item.product_name,
+    qty: `${item.quantity} ${item.unit || 'pc'}`,
+    collected: item.status === 'cancelled' ? false : !!pickedUpAt,
+    status: item.status ?? 'active',   // ✅ expose status to the UI
+  };
+}
+
 // ==========================================
-// QUERY: Get Available Orders (Ready for Pickup) - UPDATED
+// QUERY: Get Available Orders (Ready for Pickup)
 // ==========================================
 
 export function useAvailableDeliveryOrders() {
@@ -125,8 +112,7 @@ export function useAvailableDeliveryOrders() {
     queryFn: async (): Promise<DeliveryOrder[]> => {
       const { data, error } = await supabase
         .from('orders')
-        .select(
-          `
+        .select(`
           id,
           order_number,
           status,
@@ -164,68 +150,47 @@ export function useAvailableDeliveryOrders() {
             latitude,
             longitude
           ),
-          order_items(
-            id,
-            product_name,
-            quantity,
-            unit
-          )
-        `
-        )
+          order_items(${ORDER_ITEMS_SELECT})
+        `)
         .eq('status', 'ready_for_pickup')
         .is('delivery_boy_id', null)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Fetch error:', error);
-        throw error;
-      }
+      if (error) { console.error('❌ Fetch error:', error); throw error; }
+      if (!data || data.length === 0) return [];
 
-      if (!data || data.length === 0) {
-        return [];
-      }
-
-      // Filter out orders with missing data
       const validOrders = data.filter((order) => {
         const hasCustomer = order.customers;
-        const hasAddress = order.customer_addresses;
-        const hasVendor = order.vendors;
-        const hasItems = order.order_items && order.order_items.length > 0;
-        const hasPhone = order.customers?.users?.phone;
+        const hasAddress  = order.customer_addresses;
+        const hasVendor   = order.vendors;
+        // At least one active item required
+        const hasItems    = order.order_items?.some((i: any) => i.status !== 'cancelled');
+        const hasPhone    = order.customers?.users?.phone;
 
         if (!hasCustomer) console.warn(`⚠️ Order ${order.order_number}: Missing customer`);
-        if (!hasAddress) console.warn(`⚠️ Order ${order.order_number}: Missing address`);
-        if (!hasVendor) console.warn(`⚠️ Order ${order.order_number}: Missing vendor`);
-        if (!hasItems) console.warn(`⚠️ Order ${order.order_number}: Missing items`);
-        if (!hasPhone) console.warn(`⚠️ Order ${order.order_number}: Missing phone`);
+        if (!hasAddress)  console.warn(`⚠️ Order ${order.order_number}: Missing address`);
+        if (!hasVendor)   console.warn(`⚠️ Order ${order.order_number}: Missing vendor`);
+        if (!hasItems)    console.warn(`⚠️ Order ${order.order_number}: No active items`);
+        if (!hasPhone)    console.warn(`⚠️ Order ${order.order_number}: Missing phone`);
 
         return hasCustomer && hasAddress && hasVendor && hasItems && hasPhone;
       });
 
-      // Transform to delivery order format with calculated delivery fee
       const deliveryOrders: DeliveryOrder[] = await Promise.all(
         validOrders.map(async (order) => {
           const customer = order.customers!;
-          const address = order.customer_addresses!;
-          const vendor = order.vendors!;
-          const phone = customer.users?.phone || '';
+          const address  = order.customer_addresses!;
+          const vendor   = order.vendors!;
+          const phone    = customer.users?.phone || '';
 
           const distance = calculateDistance(
-            vendor.latitude || 0,
-            vendor.longitude || 0,
-            address.latitude || 0,
-            address.longitude || 0
+            vendor.latitude || 0, vendor.longitude || 0,
+            address.latitude || 0, address.longitude || 0,
           );
 
-          // Calculate delivery fee using RPC if needed
-          const deliveryFee = await getDeliveryFee(order.delivery_fee, distance);
-
-          // Calculate payout (what delivery boy receives)
-          const payout = calculateDeliveryPayout(order);
-
-          // Calculate platform net revenue
+          const deliveryFee     = await getDeliveryFee(order.delivery_fee, distance);
+          const payout          = calculateDeliveryPayout(order);
           const platformRevenue = calculatePlatformRevenue(order);
-
 
           return {
             id: order.id,
@@ -234,8 +199,8 @@ export function useAvailableDeliveryOrders() {
             customer: {
               name: `${customer.first_name} ${customer.last_name}`,
               address: `${address.address_line1}, ${address.address_line2 ? address.address_line2 + ', ' : ''}${address.city}, ${address.state} - ${address.pincode}`,
-              phone: phone,
-              lat: address.latitude || undefined,
+              phone,
+              lat: address.latitude  || undefined,
               lng: address.longitude || undefined,
             },
             vendors: [
@@ -243,42 +208,37 @@ export function useAvailableDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
-                lat: vendor.latitude ?? undefined, // ✅ ADD
-                lng: vendor.longitude ?? undefined, // ✅ ADD
-                items: order.order_items!.map((item) => ({
-                  id: item.id,
-                  name: item.product_name,
-                  qty: `${item.quantity} ${item.unit || 'pc'}`,
-                  collected: false,
-                })),
+                lat: vendor.latitude  ?? undefined,
+                lng: vendor.longitude ?? undefined,
+                items: order.order_items!.map((item: any) => mapItem(item, null)),
                 collected: false,
               },
             ],
-            payout: payout, // What delivery boy receives
+            payout,
             distance: Math.round(distance * 10) / 10,
             totalItems: order.item_count,
             deliveryOtp: order.delivery_otp || '',
             created_at: order.created_at,
             pickup_address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
             is_free_delivery: order.is_free_delivery,
-            calculated_delivery_fee: deliveryFee, // For reference
-            platform_revenue: platformRevenue, // Platform's net revenue
+            calculated_delivery_fee: deliveryFee,
+            platform_revenue: platformRevenue,
           };
         })
       );
 
       return deliveryOrders;
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 30000,
   });
 }
 
 // ==========================================
-// QUERY: Get Active Orders - UPDATED
+// QUERY: Get Active Orders
 // ==========================================
 
 export function useActiveDeliveryOrders() {
-  const session = useAuthStore((state) => state.session);
+  const session       = useAuthStore((state) => state.session);
   const deliveryBoyId = session?.user?.id;
 
   return useQuery({
@@ -288,8 +248,7 @@ export function useActiveDeliveryOrders() {
 
       const { data, error } = await supabase
         .from('orders')
-        .select(
-          `
+        .select(`
           id,
           order_number,
           status,
@@ -328,60 +287,38 @@ export function useActiveDeliveryOrders() {
             latitude,
             longitude
           ),
-          order_items(
-            id,
-            product_name,
-            quantity,
-            unit
-          )
-        `
-        )
+          order_items(${ORDER_ITEMS_SELECT})
+        `)
         .eq('delivery_boy_id', deliveryBoyId)
         .in('status', ['ready_for_pickup', 'picked_up', 'out_for_delivery'])
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Fetch error:', error);
-        throw error;
-      }
+      if (error) { console.error('❌ Fetch error:', error); throw error; }
+      if (!data || data.length === 0) return [];
 
-      if (!data || data.length === 0) {
-        return [];
-      }
+      const validOrders = data.filter(
+        (order) =>
+          order.customers &&
+          order.customer_addresses &&
+          order.vendors &&
+          order.order_items?.some((i: any) => i.status !== 'cancelled') &&
+          order.customers?.users?.phone
+      );
 
-      // Filter out orders with missing data
-      const validOrders = data.filter((order) => {
-        const hasCustomer = order.customers;
-        const hasAddress = order.customer_addresses;
-        const hasVendor = order.vendors;
-        const hasItems = order.order_items && order.order_items.length > 0;
-        const hasPhone = order.customers?.users?.phone;
-
-        return hasCustomer && hasAddress && hasVendor && hasItems && hasPhone;
-      });
-
-      // Transform to delivery order format
       const deliveryOrders: DeliveryOrder[] = await Promise.all(
         validOrders.map(async (order) => {
           const customer = order.customers!;
-          const address = order.customer_addresses!;
-          const vendor = order.vendors!;
-          const phone = customer.users?.phone || '';
+          const address  = order.customer_addresses!;
+          const vendor   = order.vendors!;
+          const phone    = customer.users?.phone || '';
 
           const distance = calculateDistance(
-            vendor.latitude || 0,
-            vendor.longitude || 0,
-            address.latitude || 0,
-            address.longitude || 0
+            vendor.latitude || 0, vendor.longitude || 0,
+            address.latitude || 0, address.longitude || 0,
           );
 
-          // Calculate delivery fee using RPC if needed
-          const deliveryFee = await getDeliveryFee(order.delivery_fee, distance);
-
-          // Calculate payout
-          const payout = calculateDeliveryPayout(order);
-
-          // Calculate platform net revenue
+          const deliveryFee     = await getDeliveryFee(order.delivery_fee, distance);
+          const payout          = calculateDeliveryPayout(order);
           const platformRevenue = calculatePlatformRevenue(order);
 
           return {
@@ -391,8 +328,8 @@ export function useActiveDeliveryOrders() {
             customer: {
               name: `${customer.first_name} ${customer.last_name}`,
               address: `${address.address_line1}, ${address.address_line2 ? address.address_line2 + ', ' : ''}${address.city}, ${address.state} - ${address.pincode}`,
-              phone: phone,
-              lat: address.latitude || undefined,
+              phone,
+              lat: address.latitude  || undefined,
               lng: address.longitude || undefined,
             },
             vendors: [
@@ -400,18 +337,13 @@ export function useActiveDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
-                lat: vendor.latitude ?? undefined, // ✅ ADD
-                lng: vendor.longitude ?? undefined, // ✅ ADD
-                items: order.order_items!.map((item) => ({
-                  id: item.id,
-                  name: item.product_name,
-                  qty: `${item.quantity} ${item.unit || 'pc'}`,
-                  collected: !!order.picked_up_at,
-                })),
+                lat: vendor.latitude  ?? undefined,
+                lng: vendor.longitude ?? undefined,
+                items: order.order_items!.map((item: any) => mapItem(item, order.picked_up_at)),
                 collected: !!order.picked_up_at,
               },
             ],
-            payout: payout,
+            payout,
             distance: Math.round(distance * 10) / 10,
             totalItems: order.item_count,
             deliveryOtp: order.delivery_otp || '',
@@ -432,11 +364,11 @@ export function useActiveDeliveryOrders() {
 }
 
 // ==========================================
-// QUERY: Get Completed Orders - UPDATED
+// QUERY: Get Completed Orders
 // ==========================================
 
 export function useCompletedDeliveryOrders() {
-  const session = useAuthStore((state) => state.session);
+  const session       = useAuthStore((state) => state.session);
   const deliveryBoyId = session?.user?.id;
 
   return useQuery({
@@ -446,8 +378,7 @@ export function useCompletedDeliveryOrders() {
 
       const { data, error } = await supabase
         .from('orders')
-        .select(
-          `
+        .select(`
           id,
           order_number,
           status,
@@ -486,29 +417,16 @@ export function useCompletedDeliveryOrders() {
             latitude,
             longitude
           ),
-          order_items(
-            id,
-            product_name,
-            quantity,
-            unit
-          )
-        `
-        )
+          order_items(${ORDER_ITEMS_SELECT})
+        `)
         .eq('delivery_boy_id', deliveryBoyId)
         .eq('status', 'delivered')
         .order('delivered_at', { ascending: false })
         .limit(50);
 
-      if (error) {
-        console.error('❌ Completed orders fetch error:', error);
-        throw error;
-      }
+      if (error) { console.error('❌ Completed orders fetch error:', error); throw error; }
+      if (!data || data.length === 0) return [];
 
-      if (!data || data.length === 0) {
-        return [];
-      }
-
-      // Filter and transform
       const validOrders = data.filter(
         (order) =>
           order.customers &&
@@ -521,19 +439,17 @@ export function useCompletedDeliveryOrders() {
       const deliveryOrders: DeliveryOrder[] = await Promise.all(
         validOrders.map(async (order) => {
           const customer = order.customers!;
-          const address = order.customer_addresses!;
-          const vendor = order.vendors!;
-          const phone = customer.users?.phone || '';
+          const address  = order.customer_addresses!;
+          const vendor   = order.vendors!;
+          const phone    = customer.users?.phone || '';
 
           const distance = calculateDistance(
-            vendor.latitude || 0,
-            vendor.longitude || 0,
-            address.latitude || 0,
-            address.longitude || 0
+            vendor.latitude || 0, vendor.longitude || 0,
+            address.latitude || 0, address.longitude || 0,
           );
 
-          const deliveryFee = await getDeliveryFee(order.delivery_fee, distance);
-          const payout = calculateDeliveryPayout(order);
+          const deliveryFee     = await getDeliveryFee(order.delivery_fee, distance);
+          const payout          = calculateDeliveryPayout(order);
           const platformRevenue = calculatePlatformRevenue(order);
 
           return {
@@ -543,8 +459,8 @@ export function useCompletedDeliveryOrders() {
             customer: {
               name: `${customer.first_name} ${customer.last_name}`,
               address: `${address.address_line1}, ${address.address_line2 ? address.address_line2 + ', ' : ''}${address.city}, ${address.state} - ${address.pincode}`,
-              phone: phone,
-              lat: address.latitude || undefined,
+              phone,
+              lat: address.latitude  || undefined,
               lng: address.longitude || undefined,
             },
             vendors: [
@@ -552,18 +468,17 @@ export function useCompletedDeliveryOrders() {
                 id: vendor.user_id,
                 name: vendor.store_name,
                 address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
-                lat: vendor.latitude ?? undefined, // ✅ ADD
-                lng: vendor.longitude ?? undefined, // ✅ ADD
-                items: order.order_items!.map((item) => ({
-                  id: item.id,
-                  name: item.product_name,
-                  qty: `${item.quantity} ${item.unit || 'pc'}`,
-                  collected: true,
+                lat: vendor.latitude  ?? undefined,
+                lng: vendor.longitude ?? undefined,
+                // For completed orders every active item was collected
+                items: order.order_items!.map((item: any) => ({
+                  ...mapItem(item, 'delivered'),
+                  collected: item.status !== 'cancelled',
                 })),
                 collected: true,
               },
             ],
-            payout: payout,
+            payout,
             distance: Math.round(distance * 10) / 10,
             totalItems: order.item_count,
             deliveryOtp: order.delivery_otp || '',
@@ -583,7 +498,7 @@ export function useCompletedDeliveryOrders() {
 }
 
 // ==========================================
-// QUERY: Get Order Detail - UPDATED
+// QUERY: Get Order Detail
 // ==========================================
 
 export function useDeliveryOrderDetail(orderId: string) {
@@ -592,8 +507,7 @@ export function useDeliveryOrderDetail(orderId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select(
-          `
+        .select(`
           id,
           order_number,
           delivery_boy_id,
@@ -634,45 +548,37 @@ export function useDeliveryOrderDetail(orderId: string) {
             latitude,
             longitude
           ),
-          order_items(
-            id,
-            product_name,
-            quantity,
-            unit
-          )
-        `
-        )
+          order_items(${ORDER_ITEMS_SELECT})
+        `)
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
 
       const customer = data.customers!;
-      const address = data.customer_addresses!;
-      const vendor = data.vendors!;
-      const phone = customer.users?.phone || '';
+      const address  = data.customer_addresses!;
+      const vendor   = data.vendors!;
+      const phone    = customer.users?.phone || '';
 
       const distance = calculateDistance(
-        vendor.latitude || 0,
-        vendor.longitude || 0,
-        address.latitude || 0,
-        address.longitude || 0
+        vendor.latitude || 0, vendor.longitude || 0,
+        address.latitude || 0, address.longitude || 0,
       );
 
-      const deliveryFee = await getDeliveryFee(data.delivery_fee, distance);
-      const payout = calculateDeliveryPayout(data);
+      const deliveryFee     = await getDeliveryFee(data.delivery_fee, distance);
+      const payout          = calculateDeliveryPayout(data);
       const platformRevenue = calculatePlatformRevenue(data);
 
       const deliveryOrder: DeliveryOrder = {
         id: data.id,
         order_number: data.order_number,
         status: data.status,
-        delivery_boy_id:data.delivery_boy_id,
+        delivery_boy_id: data.delivery_boy_id,
         customer: {
           name: `${customer.first_name} ${customer.last_name}`,
           address: `${address.address_line1}, ${address.address_line2 ? address.address_line2 + ', ' : ''}${address.city}, ${address.state} - ${address.pincode}`,
-          phone: phone,
-          lat: address.latitude || undefined,
+          phone,
+          lat: address.latitude  || undefined,
           lng: address.longitude || undefined,
         },
         vendors: [
@@ -680,18 +586,14 @@ export function useDeliveryOrderDetail(orderId: string) {
             id: vendor.user_id,
             name: vendor.store_name,
             address: `${vendor.address}, ${vendor.city}, ${vendor.state}`,
-            lat: vendor.latitude ?? undefined, // ✅ ADD
-            lng: vendor.longitude ?? undefined, // ✅ ADD
-            items: data.order_items!.map((item) => ({
-              id: item.id,
-              name: item.product_name,
-              qty: `${item.quantity} ${item.unit || 'pc'}`,
-              collected: !!data.picked_up_at,
-            })),
+            lat: vendor.latitude  ?? undefined,
+            lng: vendor.longitude ?? undefined,
+            // ✅ status is now included so the UI can split active vs cancelled
+            items: data.order_items!.map((item: any) => mapItem(item, data.picked_up_at)),
             collected: !!data.picked_up_at,
           },
         ],
-        payout: payout,
+        payout,
         distance: Math.round(distance * 10) / 10,
         totalItems: data.item_count,
         deliveryOtp: data.delivery_otp || '',
@@ -705,15 +607,16 @@ export function useDeliveryOrderDetail(orderId: string) {
       return deliveryOrder;
     },
     enabled: !!orderId,
+    staleTime: 0,  // always re-fetch after item cancellation
   });
 }
 
 // ==========================================
-// QUERY: Get Delivery Boy Stats - UPDATED
+// QUERY: Get Delivery Boy Stats
 // ==========================================
 
 export function useDeliveryBoyStats() {
-  const session = useAuthStore((state) => state.session);
+  const session       = useAuthStore((state) => state.session);
   const deliveryBoyId = session?.user?.id;
 
   return useQuery({
@@ -723,49 +626,39 @@ export function useDeliveryBoyStats() {
 
       const { data, error } = await supabase
         .from('orders')
-        .select(
-          'status, total_commission, delivery_fee, delivery_fee_paid_by_customer, is_free_delivery'
-        )
+        .select('status, total_commission, delivery_fee, delivery_fee_paid_by_customer, is_free_delivery')
         .eq('delivery_boy_id', deliveryBoyId);
 
       if (error) throw error;
 
-      const totalOrders = data.length;
-      const activeOrders = data.filter(
-        (o) =>
-          o.status === 'ready_for_pickup' ||
-          o.status === 'picked_up' ||
-          o.status === 'out_for_delivery'
+      const totalOrders     = data.length;
+      const activeOrders    = data.filter(
+        (o) => ['ready_for_pickup', 'picked_up', 'out_for_delivery'].includes(o.status)
       ).length;
       const completedOrders = data.filter((o) => o.status === 'delivered').length;
 
-      // Calculate total earnings using the same logic as calculateDeliveryPayout
-      // Delivery boy always gets the full delivery_fee
-      const { data:wallet, error:walletError } = await supabase
+      const { data: wallet, error: walletError } = await supabase
         .from('wallets')
         .select('*')
         .eq('user_id', deliveryBoyId)
         .single();
- 
-      // Calculate distance from completed orders
+
       const { data: completedData, error: distanceError } = await supabase
         .from('orders')
-        .select(
-          `
+        .select(`
           customer_addresses(latitude, longitude),
           vendors(latitude, longitude)
-        `
-        )
+        `)
         .eq('delivery_boy_id', deliveryBoyId)
         .eq('status', 'delivered');
 
       let totalDistance = 0;
       if (!distanceError && completedData) {
         totalDistance = completedData.reduce((sum, order) => {
-          const vendorLat = order.vendors?.latitude || 0;
-          const vendorLng = order.vendors?.longitude || 0;
-          const customerLat = order.customer_addresses?.latitude || 0;
-          const customerLng = order.customer_addresses?.longitude || 0;
+          const vendorLat    = order.vendors?.latitude || 0;
+          const vendorLng    = order.vendors?.longitude || 0;
+          const customerLat  = order.customer_addresses?.latitude || 0;
+          const customerLng  = order.customer_addresses?.longitude || 0;
           return sum + calculateDistance(vendorLat, vendorLng, customerLat, customerLng);
         }, 0);
       }
@@ -774,7 +667,7 @@ export function useDeliveryBoyStats() {
         totalOrders,
         activeOrders,
         completedOrders,
-        totalEarnings: wallet.lifetime_earnings,
+        totalEarnings: wallet?.lifetime_earnings ?? 0,
         totalDistance: Math.round(totalDistance * 10) / 10,
       };
     },
@@ -783,12 +676,12 @@ export function useDeliveryBoyStats() {
 }
 
 // ==========================================
-// MUTATION: Accept Order - NO CHANGES NEEDED
+// MUTATION: Accept Order
 // ==========================================
 
 export function useAcceptDeliveryOrder() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const queryClient   = useQueryClient();
+  const session       = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (orderId: string) => {
@@ -799,7 +692,7 @@ export function useAcceptDeliveryOrder() {
         .from('orders')
         .update({
           delivery_boy_id: deliveryBoyId,
-          status: 'ready_for_pickup', // ✅ KEEP SAME
+          status: 'ready_for_pickup',
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId)
@@ -814,7 +707,6 @@ export function useAcceptDeliveryOrder() {
     onSuccess: () => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) return;
-
       queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.available() });
       queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.active(deliveryBoyId) });
       queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.stats(deliveryBoyId) });
@@ -822,14 +714,13 @@ export function useAcceptDeliveryOrder() {
   });
 }
 
-
 // ==========================================
-// MUTATION: Mark Order as Picked Up - NO CHANGES NEEDED
+// MUTATION: Mark Order as Picked Up
 // ==========================================
 
 export function useMarkOrderPickedUp() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const queryClient   = useQueryClient();
+  const session       = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (orderId: string) => {
@@ -839,7 +730,7 @@ export function useMarkOrderPickedUp() {
       const { data, error } = await supabase
         .from('orders')
         .update({
-          status: 'out_for_delivery', // ✅ MOVE HERE
+          status: 'out_for_delivery',
           picked_up_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -851,31 +742,28 @@ export function useMarkOrderPickedUp() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_,orderId) => {
+    onSuccess: (_, orderId) => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) return;
-
       queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.active(deliveryBoyId) });
       queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.detail(orderId) });
     },
   });
 }
 
-
 // ==========================================
-// MUTATION: Complete Delivery (Verify OTP) - UPDATED
+// MUTATION: Complete Delivery (Verify OTP)
 // ==========================================
 
 export function useCompleteDelivery() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const queryClient   = useQueryClient();
+  const session       = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async ({ orderId, otp }: CompleteDeliveryParams) => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) throw new Error('Delivery boy not authenticated');
 
-      // First verify OTP and get order details
       const { data: order, error: fetchError } = await supabase
         .from('orders')
         .select('delivery_otp, total_commission, delivery_fee, is_free_delivery')
@@ -889,17 +777,12 @@ export function useCompleteDelivery() {
         throw new Error('Invalid OTP');
       }
 
-      // Calculate platform net revenue
-      const commission = parseFloat(order.total_commission || '0');
-      const deliveryFee = parseFloat(order.delivery_fee || '0');
+      const commission       = parseFloat(order.total_commission || '0');
+      const deliveryFee      = parseFloat(order.delivery_fee || '0');
+      const platformNetRevenue = order.is_free_delivery
+        ? commission - deliveryFee
+        : commission;
 
-      // If free delivery, platform pays delivery fee from commission
-      // Platform revenue = commission - delivery_fee (can be negative)
-      // If not free delivery, platform keeps entire commission
-      // Platform revenue = commission
-      const platformNetRevenue = order.is_free_delivery ? commission - deliveryFee : commission;
-
-      // Update order status with platform_net_revenue
       const { data, error } = await supabase
         .from('orders')
         .update({
@@ -920,19 +803,10 @@ export function useCompleteDelivery() {
     onSuccess: (data) => {
       const deliveryBoyId = session?.user?.id;
       if (!deliveryBoyId) return;
-
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.active(deliveryBoyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.completed(deliveryBoyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.orders.detail(data.id),
-      });
-      queryClient.invalidateQueries({
-        queryKey: deliveryQueryKeys.stats(deliveryBoyId),
-      });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.active(deliveryBoyId) });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.completed(deliveryBoyId) });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.orders.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: deliveryQueryKeys.stats(deliveryBoyId) });
     },
   });
 }

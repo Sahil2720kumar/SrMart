@@ -388,28 +388,38 @@ export function useCreateAddress() {
   return useMutation({
     mutationFn: async (address: CustomerAddressInsert) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
-
-
-      
+    
       const customerId = await getCustomerId(session.user.id);
-
-      // If this is set as default, unset all other defaults first
-      if (address.is_default) {
+    
+      // Check if customer has any existing addresses
+      const { data: existingAddresses } = await supabase
+        .from('customer_addresses')
+        .select('id')
+        .eq('customer_id', customerId);
+    
+      const isFirstAddress = !existingAddresses || existingAddresses.length === 0;
+    
+      // Auto-default if first address OR customer explicitly selected default
+      const shouldSetDefault = isFirstAddress || address.is_default;
+    
+      if (shouldSetDefault && !isFirstAddress) {
+        // Only unset others if not the first address (no rows to unset otherwise)
         await supabase
           .from('customer_addresses')
           .update({ is_default: false })
           .eq('customer_id', customerId);
       }
-
+    
       const { data, error } = await supabase
         .from('customer_addresses')
         .insert({
           customer_id: customerId,
           ...address,
+          is_default: shouldSetDefault, // override with computed value
         })
         .select()
         .single();
-
+    
       if (error) throw error;
       return data as CustomerAddress;
     },

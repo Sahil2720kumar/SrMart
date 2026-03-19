@@ -27,71 +27,71 @@ const OrderDetailScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const orderId = params.orderId as string;
-  
+
   const store = useDeliveryStore();
   const isVerified = store.adminVerificationStatus === 'approved' && store.isKycCompleted;
 
   const [expandedVendor, setExpandedVendor] = useState<string | null>(null);
-  
+
   // OTP Modal State
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
-  
+
   // Confirmation Modal States
-  const [showPickupModal, setShowPickupModal] = useState(false);
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [currentVendorId, setCurrentVendorId] = useState<string | null>(null);
-  
+  const [showPickupModal, setShowPickupModal]   = useState(false);
+  const [showAcceptModal, setShowAcceptModal]   = useState(false);
+  const [currentVendorId, setCurrentVendorId]   = useState<string | null>(null);
+
   const [localItemStates, setLocalItemStates] = useState<Record<string, boolean>>({});
 
   // Queries
-  const { 
-    data: order, 
-    isLoading, 
+  const {
+    data: order,
+    isLoading,
     error,
     refetch,
   } = useDeliveryOrderDetail(orderId);
 
   // Mutations
-  const acceptOrderMutation = useAcceptDeliveryOrder();
-  const markPickedUpMutation = useMarkOrderPickedUp();
+  const acceptOrderMutation      = useAcceptDeliveryOrder();
+  const markPickedUpMutation     = useMarkOrderPickedUp();
   const completeDeliveryMutation = useCompleteDelivery();
 
   // Calculate vendor collection progress
   const vendorProgress = useMemo(() => {
     if (!order) return { collected: 0, total: 0, allCollected: false };
-    const collected = order.vendors.filter(v => v.collected).length;
+    const collected = order.vendors.filter((v: any) => v.collected).length;
     const total = order.vendors.length;
     return { collected, total, allCollected: collected === total };
   }, [order]);
 
   const handleToggleItemCollection = (vendorId: string, itemId: string) => {
     if (!isVerified) return;
-    
     const key = `${vendorId}-${itemId}`;
-    setLocalItemStates(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setLocalItemStates((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const isItemCollected = (vendorId: string, itemId: string) => {
     if (!order) return false;
     const key = `${vendorId}-${itemId}`;
-    const vendor = order.vendors.find(v => v.id === vendorId);
-    return localItemStates[key] !== undefined 
-      ? localItemStates[key] 
-      : vendor?.items.find(i => i.id === itemId)?.collected || false;
+    const vendor = order.vendors.find((v: any) => v.id === vendorId);
+    return localItemStates[key] !== undefined
+      ? localItemStates[key]
+      : vendor?.items.find((i: any) => i.id === itemId)?.collected || false;
   };
 
+  // Only count NON-cancelled items toward "all collected"
   const areAllItemsCollected = (vendorId: string) => {
     if (!order) return false;
-    const vendor = order.vendors.find(v => v.id === vendorId);
+    const vendor = order.vendors.find((v: any) => v.id === vendorId);
     if (!vendor) return false;
-    return vendor.items.every(item => isItemCollected(vendorId, item.id));
+    const activeItems = vendor.items.filter((i: any) => i.status !== 'cancelled');
+    if (activeItems.length === 0) return true;
+    return activeItems.every((item: any) => isItemCollected(vendorId, item.id));
   };
 
-  // Accept Order Handler
+  // ─── Order-level action handlers ─────────────────────────────────────────
+
   const handleAcceptOrder = () => {
     if (!isVerified || !order) return;
     setShowAcceptModal(true);
@@ -99,7 +99,6 @@ const OrderDetailScreen = () => {
 
   const handleConfirmAcceptOrder = async () => {
     if (!isVerified || !order) return;
-
     try {
       await acceptOrderMutation.mutateAsync(order.id);
       setShowAcceptModal(false);
@@ -112,23 +111,17 @@ const OrderDetailScreen = () => {
       refetch();
     } catch (error: any) {
       setShowAcceptModal(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to accept order.',
-        position: 'top',
-      });
+      Toast.show({ type: 'error', text1: 'Error', text2: error.message || 'Failed to accept order.', position: 'top' });
     }
   };
 
-  // Mark Vendor Picked Up Handler
   const handleMarkVendorCollectedPress = (vendorId: string) => {
     if (!isVerified || !order) return;
     if (!areAllItemsCollected(vendorId)) {
       Toast.show({
         type: 'error',
         text1: 'Incomplete',
-        text2: 'Please collect all items before marking as picked up.',
+        text2: 'Please collect all active items before marking as picked up.',
         position: 'top',
       });
       return;
@@ -139,7 +132,6 @@ const OrderDetailScreen = () => {
 
   const handleConfirmMarkPickedUp = async () => {
     if (!isVerified || !order) return;
-
     try {
       await markPickedUpMutation.mutateAsync(order.id);
       setShowPickupModal(false);
@@ -154,12 +146,7 @@ const OrderDetailScreen = () => {
       refetch();
     } catch (error: any) {
       setShowPickupModal(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to mark order as picked up.',
-        position: 'top',
-      });
+      Toast.show({ type: 'error', text1: 'Error', text2: error.message || 'Failed to mark order as picked up.', position: 'top' });
     }
   };
 
@@ -167,32 +154,24 @@ const OrderDetailScreen = () => {
     if (!order) return;
     const { lat, lng } = order.customer;
     if (lat && lng) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-      Linking.openURL(url);
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
     }
   };
 
   const handleNavigateToVendor = (vendorId: string) => {
     if (!order) return;
-    const vendor = order.vendors.find(v => v.id === vendorId);
+    const vendor = order.vendors.find((v: any) => v.id === vendorId);
     if (vendor?.lat && vendor?.lng) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${vendor.lat},${vendor.lng}`;
-      Linking.openURL(url);
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${vendor.lat},${vendor.lng}`);
     }
   };
 
   const handleVerifyOtp = async () => {
     if (!isVerified || !order) return;
-
     try {
-      await completeDeliveryMutation.mutateAsync({
-        orderId: order.id,
-        otp: otpInput,
-      });
-      
+      await completeDeliveryMutation.mutateAsync({ orderId: order.id, otp: otpInput });
       setShowOtpModal(false);
       setOtpInput('');
-      
       Toast.show({
         type: 'success',
         text1: 'Delivery Complete! 🎉',
@@ -201,14 +180,11 @@ const OrderDetailScreen = () => {
       });
       router.replace('/delivery/orders');
     } catch (error: any) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Invalid OTP. Please try again.',
-        position: 'top',
-      });
+      Toast.show({ type: 'error', text1: 'Error', text2: error.message || 'Invalid OTP. Please try again.', position: 'top' });
     }
   };
+
+  // ─── Loading / Error ──────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -246,30 +222,32 @@ const OrderDetailScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ready_for_pickup': return 'bg-yellow-500';
-      case 'out_for_delivery': return 'bg-blue-500';
-      case 'delivered': return 'bg-green-500';
-      default: return 'bg-gray-500';
+      case 'ready_for_pickup':  return 'bg-yellow-500';
+      case 'out_for_delivery':  return 'bg-blue-500';
+      case 'delivered':         return 'bg-green-500';
+      default:                  return 'bg-gray-500';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'ready_for_pickup': return 'Ready for Pickup';
-      case 'out_for_delivery': return 'Out for Delivery';
-      case 'delivered': return 'Delivered';
-      default: return 'Unknown';
+      case 'ready_for_pickup':  return 'Ready for Pickup';
+      case 'out_for_delivery':  return 'Out for Delivery';
+      case 'delivered':         return 'Delivered';
+      default:                  return 'Unknown';
     }
   };
-  
-  // Determine current stage
+
   const isUnassigned = !order.delivery_boy_id;
-  const isAssigned = !!order.delivery_boy_id && !order.picked_up_at;
-  const isPickedUp = order.status === 'out_for_delivery';
-  const isDelivered = order.status === 'delivered';
-   
+  const isAssigned   = !!order.delivery_boy_id && !order.picked_up_at;
+  const isPickedUp   = order.status === 'out_for_delivery';
+  const isDelivered  = order.status === 'delivered';
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
+
       {/* Header */}
       <View className="px-4 py-4 flex-row items-center">
         <TouchableOpacity
@@ -283,18 +261,17 @@ const OrderDetailScreen = () => {
           <Text className="text-white text-xl font-bold">Order #{order.order_number}</Text>
         </View>
         <View className={`px-4 py-2 rounded-full ${getStatusColor(order.status)}`}>
-          <Text className="text-white text-xs font-bold">
-            {getStatusText(order.status)}
-          </Text>
+          <Text className="text-white text-xs font-bold">{getStatusText(order.status)}</Text>
         </View>
       </View>
 
-      <ScrollView 
-        className="flex-1" 
+      <ScrollView
+        className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-4">
+
           {/* Verification Gate */}
           {!isVerified && (
             <View className="bg-white rounded-3xl p-5 mb-4 shadow-lg border-2 border-orange-400">
@@ -303,9 +280,7 @@ const OrderDetailScreen = () => {
                   <Feather name="alert-triangle" size={24} color="#ea580c" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-lg font-bold text-gray-900 mb-2">
-                    Verification Required
-                  </Text>
+                  <Text className="text-lg font-bold text-gray-900 mb-2">Verification Required</Text>
                   <Text className="text-sm text-gray-600 leading-5">
                     Complete KYC and admin verification to proceed with orders
                   </Text>
@@ -344,7 +319,7 @@ const OrderDetailScreen = () => {
             </View>
           </View>
 
-          {/* STAGE 1: Accept Order Button - Show only if unassigned */}
+          {/* STAGE 1: Accept Order */}
           {isUnassigned && (
             <TouchableOpacity
               onPress={handleAcceptOrder}
@@ -368,22 +343,21 @@ const OrderDetailScreen = () => {
             </TouchableOpacity>
           )}
 
-          {/* Progress Indicator - Show after accepting */}
+          {/* Progress Indicator */}
           {!isUnassigned && (
             <View className="bg-white rounded-3xl p-5 mb-4 shadow-lg">
               <Text className="text-lg font-bold text-gray-900 mb-4">Delivery Progress</Text>
-              
+
               <View className="flex-row items-center justify-between mb-2">
                 {/* Pickup */}
                 <View className="items-center flex-1">
                   <View className={`w-12 h-12 rounded-full items-center justify-center mb-2 ${
                     isPickedUp || isDelivered ? 'bg-green-500' : 'bg-yellow-500'
                   }`}>
-                    {isPickedUp || isDelivered ? (
-                      <Feather name="check" size={24} color="white" />
-                    ) : (
-                      <Feather name="shopping-bag" size={24} color="white" />
-                    )}
+                    {isPickedUp || isDelivered
+                      ? <Feather name="check" size={24} color="white" />
+                      : <Feather name="shopping-bag" size={24} color="white" />
+                    }
                   </View>
                   <Text className="text-xs font-semibold text-gray-700 text-center">Pickup</Text>
                   <Text className="text-xs text-gray-500">
@@ -391,28 +365,24 @@ const OrderDetailScreen = () => {
                   </Text>
                 </View>
 
-                {/* Line */}
-                <View className={`h-1 flex-1 mx-2 ${isPickedUp || isDelivered ? 'bg-green-500' : 'bg-gray-200'}`} />
+                <View className={`h-1 flex-1 mx-2 ${
+                  isPickedUp || isDelivered ? 'bg-green-500' : 'bg-gray-200'
+                }`} />
 
                 {/* Delivery */}
                 <View className="items-center flex-1">
                   <View className={`w-12 h-12 rounded-full items-center justify-center mb-2 ${
-                    isDelivered ? 'bg-green-500' : 
-                    isPickedUp ? 'bg-blue-500' : 'bg-gray-300'
+                    isDelivered ? 'bg-green-500' : isPickedUp ? 'bg-blue-500' : 'bg-gray-300'
                   }`}>
-                    {isDelivered ? (
-                      <Feather name="check" size={24} color="white" />
-                    ) : (
-                      <Feather name="truck" size={24} color="white" />
-                    )}
+                    {isDelivered
+                      ? <Feather name="check" size={24} color="white" />
+                      : <Feather name="truck" size={24} color="white" />
+                    }
                   </View>
                   <Text className="text-xs font-semibold text-gray-700 text-center">Delivery</Text>
-                  <Text className="text-xs text-gray-500">
-                    {isDelivered ? 'Done' : 'Pending'}
-                  </Text>
+                  <Text className="text-xs text-gray-500">{isDelivered ? 'Done' : 'Pending'}</Text>
                 </View>
 
-                {/* Line */}
                 <View className={`h-1 flex-1 mx-2 ${isDelivered ? 'bg-green-500' : 'bg-gray-200'}`} />
 
                 {/* Completed */}
@@ -428,7 +398,7 @@ const OrderDetailScreen = () => {
             </View>
           )}
 
-          {/* STAGE 2: Vendor Pickup Section - Show after accepting */}
+          {/* STAGE 2: Vendor Pickup Section */}
           {!isUnassigned && (
             <View className="mb-4">
               <View className="flex-row items-center justify-between mb-3">
@@ -440,10 +410,14 @@ const OrderDetailScreen = () => {
                 </View>
               </View>
 
-              {order.vendors.map((vendor, idx) => {
+              {order.vendors.map((vendor: any) => {
                 const allItemsCollected = areAllItemsCollected(vendor.id);
+                const activeItems    = vendor.items.filter((i: any) => i.status !== 'cancelled');
+                const cancelledItems = vendor.items.filter((i: any) => i.status === 'cancelled');
+
                 return (
                   <View key={vendor.id} className="bg-white rounded-3xl p-5 mb-3 shadow-lg">
+
                     {/* Vendor Header */}
                     <View className="flex-row items-start justify-between mb-3">
                       <View className="flex-1">
@@ -454,7 +428,19 @@ const OrderDetailScreen = () => {
                           </Text>
                         </View>
                         <Text className="text-sm text-gray-600 mb-1">{vendor.address}</Text>
-                        <Text className="text-xs text-gray-500">{vendor.items.length} items</Text>
+                        <View className="flex-row items-center gap-2">
+                          <Text className="text-xs text-gray-500">
+                            {activeItems.length} item{activeItems.length !== 1 ? 's' : ''} to collect
+                          </Text>
+                          {cancelledItems.length > 0 && (
+                            <View className="flex-row items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full">
+                              <Feather name="x" size={10} color="#ef4444" />
+                              <Text className="text-xs text-red-500 font-semibold">
+                                {cancelledItems.length} cancelled
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       <View className={`px-3 py-1.5 rounded-full ${
                         vendor.collected ? 'bg-green-500' : 'bg-yellow-500'
@@ -477,9 +463,11 @@ const OrderDetailScreen = () => {
                       </TouchableOpacity>
                     )}
 
-                    {/* Items List */}
+                    {/* Items toggle */}
                     <TouchableOpacity
-                      onPress={() => setExpandedVendor(expandedVendor === vendor.id ? null : vendor.id)}
+                      onPress={() =>
+                        setExpandedVendor(expandedVendor === vendor.id ? null : vendor.id)
+                      }
                       className="flex-row items-center justify-between py-2 border-t border-gray-100"
                       activeOpacity={0.8}
                       disabled={vendor.collected || isUnassigned}
@@ -492,17 +480,20 @@ const OrderDetailScreen = () => {
                           : 'View items to collect'}
                       </Text>
                       {!vendor.collected && !isUnassigned && (
-                        <Feather 
-                          name={expandedVendor === vendor.id ? 'chevron-up' : 'chevron-down'} 
-                          size={20} 
+                        <Feather
+                          name={expandedVendor === vendor.id ? 'chevron-up' : 'chevron-down'}
+                          size={20}
                           color="#6b7280"
                         />
                       )}
                     </TouchableOpacity>
 
+                    {/* Expanded items list */}
                     {expandedVendor === vendor.id && !vendor.collected && !isUnassigned && (
                       <View className="mt-3 space-y-2">
-                        {vendor.items.map((item) => (
+
+                        {/* ── Active items (collectable) ───────────────── */}
+                        {activeItems.map((item: any) => (
                           <TouchableOpacity
                             key={item.id}
                             onPress={() => handleToggleItemCollection(vendor.id, item.id)}
@@ -529,6 +520,41 @@ const OrderDetailScreen = () => {
                             </View>
                           </TouchableOpacity>
                         ))}
+
+                        {/* ── Cancelled items (non-interactive) ────────── */}
+                        {cancelledItems.length > 0 && (
+                          <View className="mt-2 pt-2 border-t border-dashed border-gray-200">
+                            <View className="flex-row items-center gap-1.5 mb-2">
+                              <Feather name="x-circle" size={13} color="#ef4444" />
+                              <Text className="text-xs text-red-500 font-semibold uppercase tracking-wide">
+                                Cancelled by vendor — do not collect
+                              </Text>
+                            </View>
+
+                            {cancelledItems.map((item: any) => (
+                              <View
+                                key={item.id}
+                                className="flex-row items-center py-2 opacity-40"
+                              >
+                                {/* Locked red X instead of a checkbox */}
+                                <View className="w-6 h-6 bg-red-100 rounded items-center justify-center mr-3">
+                                  <Feather name="x" size={14} color="#ef4444" />
+                                </View>
+                                <View className="flex-1">
+                                  <Text className="font-semibold text-gray-500 line-through">
+                                    {item.name}
+                                  </Text>
+                                  <Text className="text-xs text-gray-400">{item.qty}</Text>
+                                </View>
+                                <View className="bg-red-100 rounded-lg px-2 py-0.5">
+                                  <Text className="text-red-500 text-xs font-semibold">
+                                    Cancelled
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        )}
                       </View>
                     )}
 
@@ -536,7 +562,11 @@ const OrderDetailScreen = () => {
                     {!vendor.collected && isAssigned && (
                       <TouchableOpacity
                         onPress={() => handleMarkVendorCollectedPress(vendor.id)}
-                        disabled={!isVerified || !allItemsCollected || markPickedUpMutation.isPending}
+                        disabled={
+                          !isVerified ||
+                          !allItemsCollected ||
+                          markPickedUpMutation.isPending
+                        }
                         className={`mt-4 py-3 rounded-xl flex-row items-center justify-center gap-2 ${
                           isVerified && allItemsCollected ? 'bg-indigo-600' : 'bg-gray-300'
                         }`}
@@ -624,6 +654,7 @@ const OrderDetailScreen = () => {
               </View>
             </View>
           )}
+
         </View>
       </ScrollView>
 
@@ -631,8 +662,8 @@ const OrderDetailScreen = () => {
       {(showOtpModal || showPickupModal || showAcceptModal) && (
         <BlurView
           intensity={10}
-          experimentalBlurMethod='dimezisBlurView'
-          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+          experimentalBlurMethod="dimezisBlurView"
+          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
         />
       )}
 
@@ -659,8 +690,10 @@ const OrderDetailScreen = () => {
         }}
         onConfirm={handleConfirmMarkPickedUp}
         title="Confirm Pickup?"
-        message={`Please confirm that you have collected all items from ${
-          currentVendorId ? order.vendors.find(v => v.id === currentVendorId)?.name : 'this vendor'
+        message={`Please confirm that you have collected all active items from ${
+          currentVendorId
+            ? order.vendors.find((v: any) => v.id === currentVendorId)?.name
+            : 'this vendor'
         }. This will update the order status to "Out for Delivery".`}
         confirmText="Yes, Picked Up"
         cancelText="Cancel"

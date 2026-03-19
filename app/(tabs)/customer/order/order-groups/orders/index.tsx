@@ -60,14 +60,10 @@ export default function OrderGroupDetailScreen() {
 
   const getPaymentMethodDisplay = (method?: string) => {
     switch (method) {
-      case 'cod':
-        return 'Cash on Delivery';
-      case 'razorpay':
-        return 'Online Payment (Razorpay)';
-      case 'wallet':
-        return 'Wallet';
-      default:
-        return method?.toUpperCase() || 'N/A';
+      case 'cod':   return 'Cash on Delivery';
+      case 'razorpay': return 'Online Payment (Razorpay)';
+      case 'wallet': return 'Wallet';
+      default: return method?.toUpperCase() || 'N/A';
     }
   };
 
@@ -82,9 +78,7 @@ export default function OrderGroupDetailScreen() {
   if (error || !orderGroup) {
     return (
       <View className="flex-1 items-center justify-center bg-white px-4">
-        <Text className="text-red-600 text-center">
-          Error loading order group details
-        </Text>
+        <Text className="text-red-600 text-center">Error loading order group details</Text>
         <TouchableOpacity
           onPress={() => router.back()}
           className="mt-4 bg-green-500 px-6 py-3 rounded-xl"
@@ -97,39 +91,27 @@ export default function OrderGroupDetailScreen() {
 
   return (
     <View className="flex-1 bg-gray-50">
-      <Stack.Screen
-        options={{
-          title: 'Order Group Details',
-          headerBackTitle: 'Groups',
-        }}
-      />
+      <Stack.Screen options={{ title: 'Order Group Details', headerBackTitle: 'Groups' }} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
       >
-        {/* Order Group Summary */}
+        {/* ── Order Group Summary ───────────────────────────────────────── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3">
-          <Text className="text-base font-bold text-gray-900 mb-4">
-            Order Group Summary
-          </Text>
+          <Text className="text-base font-bold text-gray-900 mb-4">Order Group Summary</Text>
 
           <View className="mb-3">
             <Text className="text-xs text-gray-500 mb-1">Group ID</Text>
-            <Text className="text-sm font-mono font-semibold text-gray-900">
-              {orderGroup.id}
-            </Text>
+            <Text className="text-sm font-mono font-semibold text-gray-900">{orderGroup.id}</Text>
           </View>
 
           <View className="mb-3">
             <Text className="text-xs text-gray-500 mb-1">Created Date</Text>
             <Text className="text-sm font-semibold text-gray-900">
               {new Date(orderGroup.created_at).toLocaleString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
+                month: 'long', day: 'numeric', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
               })}
             </Text>
           </View>
@@ -144,11 +126,7 @@ export default function OrderGroupDetailScreen() {
           <View className="mb-3">
             <Text className="text-xs text-gray-500 mb-1">Payment Status</Text>
             <View className="flex-row items-center">
-              <View
-                className={`px-3 py-1.5 rounded-full ${getPaymentStatusColor(
-                  orderGroup.payment_status
-                )}`}
-              >
+              <View className={`px-3 py-1.5 rounded-full ${getPaymentStatusColor(orderGroup.payment_status)}`}>
                 <Text className="text-xs font-semibold">
                   {orderGroup.payment_status.toUpperCase()}
                 </Text>
@@ -162,17 +140,13 @@ export default function OrderGroupDetailScreen() {
               {orderGroup.razorpay_order_id && (
                 <View className="mb-2">
                   <Text className="text-xs text-gray-500 mb-1">Razorpay Order ID</Text>
-                  <Text className="text-xs font-mono text-gray-700">
-                    {orderGroup.razorpay_order_id}
-                  </Text>
+                  <Text className="text-xs font-mono text-gray-700">{orderGroup.razorpay_order_id}</Text>
                 </View>
               )}
               {orderGroup.razorpay_payment_id && (
                 <View>
                   <Text className="text-xs text-gray-500 mb-1">Payment ID</Text>
-                  <Text className="text-xs font-mono text-gray-700">
-                    {orderGroup.razorpay_payment_id}
-                  </Text>
+                  <Text className="text-xs font-mono text-gray-700">{orderGroup.razorpay_payment_id}</Text>
                 </View>
               )}
             </View>
@@ -180,97 +154,146 @@ export default function OrderGroupDetailScreen() {
 
           <View className="h-px bg-gray-200 my-3" />
 
+          {/* Price breakdown */}
+          <View className="gap-y-1.5 mb-3">
+            <View className="flex-row justify-between">
+              <Text className="text-sm text-gray-500">Subtotal</Text>
+              <Text className="text-sm font-semibold text-gray-900">
+                ₹{Number(orderGroup.subtotal).toFixed(2)}
+              </Text>
+            </View>
+
+            {Number(orderGroup.discount) > 0 && (
+              <View className="flex-row justify-between">
+                <Text className="text-sm text-gray-500">Product Discount</Text>
+                <Text className="text-sm font-semibold text-green-600">
+                  -₹{Number(orderGroup.discount).toFixed(2)}
+                </Text>
+              </View>
+            )}
+
+            {Number(orderGroup.coupon_discount) > 0 && (
+              <View className="flex-row justify-between">
+                <Text className="text-sm text-gray-500">Coupon Discount</Text>
+                <Text className="text-sm font-semibold text-green-600">
+                  -₹{Number(orderGroup.coupon_discount).toFixed(2)}
+                </Text>
+              </View>
+            )}
+
+            <View className="flex-row justify-between">
+              <Text className="text-sm text-gray-500">Delivery Fee</Text>
+              <Text className="text-sm font-semibold text-gray-900">
+                {orderGroup.is_free_delivery ? (
+                  <Text className="text-green-600">Free</Text>
+                ) : (
+                  `₹${Number(orderGroup.delivery_fee).toFixed(2)}`
+                )}
+              </Text>
+            </View>
+
+            {Number(orderGroup.tax) > 0 && (
+              <View className="flex-row justify-between">
+                <Text className="text-sm text-gray-500">Tax</Text>
+                <Text className="text-sm font-semibold text-gray-900">
+                  ₹{Number(orderGroup.tax).toFixed(2)}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View className="h-px bg-gray-200 mb-3" />
+
           <View className="flex-row justify-between items-center">
             <Text className="text-base font-bold text-gray-900">Total Amount</Text>
             <Text className="text-xl font-bold text-gray-900">
-              ₹{orderGroup.total_amount.toFixed(2)}
+              ₹{Number(orderGroup.total_amount).toFixed(2)}
             </Text>
           </View>
         </View>
 
-        {/* Customer Information */}
+        {/* ── Customer Information ──────────────────────────────────────── */}
         {orderGroup.customers && (
           <View className="bg-white mx-4 rounded-2xl p-4 mb-3">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Customer Details
-            </Text>
+            <Text className="text-base font-bold text-gray-900 mb-3">Customer Details</Text>
 
             <View className="flex-row items-center">
-              {/* Customer Image */}
               <View className="w-14 h-14 bg-gray-200 rounded-full mr-3 overflow-hidden">
                 {orderGroup.customers.profile_image ? (
                   <Image
                     source={orderGroup.customers.profile_image}
-                    placeholder={{ blurhash: blurhash }}
+                    placeholder={{ blurhash }}
                     contentFit="cover"
                     transition={1000}
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
-                  <View className="w-full h-full items-center justify-center bg-green-100" />
+                  <View className="w-full h-full items-center justify-center bg-green-100">
+                    <Text className="text-2xl">👤</Text>
+                  </View>
                 )}
               </View>
 
-              {/* Customer Info */}
               <View className="flex-1">
                 <Text className="text-sm font-bold text-gray-900 mb-1">
-                  {orderGroup.customers.first_name}{' '}
-                  {orderGroup.customers.last_name}
+                  {orderGroup.customers.first_name} {orderGroup.customers.last_name}
                 </Text>
                 <Text className="text-xs text-gray-500">
-                  Customer ID:{' '}
-                  {String(orderGroup.customers.user_id).slice(0, 8)}...
+                  Customer ID: {String(orderGroup.customers.user_id).slice(0, 8)}...
                 </Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* Orders in this Group */}
+        {/* ── Orders in this Group ──────────────────────────────────────── */}
         <View className="bg-white mx-4 rounded-2xl p-4 mb-3 gap-y-2">
-          <Text className="text-base font-bold text-gray-900">
+          <Text className="text-base font-bold text-gray-900 mb-1">
             Orders ({orderGroup.orders?.length || 0})
           </Text>
 
           {orderGroup.orders && orderGroup.orders.length > 0 ? (
-            orderGroup.orders.map((order, index) => (
-              <TouchableOpacity
-                key={order.id}
-                onPress={() => router.push(`/customer/order/order-groups/orders/${order.id}`)}
-                className={`border border-gray-100 rounded-xl p-4 mb-3 last:mb-0 ${
-                  index < orderGroup.orders.length - 1 ? 'mb-3' : ''
-                }`}
-                activeOpacity={0.7}
-              >
-                {/* Order Header */}
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-1">
-                    <Text className="text-xs text-gray-500 mb-1">
-                      {order.order_number}
-                    </Text>
-                    <View className="flex-row items-center gap-2">
-                      {/* Vendor Image */}
-                      <View className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden">
-                        {order.vendors?.store_image ? (
-                          <Image
-                            source={order.vendors?.store_image}
-                            placeholder={{ blurhash: blurhash }}
-                            contentFit="cover"
-                            transition={1000}
-                            style={{ width: '100%', height: '100%' }}
-                          />
-                        ) : (
-                          <View className="w-full h-full items-center justify-center">
-                            <Text className="text-lg">🏪</Text>
-                          </View>
-                        )}
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
-                          {order.vendors?.store_name || 'Unknown Vendor'}
-                        </Text>
-                        {order.vendors?.rating !== null &&
-                          order.vendors?.rating !== undefined && (
+            orderGroup.orders.map((order, index) => {
+              const allItems       = order.order_items ?? [];
+              const activeItems    = allItems.filter((i: any) => i.status !== 'cancelled');
+              const cancelledItems = allItems.filter((i: any) => i.status === 'cancelled');
+
+              return (
+                <TouchableOpacity
+                  key={order.id}
+                  onPress={() =>
+                    router.push(`/customer/order/order-groups/orders/${order.id}`)
+                  }
+                  className={`border border-gray-100 rounded-xl p-4 ${
+                    index < orderGroup.orders.length - 1 ? 'mb-3' : ''
+                  }`}
+                  activeOpacity={0.7}
+                >
+                  {/* Order Header */}
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="flex-1">
+                      <Text className="text-xs text-gray-500 mb-1">{order.order_number}</Text>
+                      <View className="flex-row items-center gap-2">
+                        <View className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden">
+                          {order.vendors?.store_image ? (
+                            <Image
+                              source={order.vendors.store_image}
+                              placeholder={{ blurhash }}
+                              contentFit="cover"
+                              transition={1000}
+                              style={{ width: '100%', height: '100%' }}
+                            />
+                          ) : (
+                            <View className="w-full h-full items-center justify-center">
+                              <Text className="text-lg">🏪</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
+                            {order.vendors?.store_name || 'Unknown Vendor'}
+                          </Text>
+                          {order.vendors?.rating != null && (
                             <View className="flex-row items-center">
                               <FontAwesome name="star" size={10} color="#fbbf24" />
                               <Text className="text-xs text-gray-600 ml-1">
@@ -278,64 +301,125 @@ export default function OrderGroupDetailScreen() {
                               </Text>
                             </View>
                           )}
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <View
-                    className={`px-3 py-1.5 rounded-full ${getOrderStatusColor(order.status)}`}
-                  >
-                    <Text className="text-xs font-semibold">
-                      {getOrderStatusText(order.status)}
-                    </Text>
-                  </View>
-                </View>
 
-                {/* Order Items Preview */}
-                <View className="mb-3">
-                  <Text className="text-sm text-gray-600 mb-2">
-                    {order.item_count} {order.item_count === 1 ? 'item' : 'items'}
-                  </Text>
-                  {order.order_items?.slice(0, 2).map((item) => (
-                    <View key={item.id} className="flex-row items-center gap-2 mb-1">
-                      <View className="w-8 h-8 bg-gray-100 rounded-md overflow-hidden">
-                        {item.product_image ? (
-                          <Image
-                            source={item.product_image}
-                            placeholder={{ blurhash: blurhash }}
-                            contentFit="cover"
-                            transition={300}
-                            style={{ width: '100%', height: '100%' }}
-                          />
-                        ) : (
-                          <View className="w-full h-full items-center justify-center">
-                            <Text className="text-sm">📦</Text>
+                    <View className={`px-3 py-1.5 rounded-full ${getOrderStatusColor(order.status)}`}>
+                      <Text className="text-xs font-semibold">
+                        {getOrderStatusText(order.status)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* ── Active Items ─────────────────────────────────────── */}
+                  {activeItems.length > 0 && (
+                    <View className="mb-2">
+                      <Text className="text-xs text-gray-500 mb-1.5">
+                        {activeItems.reduce((s: number, i: any) => s + i.quantity, 0)}{' '}
+                        {activeItems.reduce((s: number, i: any) => s + i.quantity, 0) === 1
+                          ? 'item'
+                          : 'items'}
+                      </Text>
+
+                      {activeItems.slice(0, 2).map((item: any) => (
+                        <View key={item.id} className="flex-row items-center gap-2 mb-1">
+                          <View className="w-8 h-8 bg-gray-100 rounded-md overflow-hidden">
+                            {item.product_image ? (
+                              <Image
+                                source={item.product_image}
+                                placeholder={{ blurhash }}
+                                contentFit="cover"
+                                transition={300}
+                                style={{ width: '100%', height: '100%' }}
+                              />
+                            ) : (
+                              <View className="w-full h-full items-center justify-center">
+                                <Text className="text-sm">📦</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
-                      <Text className="text-xs text-gray-600 flex-1" numberOfLines={1}>
-                        {item.product_name} × {item.quantity}
-                      </Text>
-                      <Text className="text-xs font-semibold text-gray-700">
-                        ₹{item.total_price.toFixed(2)}
-                      </Text>
-                    </View>
-                  ))}
-                  {order.order_items && order.order_items.length > 2 && (
-                    <Text className="text-xs text-gray-500 ml-10">
-                      +{order.order_items.length - 2} more items
-                    </Text>
-                  )}
-                </View>
+                          <Text className="text-xs text-gray-600 flex-1" numberOfLines={1}>
+                            {item.product_name} × {item.quantity}
+                          </Text>
+                          <Text className="text-xs font-semibold text-gray-700">
+                            ₹{Number(item.total_price).toFixed(2)}
+                          </Text>
+                        </View>
+                      ))}
 
-                {/* Order Total */}
-                <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
-                  <Text className="text-xs text-gray-500">Order Total</Text>
-                  <Text className="text-base font-bold text-gray-900">
-                    ₹{order.total_amount.toFixed(2)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))
+                      {activeItems.length > 2 && (
+                        <Text className="text-xs text-gray-500 ml-10">
+                          +{activeItems.length - 2} more items
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {/* ── Cancelled Items ───────────────────────────────────── */}
+                  {cancelledItems.length > 0 && (
+                    <View className="mt-2 pt-2 border-t border-dashed border-gray-200">
+                      {/* Header row */}
+                      <View className="flex-row items-center gap-1.5 mb-1.5">
+                        <Feather name="x-circle" size={11} color="#ef4444" />
+                        <Text className="text-xs text-red-500 font-semibold uppercase tracking-wide">
+                          Cancelled ({cancelledItems.length})
+                        </Text>
+                      </View>
+
+                      {cancelledItems.map((item: any) => (
+                        <View
+                          key={item.id}
+                          className="flex-row items-center gap-2 mb-1 opacity-50"
+                        >
+                          <View className="w-8 h-8 bg-gray-100 rounded-md overflow-hidden">
+                            {item.product_image ? (
+                              <Image
+                                source={item.product_image}
+                                placeholder={{ blurhash }}
+                                contentFit="cover"
+                                transition={300}
+                                style={{ width: '100%', height: '100%' }}
+                              />
+                            ) : (
+                              <View className="w-full h-full items-center justify-center">
+                                <Text className="text-sm">📦</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text
+                            className="text-xs text-gray-500 line-through flex-1"
+                            numberOfLines={1}
+                          >
+                            {item.product_name} × {item.quantity}
+                          </Text>
+                          <View className="bg-red-100 rounded px-1.5 py-0.5">
+                            <Text className="text-red-500 text-xs font-semibold">
+                              -₹{Number(item.total_price).toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Order Total */}
+                  <View className="flex-row items-center justify-between pt-3 border-t border-gray-100 mt-2">
+                    <View>
+                      <Text className="text-xs text-gray-500">Order Total</Text>
+                      {cancelledItems.length > 0 && (
+                        <Text className="text-xs text-red-400 mt-0.5">
+                          {cancelledItems.length} item{cancelledItems.length > 1 ? 's' : ''} cancelled
+                        </Text>
+                      )}
+                    </View>
+                    <Text className="text-base font-bold text-gray-900">
+                      ₹{Number(order.total_amount).toFixed(2)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           ) : (
             <View className="items-center py-6">
               <Text className="text-gray-500">No orders in this group</Text>
@@ -344,7 +428,7 @@ export default function OrderGroupDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Action Buttons */}
+      {/* ── Action Buttons ────────────────────────────────────────────────── */}
       <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <View className="flex-row gap-3">
           <TouchableOpacity
@@ -368,7 +452,7 @@ export default function OrderGroupDetailScreen() {
                 Toast.show({
                   type: 'success',
                   text1: `Payment ID: ${orderGroup.razorpay_payment_id}`,
-                  text2: `₹${orderGroup.total_amount.toFixed(2)} • ${orderGroup.payment_status.toUpperCase()}`,
+                  text2: `₹${Number(orderGroup.total_amount).toFixed(2)} • ${orderGroup.payment_status.toUpperCase()}`,
                   position: 'top',
                   visibilityTime: 5000,
                 });

@@ -80,7 +80,6 @@ export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus
         `)
         .eq('customer_id', customerId);
 
-      // Apply payment status filter
       if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
         query = query.eq('payment_status', filters.paymentStatus);
       }
@@ -91,13 +90,10 @@ export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus
       return data;
     },
     enabled: !!customerId,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 30,
   });
 }
 
-// ============================================================================
-// NEW QUERY: Get Order Group Detail
-// ============================================================================
 export function useOrderGroupDetailFullInfo(orderGroupId: string) {
   return useQuery({
     queryKey: orderQueryKeys.orderGroups.detail(orderGroupId),
@@ -144,7 +140,8 @@ export function useOrderGroupDetailFullInfo(orderGroupId: string) {
               quantity,
               unit_price,
               discount_price,
-              total_price
+              total_price,
+              status
             )
           )
         `)
@@ -158,9 +155,6 @@ export function useOrderGroupDetailFullInfo(orderGroupId: string) {
   });
 }
 
-// ============================================================================
-// NEW QUERY: Get Orders by Group ID
-// ============================================================================
 export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
   const session = useAuthStore((state) => state.session);
   const customerId = session?.user?.id;
@@ -227,13 +221,13 @@ export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
             quantity,
             unit_price,
             discount_price,
-            total_price
+            total_price,
+            status
           )
         `)
         .eq('order_group_id', groupId)
         .eq('customer_id', customerId);
 
-      // Apply filters
       if (filters?.status) {
         if (filters.status === 'active') {
           query = query.not('status', 'in', '(delivered,cancelled,refunded)');
@@ -244,13 +238,8 @@ export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
         }
       }
 
-      if (filters?.startDate) {
-        query = query.gte('created_at', filters.startDate);
-      }
-
-      if (filters?.endDate) {
-        query = query.lte('created_at', filters.endDate);
-      }
+      if (filters?.startDate) query = query.gte('created_at', filters.startDate);
+      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -258,13 +247,10 @@ export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
       return data as Order[];
     },
     enabled: !!customerId && !!groupId,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 30,
   });
 }
 
-// ============================================================================
-// QUERY: Get Customer Orders
-// ============================================================================
 export function useCustomerOrders(filters?: OrderFilters) {
   const session = useAuthStore((state) => state.session);
   const customerId = session?.user?.id;
@@ -331,12 +317,12 @@ export function useCustomerOrders(filters?: OrderFilters) {
             quantity,
             unit_price,
             discount_price,
-            total_price
+            total_price,
+            status
           )
         `)
         .eq('customer_id', customerId);
 
-      // Apply filters
       if (filters?.status) {
         if (filters.status === 'active') {
           query = query.not('status', 'in', '(delivered,cancelled,refunded)');
@@ -347,23 +333,14 @@ export function useCustomerOrders(filters?: OrderFilters) {
         }
       }
 
-      if (filters?.startDate) {
-        query = query.gte('created_at', filters.startDate);
-      }
-
-      if (filters?.endDate) {
-        query = query.lte('created_at', filters.endDate);
-      }
+      if (filters?.startDate) query = query.gte('created_at', filters.startDate);
+      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
 
       if (filters?.search) {
         query = query.or(`order_number.ilike.%${filters.search}%,vendors.store_name.ilike.%${filters.search}%`);
       }
 
-      // Pagination
-      if (filters?.limit) {
-        query = query.limit(filters.limit);
-      }
-
+      if (filters?.limit) query = query.limit(filters.limit);
       if (filters?.offset) {
         query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
       }
@@ -374,13 +351,10 @@ export function useCustomerOrders(filters?: OrderFilters) {
       return data as Order[];
     },
     enabled: !!customerId,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 30,
   });
 }
 
-// ============================================================================
-// QUERY: Get Vendor Orders
-// ============================================================================
 export function useVendorOrders(filters?: OrderFilters) {
   const session = useAuthStore((state) => state.session);
   const vendorId = session?.user?.id;
@@ -405,6 +379,8 @@ export function useVendorOrders(filters?: OrderFilters) {
           discount,
           coupon_discount,
           total_amount,
+          total_commission,
+          vendor_payout,
           special_instructions,
           vendor_accepted_at,
           cancelled_at,
@@ -439,22 +415,17 @@ export function useVendorOrders(filters?: OrderFilters) {
             product_image,
             quantity,
             unit_price,
+            discount_price,
             total_price,
             commission_rate,
-            commission_amount
+            commission_amount,
+            status
           )
         `)
         .eq('vendor_id', vendorId);
 
-    
-
-      if (filters?.startDate) {
-        query = query.gte('created_at', filters.startDate);
-      }
-
-      if (filters?.endDate) {
-        query = query.lte('created_at', filters.endDate);
-      }
+      if (filters?.startDate) query = query.gte('created_at', filters.startDate);
+      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -462,10 +433,10 @@ export function useVendorOrders(filters?: OrderFilters) {
       return data;
     },
     enabled: !!vendorId,
-    refetchInterval: 1000 * 30, // Auto-refetch every 30 seconds for new orders
+    refetchInterval: 1000 * 30,
   });
 }
- 
+
 // ============================================================================
 // QUERY: Get Order Detail
 // ============================================================================
@@ -486,6 +457,8 @@ export function useOrderDetail(orderId: string) {
             address,
             city,
             state,
+            latitude,
+            longitude,
             rating,
             review_count,
             business_hours
@@ -524,12 +497,16 @@ export function useOrderDetail(orderId: string) {
             product_id,
             product_name,
             product_image,
+            product_sku,
             quantity,
+            unit,
             unit_price,
             discount_price,
             total_price,
             commission_rate,
-            commission_amount
+            commission_amount,
+            vendor_id,
+            status
           )
         `)
         .eq('id', orderId)
@@ -539,12 +516,172 @@ export function useOrderDetail(orderId: string) {
       return data;
     },
     enabled: !!orderId,
+    staleTime: 0,
   });
 }
 
 // ============================================================================
-// QUERY: Get Order Timeline
+// MUTATION: Cancel a single order item (vendor)
+//
+// Strategy — two-phase update for instant UI response:
+//
+// 1. OPTIMISTIC UPDATE (onMutate)
+//    — Immediately mark the item as 'cancelled' in the cache
+//    — Immediately update subtotal / total_commission / vendor_payout
+//      on the order using values returned from the previous successful RPC,
+//      or by re-computing from the remaining active items in the cache.
+//    — Snapshot the previous cache value so we can roll back on error.
+//
+// 2. RPC CALL
+//    — Calls `vendor_cancel_order_item` which recalculates all totals in the
+//      DB and returns { new_subtotal, new_commission, new_vendor_payout }.
+//
+// 3. ON SUCCESS — patch cache with exact DB values + schedule a background
+//    refetch to sync any edge-cases (e.g. order auto-cancelled).
+//
+// 4. ON ERROR   — roll back to the snapshot captured in onMutate.
 // ============================================================================
+
+interface CancelOrderItemParams {
+  orderId: string;
+  orderItemId: string;
+  reason: string;
+}
+
+interface CancelOrderItemResponse {
+  success: boolean;
+  order_cancelled: boolean;
+  active_items_remaining?: number;
+  new_subtotal?: number;
+  new_commission?: number;
+  new_vendor_payout?: number;
+}
+
+export function useVendorCancelOrderItem() {
+  const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
+
+  return useMutation<CancelOrderItemResponse, Error, CancelOrderItemParams>({
+    // ── 1. Optimistic update ───────────────────────────────────────────────
+    onMutate: async ({ orderId, orderItemId }) => {
+      // Cancel any in-flight refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({
+        queryKey: orderQueryKeys.orders.detail(orderId),
+      });
+
+      // Snapshot current cache value for rollback
+      const previousOrder = queryClient.getQueryData(
+        orderQueryKeys.orders.detail(orderId)
+      );
+
+      // Apply optimistic update
+      queryClient.setQueryData(
+        orderQueryKeys.orders.detail(orderId),
+        (old: any) => {
+          if (!old) return old;
+
+          // Mark the cancelled item in place
+          const updatedItems = (old.order_items ?? []).map((item: any) =>
+            item.id === orderItemId ? { ...item, status: 'cancelled' } : item
+          );
+
+          // Re-compute totals from the remaining active items
+          const activeItems = updatedItems.filter(
+            (i: any) => i.status !== 'cancelled'
+          );
+
+          const newSubtotal = activeItems.reduce(
+            (sum: number, i: any) => sum + (i.total_price ?? 0),
+            0
+          );
+          const newCommission = activeItems.reduce(
+            (sum: number, i: any) => sum + (i.commission_amount ?? 0),
+            0
+          );
+          const newVendorPayout = newSubtotal - newCommission;
+          const newItemCount = activeItems.reduce(
+            (sum: number, i: any) => sum + (i.quantity ?? 0),
+            0
+          );
+
+          return {
+            ...old,
+            order_items: updatedItems,
+            subtotal: newSubtotal,
+            total_commission: newCommission,
+            vendor_payout: newVendorPayout,
+            item_count: newItemCount,
+          };
+        }
+      );
+
+      // Return snapshot for potential rollback
+      return { previousOrder };
+    },
+
+    // ── 2. RPC call ────────────────────────────────────────────────────────
+    mutationFn: async ({ orderId, orderItemId, reason }) => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase.rpc('vendor_cancel_order_item', {
+        p_order_id: orderId,
+        p_order_item_id: orderItemId,
+        p_vendor_id: vendorId,
+        p_reason: reason,
+      });
+
+      if (error) throw error;
+
+      const result = data as CancelOrderItemResponse;
+      if (!result?.success) {
+        throw new Error((result as any)?.error ?? 'Failed to cancel item');
+      }
+
+      return result;
+    },
+
+    // ── 3. On success — patch cache with exact DB values ──────────────────
+    onSuccess: (data, { orderId }) => {
+      if (!data.order_cancelled) {
+        // Patch the order-level financial fields with exact DB-confirmed values
+        queryClient.setQueryData(
+          orderQueryKeys.orders.detail(orderId),
+          (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              subtotal: data.new_subtotal ?? old.subtotal,
+              total_commission: data.new_commission ?? old.total_commission,
+              vendor_payout: data.new_vendor_payout ?? old.vendor_payout,
+            };
+          }
+        );
+      }
+
+      // Background refetch to catch edge-cases (order auto-cancelled, etc.)
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.detail(orderId),
+      });
+
+      // Also invalidate vendor order lists so the list view stays in sync
+      queryClient.invalidateQueries({
+        queryKey: orderQueryKeys.orders.all,
+      });
+    },
+
+    // ── 4. On error — roll back to snapshot ───────────────────────────────
+    onError: (_error, { orderId }, context: any) => {
+      if (context?.previousOrder) {
+        queryClient.setQueryData(
+          orderQueryKeys.orders.detail(orderId),
+          context.previousOrder
+        );
+      }
+    },
+  });
+}
+
 export function useOrderTimeline(orderId: string) {
   return useQuery({
     queryKey: orderQueryKeys.orders.timeline(orderId),
@@ -567,14 +704,12 @@ export function useOrderTimeline(orderId: string) {
 
       const timeline = [];
 
-      // Step 1: Order Placed
       timeline.push({
         status: 'Order Placed',
         completed: !!data.created_at,
         timestamp: data.created_at,
       });
 
-      // If cancelled, show and stop
       if (data.cancelled_at) {
         timeline.push({
           status: 'Cancelled',
@@ -584,29 +719,24 @@ export function useOrderTimeline(orderId: string) {
         return timeline;
       }
 
-      // Step 2: Order Confirmed (combine payment + vendor acceptance)
-      // Show as "Confirmed" when EITHER confirmed_at OR vendor_accepted_at exists
       timeline.push({
         status: 'Confirmed',
-        completed:  !!data.vendor_accepted_at,
-        timestamp:  data.vendor_accepted_at,
+        completed: !!data.vendor_accepted_at,
+        timestamp: data.vendor_accepted_at,
       });
 
-      // Step 3: Preparing Order
       timeline.push({
         status: 'Preparing Order',
         completed: !!data.vendor_accepted_at,
         timestamp: data.vendor_accepted_at,
       });
 
-      // Step 4: Out for Delivery
       timeline.push({
         status: 'Out for Delivery',
         completed: !!data.picked_up_at,
         timestamp: data.picked_up_at,
       });
 
-      // Step 5: Delivered
       timeline.push({
         status: 'Delivered',
         completed: !!data.delivered_at,
@@ -619,9 +749,6 @@ export function useOrderTimeline(orderId: string) {
   });
 }
 
-// ============================================================================
-// QUERY: Get Order Group Detail
-// ============================================================================
 export function useOrderGroupDetail(orderGroupId: string) {
   return useQuery({
     queryKey: orderQueryKeys.orderGroups.detail(orderGroupId),
@@ -651,7 +778,8 @@ export function useOrderGroupDetail(orderGroupId: string) {
               quantity,
               unit_price,
               discount_price,
-              total_price
+              total_price,
+              status
             )
           )
         `)
@@ -665,9 +793,6 @@ export function useOrderGroupDetail(orderGroupId: string) {
   });
 }
 
-// ============================================================================
-// MUTATION: Cancel Order (Customer)
-// ============================================================================
 export function useCancelOrder() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -689,15 +814,10 @@ export function useCancelOrder() {
         p_cancellation_reason: reason,
       });
 
-      
-
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      // Invalidate queries
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
       queryClient.invalidateQueries({
         queryKey: orderQueryKeys.orders.detail(variables.orderId),
       });
@@ -738,9 +858,6 @@ interface AssignDeliveryPartnerResponse {
   delivery_boy_name: string;
 }
 
-// ============================================================================
-// MUTATION: Vendor Accept Order (UPDATED)
-// ============================================================================
 export function useVendorAcceptOrder() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -756,18 +873,11 @@ export function useVendorAcceptOrder() {
       });
 
       if (error) throw error;
-      
       return data as VendorAcceptOrderResponse;
     },
-    onSuccess: (data, orderId) => {
-
-      // Invalidate queries to refresh the UI
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(orderId),
-      });
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
     onError: (error: any) => {
       console.error('Failed to accept order:', error.message);
@@ -775,9 +885,6 @@ export function useVendorAcceptOrder() {
   });
 }
 
-// ============================================================================
-// MUTATION: Vendor Reject Order (UPDATED)
-// ============================================================================
 export function useVendorRejectOrder() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -804,19 +911,11 @@ export function useVendorRejectOrder() {
       });
 
       if (error) throw error;
-      
       return data as VendorRejectOrderResponse;
     },
-    onSuccess: (data, variables) => {
-      
-
-      // Invalidate queries
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(variables.orderId),
-      });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(variables.orderId) });
     },
     onError: (error: any) => {
       console.error('Failed to reject order:', error.message);
@@ -824,9 +923,6 @@ export function useVendorRejectOrder() {
   });
 }
 
-// ============================================================================
-// MUTATION: Mark Order Ready (NEW)
-// ============================================================================
 export function useMarkOrderReady() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -842,19 +938,11 @@ export function useMarkOrderReady() {
       });
 
       if (error) throw error;
-      
       return data as MarkOrderReadyResponse;
     },
-    onSuccess: (data, orderId) => {
-     
-
-      // Invalidate queries
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(orderId),
-      });
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
     onError: (error: any) => {
       console.error('Failed to mark order as ready:', error.message);
@@ -862,9 +950,6 @@ export function useMarkOrderReady() {
   });
 }
 
-// ============================================================================
-// MUTATION: Assign Delivery Partner (NEW)
-// ============================================================================
 export function useAssignDeliveryPartner() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -887,19 +972,11 @@ export function useAssignDeliveryPartner() {
       });
 
       if (error) throw error;
-      
       return data as AssignDeliveryPartnerResponse;
     },
-    onSuccess: (data, variables) => {
-  
-
-      // Invalidate queries
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(variables.orderId),
-      });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(variables.orderId) });
     },
     onError: (error: any) => {
       console.error('Failed to assign delivery partner:', error.message);
@@ -907,9 +984,6 @@ export function useAssignDeliveryPartner() {
   });
 }
 
-// ============================================================================
-// QUERY: Get Available Delivery Partners (NEW)
-// ============================================================================
 export function useAvailableDeliveryPartners(location?: {
   latitude: number;
   longitude: number;
@@ -917,29 +991,21 @@ export function useAvailableDeliveryPartners(location?: {
   return useQuery({
     queryKey: ['delivery-partners', 'available', location],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('delivery_boys')
         .select(`*,users(phone)`)
         .eq('is_available', true)
-        .eq('is_verified', true);
-
-      //  If location provided, you could add distance filtering here
-      // This would require a PostGIS extension or custom function
-
-      const { data, error } = await query
+        .eq('is_verified', true)
         .order('rating', { ascending: false })
         .limit(20);
 
       if (error) throw error;
       return data;
     },
-    enabled: !!location, // Only run if location is provided
+    enabled: !!location,
   });
 }
 
-// ============================================================================
-// MUTATION: Update Order Status (Vendor/Admin)
-// ============================================================================
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
@@ -947,26 +1013,19 @@ export function useUpdateOrderStatus() {
     mutationFn: async ({
       orderId,
       status,
-      description,
     }: {
       orderId: string;
       status: OrderStatus;
       description?: string;
     }) => {
-      // Update order status
       const updates: any = {
         status,
         updated_at: new Date().toISOString(),
       };
 
-      // Add timestamp fields based on status
-      if (status === 'confirmed') {
-        updates.confirmed_at = new Date().toISOString();
-      } else if (status === 'picked_up') {
-        updates.picked_up_at = new Date().toISOString();
-      } else if (status === 'delivered') {
-        updates.delivered_at = new Date().toISOString();
-      }
+      if (status === 'confirmed') updates.confirmed_at = new Date().toISOString();
+      else if (status === 'picked_up') updates.picked_up_at = new Date().toISOString();
+      else if (status === 'delivered') updates.delivered_at = new Date().toISOString();
 
       const { data, error } = await supabase
         .from('orders')
@@ -979,46 +1038,31 @@ export function useUpdateOrderStatus() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.detail(data.id) 
-      });
-      queryClient.invalidateQueries({ 
-        queryKey: orderQueryKeys.orders.all 
-      });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
     },
   });
 }
 
-// ============================================================================
-// MUTATION: Reorder (Add order items back to cart)
-// ============================================================================
 export function useReorder() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (orderId: string) => {
-      // Get order items
       const { data: orderItems, error } = await supabase
         .from('order_items')
-        .select('product_id, quantity,products(*)')
+        .select('product_id, quantity, products(*)')
         .eq('order_id', orderId);
 
       if (error) throw error;
-      
-      // Return items to be added to cart
-      // (Your cart logic will handle the actual addition)
       return orderItems;
     },
     onSuccess: () => {
-      // Invalidate cart queries if you have them
       queryClient.invalidateQueries({ queryKey: ['cart'] });
     },
   });
 }
 
-// ============================================================================
-// MUTATION: Rate Order (Customer)
-// ============================================================================
 export function useRateOrder() {
   const queryClient = useQueryClient();
 
@@ -1032,14 +1076,9 @@ export function useRateOrder() {
       rating: number;
       review?: string;
     }) => {
-      // This would insert into a reviews table
       const { data, error } = await supabase
         .from('reviews')
-        .insert({
-          order_id: orderId,
-          rating,
-          review,
-        })
+        .insert({ order_id: orderId, rating, review })
         .select()
         .single();
 
@@ -1054,16 +1093,8 @@ export function useRateOrder() {
   });
 }
 
-
-
-// Helper function to calculate distance
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371; // Earth's radius in km
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -1072,15 +1103,9 @@ function calculateDistance(
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-
-
-// ============================================================================
-// QUERY: Get Vendor Statistics
-// ============================================================================
 export function useVendorOrderStats(vendorId: string) {
   return useQuery({
     queryKey: ['vendor-stats', vendorId],
@@ -1092,6 +1117,7 @@ export function useVendorOrderStats(vendorId: string) {
 
       if (error) throw error;
 
+      const today = new Date();
       const stats = {
         total: data.length,
         new: data.filter((o) => o.status === 'pending' || o.status === 'confirmed').length,
@@ -1101,12 +1127,11 @@ export function useVendorOrderStats(vendorId: string) {
         cancelled: data.filter((o) => o.status === 'cancelled').length,
         todayRevenue: data
           .filter((o) => {
-            const orderDate = new Date(o.created_at);
-            const today = new Date();
+            const d = new Date(o.created_at);
             return (
-              orderDate.getDate() === today.getDate() &&
-              orderDate.getMonth() === today.getMonth() &&
-              orderDate.getFullYear() === today.getFullYear()
+              d.getDate() === today.getDate() &&
+              d.getMonth() === today.getMonth() &&
+              d.getFullYear() === today.getFullYear()
             );
           })
           .reduce((sum, o) => sum + parseFloat(o.total_amount), 0),
@@ -1119,18 +1144,8 @@ export function useVendorOrderStats(vendorId: string) {
 }
 
 // ==========================================
-// COUPON & OFFER HOOKS — FIXED
-// ==========================================
-
-// ==========================================
 // COUPON HOOKS
 // ==========================================
-//
-// FLOW:
-//  1. useMyAllCouponUsage  — fetches all per-user usage counts in one query on screen mount
-//  2. useValidateCoupon    — READ ONLY check before applying (nothing written to DB)
-//  3. useRecordCouponUsage — INSERT into coupon_usage AFTER order is created
-//                            DB trigger auto-increments coupons.usage_count
 
 export const couponQueryKeys = {
   all: ['coupons'] as const,
@@ -1139,7 +1154,6 @@ export const couponQueryKeys = {
   myUsage: (userId: string) => ['coupon-usage', 'mine', userId] as const,
 };
 
-// ─── Fetch all active coupons ─────────────────────────────────────────────
 export function useActiveCoupons() {
   return useQuery({
     queryKey: couponQueryKeys.active(),
@@ -1158,9 +1172,6 @@ export function useActiveCoupons() {
   });
 }
 
-// ─── Fetch current user's usage count for ALL coupons in one query ────────
-// Returns { [couponId]: number } — used by the coupon screen to split
-// eligible coupons into "within limit" vs "limit exceeded" without N+1 queries.
 export function useMyAllCouponUsage() {
   const session = useAuthStore((state) => state.session);
 
@@ -1176,7 +1187,6 @@ export function useMyAllCouponUsage() {
 
       if (error) throw error;
 
-      // Build count map: { couponId -> times used by this user }
       const usageMap: Record<string, number> = {};
       for (const row of data ?? []) {
         usageMap[row.coupon_id] = (usageMap[row.coupon_id] ?? 0) + 1;
@@ -1187,10 +1197,6 @@ export function useMyAllCouponUsage() {
   });
 }
 
-// ─── Validate coupon — READ ONLY, nothing written to DB ──────────────────
-// Call when user selects or manually enters a coupon.
-// coupon_usage.order_id is NOT NULL so we cannot write usage until
-// a real order exists — this hook only validates eligibility.
 export function useValidateCoupon() {
   const session = useAuthStore((state) => state.session);
 
@@ -1204,7 +1210,6 @@ export function useValidateCoupon() {
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
 
-      // 1. Fetch coupon
       const { data: coupon, error: couponError } = await supabase
         .from('coupons')
         .select('*')
@@ -1214,22 +1219,18 @@ export function useValidateCoupon() {
 
       if (couponError || !coupon) throw new Error('Invalid coupon code');
 
-      // 2. Date validity
       const now = new Date();
       if (now < new Date(coupon.start_date)) throw new Error('Coupon is not active yet');
       if (now > new Date(coupon.end_date)) throw new Error('Coupon has expired');
 
-      // 3. Minimum order amount
       if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) {
         throw new Error(`Minimum order of ₹${coupon.min_order_amount} required`);
       }
 
-      // 4. Global usage limit
       if (coupon.usage_limit != null && (coupon.usage_count ?? 0) >= coupon.usage_limit) {
         throw new Error('This coupon is no longer available');
       }
 
-      // 5. Per-user usage limit — single COUNT query, no row fetching
       const perUserLimit = coupon.usage_limit_per_user ?? 1;
 
       const { count: usedCount, error: usageError } = await supabase
@@ -1261,12 +1262,6 @@ export function useValidateCoupon() {
   });
 }
 
-// ─── Record coupon usage — call AFTER order is successfully created ───────
-// The DB trigger `trigger_update_coupon_usage_count` fires on INSERT and
-// auto-increments coupons.usage_count. Do NOT increment it manually.
-//
-// Called in PaymentScreen inside handleOrderSuccess(groupId):
-//   await recordCouponUsage.mutateAsync({ couponId, orderId, discountAmount })
 export function useRecordCouponUsage() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
@@ -1278,7 +1273,7 @@ export function useRecordCouponUsage() {
       discountAmount,
     }: {
       couponId: string;
-      orderId: string;       // real orders.id UUID — must exist before calling this
+      orderId: string;
       discountAmount: number;
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
@@ -1295,7 +1290,6 @@ export function useRecordCouponUsage() {
         .single();
 
       if (error) {
-        // 23505 = unique_violation (coupon_id, order_id already exists) — safe to ignore
         if (error.code === '23505') {
           console.warn('[coupon] usage already recorded for order', orderId);
           return null;
@@ -1305,7 +1299,7 @@ export function useRecordCouponUsage() {
 
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: couponQueryKeys.active() });
       queryClient.invalidateQueries({
         queryKey: couponQueryKeys.myUsage(session?.user?.id ?? ''),
@@ -1314,7 +1308,6 @@ export function useRecordCouponUsage() {
   });
 }
 
-// ─── Pure discount calculator — no DB calls ──────────────────────────────
 export function calculateCouponDiscount(coupon: Coupon, orderAmount: number): number {
   if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) return 0;
 
@@ -1328,7 +1321,6 @@ export function calculateCouponDiscount(coupon: Coupon, orderAmount: number): nu
 
   return Math.max(discount, 0);
 }
-
 
 // ==========================================
 // REVIEW HOOKS
@@ -1385,10 +1377,7 @@ export function useAddReview() {
     }) => {
       const { data, error } = await supabase
         .from('reviews')
-        .insert({
-          ...reviewData,
-          customer_id: session?.user?.id,
-        })
+        .insert({ ...reviewData, customer_id: session?.user?.id })
         .select()
         .single();
       if (error) throw error;
@@ -1396,14 +1385,10 @@ export function useAddReview() {
     },
     onSuccess: (data) => {
       if (data.product_id) {
-        queryClient.invalidateQueries({ 
-          queryKey: queryKeys.reviews.byProduct(data.product_id) 
-        });
+        queryClient.invalidateQueries({ queryKey: queryKeys.reviews.byProduct(data.product_id) });
       }
       if (data.vendor_id) {
-        queryClient.invalidateQueries({ 
-          queryKey: queryKeys.reviews.byVendor(data.vendor_id) 
-        });
+        queryClient.invalidateQueries({ queryKey: queryKeys.reviews.byVendor(data.vendor_id) });
       }
     },
   });
@@ -1430,7 +1415,7 @@ export function useNotifications() {
       return data;
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 60, // Refetch every minute
+    refetchInterval: 1000 * 60,
   });
 }
 
@@ -1450,7 +1435,7 @@ export function useUnreadNotificationCount() {
       return count || 0;
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 30, // Refetch every 30 seconds
+    refetchInterval: 1000 * 30,
   });
 }
 
@@ -1467,12 +1452,8 @@ export function useMarkNotificationAsRead() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.notifications.all(session?.user?.id!) 
-      });
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.notifications.count(session?.user?.id!) 
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(session?.user?.id!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.count(session?.user?.id!) });
     },
   });
 }
@@ -1491,12 +1472,8 @@ export function useMarkAllNotificationsAsRead() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.notifications.all(session?.user?.id!) 
-      });
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.notifications.count(session?.user?.id!) 
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(session?.user?.id!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.count(session?.user?.id!) });
     },
   });
 }

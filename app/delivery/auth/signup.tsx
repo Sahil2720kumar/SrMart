@@ -193,6 +193,7 @@ export default function DeliverySignupScreen() {
               </>
             ) : (
               <>
+                <Text className="text-gray-700 font-semibold mb-2">Email Address</Text>
                 <TextInput
                   className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
                   placeholder="Email"
@@ -201,6 +202,7 @@ export default function DeliverySignupScreen() {
                   value={email}
                   onChangeText={setEmail}
                 />
+                <Text className="text-gray-700 font-semibold mb-2">Password</Text>
                 <TextInput
                   className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-4"
                   placeholder="Password"
@@ -208,6 +210,7 @@ export default function DeliverySignupScreen() {
                   value={password}
                   onChangeText={setPassword}
                 />
+                <Text className="text-gray-700 font-semibold mb-2">Confirm Password</Text>
                 <TextInput
                   className="border-2 border-gray-200 rounded-xl px-4 py-4 mb-6"
                   placeholder="Confirm Password"

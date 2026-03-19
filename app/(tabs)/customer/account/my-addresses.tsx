@@ -313,7 +313,7 @@ export default function MyAddressesScreen() {
 
                   {/* Action buttons */}
                   <View className="flex-row items-center gap-x-2">
-                    {!address.is_default && (
+                  {!address.is_default && addresses.length > 1 &&  (
                       <TouchableOpacity
                         onPress={() => handleSetDefault(address)}
                         disabled={setDefaultAddress.isPending}
