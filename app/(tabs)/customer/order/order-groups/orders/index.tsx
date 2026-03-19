@@ -19,53 +19,60 @@ export default function OrderGroupDetailScreen() {
   const getPaymentStatusColor = (status: PaymentStatus) => {
     const colors: Record<PaymentStatus, string> = {
       pending: 'bg-yellow-100 text-yellow-700',
-      paid: 'bg-green-100 text-green-700',
-      failed: 'bg-red-100 text-red-700',
-      refunded: 'bg-purple-100 text-purple-700',
+      paid:    'bg-green-100 text-green-700',
+      failed:  'bg-red-100 text-red-700',
+      refunded:'bg-purple-100 text-purple-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
 
   const getOrderStatusColor = (status: OrderStatus) => {
     const colors: Record<OrderStatus, string> = {
-      all: 'bg-emerald-100 text-emerald-700',
-      pending: 'bg-gray-100 text-gray-700',
-      confirmed: 'bg-blue-100 text-blue-700',
-      processing: 'bg-orange-100 text-orange-700',
+      all:              'bg-emerald-100 text-emerald-700',
+      pending:          'bg-gray-100 text-gray-700',
+      confirmed:        'bg-blue-100 text-blue-700',
+      processing:       'bg-orange-100 text-orange-700',
       ready_for_pickup: 'bg-purple-100 text-purple-700',
-      picked_up: 'bg-indigo-100 text-indigo-700',
+      picked_up:        'bg-indigo-100 text-indigo-700',
       out_for_delivery: 'bg-cyan-100 text-cyan-700',
-      delivered: 'bg-green-100 text-green-700',
-      cancelled: 'bg-red-100 text-red-700',
-      refunded: 'bg-pink-100 text-pink-700',
+      delivered:        'bg-green-100 text-green-700',
+      cancelled:        'bg-red-100 text-red-700',
+      refunded:         'bg-pink-100 text-pink-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
 
   const getOrderStatusText = (status: OrderStatus) => {
     const labels: Record<OrderStatus, string> = {
-      all: 'All',
-      pending: 'Pending',
-      confirmed: 'Confirmed',
-      processing: 'Processing',
+      all:              'All',
+      pending:          'Pending',
+      confirmed:        'Confirmed',
+      processing:       'Processing',
       ready_for_pickup: 'Ready for Pickup',
-      picked_up: 'Picked Up',
+      picked_up:        'Picked Up',
       out_for_delivery: 'Out for Delivery',
-      delivered: 'Delivered',
-      cancelled: 'Cancelled',
-      refunded: 'Refunded',
+      delivered:        'Delivered',
+      cancelled:        'Cancelled',
+      refunded:         'Refunded',
     };
     return labels[status] || status;
   };
 
   const getPaymentMethodDisplay = (method?: string) => {
     switch (method) {
-      case 'cod':   return 'Cash on Delivery';
-      case 'razorpay': return 'Online Payment (Razorpay)';
-      case 'wallet': return 'Wallet';
-      default: return method?.toUpperCase() || 'N/A';
+      case 'cod':       return 'Cash on Delivery';
+      case 'razorpay':  return 'Online Payment (Razorpay)';
+      case 'wallet':    return 'Wallet';
+      default:          return method?.toUpperCase() || 'N/A';
     }
   };
+
+  // ✅ Determine if OTP should be shown
+  // Show OTP only when order is active (not delivered/cancelled)
+  const isGroupActive = orderGroup?.status &&
+    !['delivered', 'cancelled', 'refunded'].includes(orderGroup.status);
+
+  const hasOtp = !!orderGroup?.delivery_otp;
 
   if (isLoading) {
     return (
@@ -97,6 +104,56 @@ export default function OrderGroupDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
       >
+
+        {/* ✅ OTP Card — shown when order is active and OTP exists */}
+        {isGroupActive && hasOtp && (
+          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3 border-2 border-green-200">
+            <View className="flex-row items-center mb-3">
+              <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center mr-3">
+                <Feather name="lock" size={18} color="#16a34a" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-bold text-gray-900">Delivery OTP</Text>
+                <Text className="text-xs text-gray-500 mt-0.5">
+                  Share this with your delivery partner when they arrive
+                </Text>
+              </View>
+            </View>
+
+            {/* ✅ Large OTP display */}
+            <View className="bg-green-50 rounded-xl py-5 items-center justify-center mb-3">
+              <Text className="text-5xl font-bold text-green-700 tracking-[12px]">
+                {orderGroup.delivery_otp}
+              </Text>
+            </View>
+
+            <View className="flex-row items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl p-3">
+              <Feather name="alert-triangle" size={14} color="#d97706" style={{ marginTop: 1 }} />
+              <Text className="text-xs text-amber-700 flex-1 leading-5">
+                Do not share this OTP with anyone before your delivery partner arrives.
+                Only share it once you have received all your items.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ✅ Delivered — show OTP was verified */}
+        {orderGroup.status === 'delivered' && hasOtp && (
+          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3 border border-green-200">
+            <View className="flex-row items-center gap-3">
+              <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center">
+                <Feather name="check-circle" size={18} color="#16a34a" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-green-800">OTP Verified ✓</Text>
+                <Text className="text-xs text-green-600 mt-0.5">
+                  Delivery confirmed with OTP {orderGroup.delivery_otp}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* ── Order Group Summary ───────────────────────────────────────── */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 mb-3">
           <Text className="text-base font-bold text-gray-900 mb-4">Order Group Summary</Text>
@@ -312,14 +369,13 @@ export default function OrderGroupDetailScreen() {
                     </View>
                   </View>
 
-                  {/* ── Active Items ─────────────────────────────────────── */}
+                  {/* Active Items */}
                   {activeItems.length > 0 && (
                     <View className="mb-2">
                       <Text className="text-xs text-gray-500 mb-1.5">
                         {activeItems.reduce((s: number, i: any) => s + i.quantity, 0)}{' '}
                         {activeItems.reduce((s: number, i: any) => s + i.quantity, 0) === 1
-                          ? 'item'
-                          : 'items'}
+                          ? 'item' : 'items'}
                       </Text>
 
                       {activeItems.slice(0, 2).map((item: any) => (
@@ -356,10 +412,9 @@ export default function OrderGroupDetailScreen() {
                     </View>
                   )}
 
-                  {/* ── Cancelled Items ───────────────────────────────────── */}
+                  {/* Cancelled Items */}
                   {cancelledItems.length > 0 && (
                     <View className="mt-2 pt-2 border-t border-dashed border-gray-200">
-                      {/* Header row */}
                       <View className="flex-row items-center gap-1.5 mb-1.5">
                         <Feather name="x-circle" size={11} color="#ef4444" />
                         <Text className="text-xs text-red-500 font-semibold uppercase tracking-wide">
@@ -368,10 +423,7 @@ export default function OrderGroupDetailScreen() {
                       </View>
 
                       {cancelledItems.map((item: any) => (
-                        <View
-                          key={item.id}
-                          className="flex-row items-center gap-2 mb-1 opacity-50"
-                        >
+                        <View key={item.id} className="flex-row items-center gap-2 mb-1 opacity-50">
                           <View className="w-8 h-8 bg-gray-100 rounded-md overflow-hidden">
                             {item.product_image ? (
                               <Image
@@ -387,10 +439,7 @@ export default function OrderGroupDetailScreen() {
                               </View>
                             )}
                           </View>
-                          <Text
-                            className="text-xs text-gray-500 line-through flex-1"
-                            numberOfLines={1}
-                          >
+                          <Text className="text-xs text-gray-500 line-through flex-1" numberOfLines={1}>
                             {item.product_name} × {item.quantity}
                           </Text>
                           <View className="bg-red-100 rounded px-1.5 py-0.5">
@@ -426,6 +475,7 @@ export default function OrderGroupDetailScreen() {
             </View>
           )}
         </View>
+
       </ScrollView>
 
       {/* ── Action Buttons ────────────────────────────────────────────────── */}
@@ -434,10 +484,10 @@ export default function OrderGroupDetailScreen() {
           <TouchableOpacity
             onPress={() => {
               Toast.show({
-                type: 'info',
+                type:  'info',
                 text1: 'Need Help?',
                 text2: 'Contact support at support@example.com',
-                position: 'top',
+                position:       'top',
                 visibilityTime: 4000,
               });
             }}
@@ -450,10 +500,10 @@ export default function OrderGroupDetailScreen() {
             <TouchableOpacity
               onPress={() => {
                 Toast.show({
-                  type: 'success',
+                  type:  'success',
                   text1: `Payment ID: ${orderGroup.razorpay_payment_id}`,
                   text2: `₹${Number(orderGroup.total_amount).toFixed(2)} • ${orderGroup.payment_status.toUpperCase()}`,
-                  position: 'top',
+                  position:       'top',
                   visibilityTime: 5000,
                 });
               }}

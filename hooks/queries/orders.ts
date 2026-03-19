@@ -3,41 +3,124 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAuthStore } from '../../store/authStore';
-import { Coupon, CouponUsage } from '@/types/offers.types';
+import { Coupon } from '@/types/offers.types';
 import { Order, OrderFilters, OrderStatus, PaymentStatus } from '@/types/orders-carts.types';
 
 // ==========================================
-// ORDER HOOKS
+// QUERY KEYS
 // ==========================================
-
 
 export const orderQueryKeys = {
   orders: {
-    all: ['orders'] as const,
-    lists: () => [...orderQueryKeys.orders.all, 'list'] as const,
-    list: (filters?: OrderFilters) => [...orderQueryKeys.orders.lists(), filters] as const,
-    byCustomer: (customerId: string, filters?: OrderFilters) => 
+    all:        ['orders'] as const,
+    lists:      () => [...orderQueryKeys.orders.all, 'list'] as const,
+    list:       (filters?: OrderFilters) => [...orderQueryKeys.orders.lists(), filters] as const,
+    byCustomer: (customerId: string, filters?: OrderFilters) =>
       [...orderQueryKeys.orders.lists(), 'customer', customerId, filters] as const,
-    byVendor: (vendorId: string, filters?: OrderFilters) => 
+    byVendor:   (vendorId: string, filters?: OrderFilters) =>
       [...orderQueryKeys.orders.lists(), 'vendor', vendorId, filters] as const,
-    details: () => [...orderQueryKeys.orders.all, 'detail'] as const,
-    detail: (id: string) => [...orderQueryKeys.orders.details(), id] as const,
-    timeline: (id: string) => [...orderQueryKeys.orders.detail(id), 'timeline'] as const,
+    details:    () => [...orderQueryKeys.orders.all, 'detail'] as const,
+    detail:     (id: string) => [...orderQueryKeys.orders.details(), id] as const,
+    timeline:   (id: string) => [...orderQueryKeys.orders.detail(id), 'timeline'] as const,
   },
   orderGroups: {
-    all: ['order-groups'] as const,
-    lists: () => [...orderQueryKeys.orderGroups.all, 'list'] as const,
-    list: (filters?: OrderFilters) => [...orderQueryKeys.orderGroups.lists(), filters] as const,
-    byCustomer: (customerId: string) => 
+    all:        ['order-groups'] as const,
+    lists:      () => [...orderQueryKeys.orderGroups.all, 'list'] as const,
+    list:       (filters?: OrderFilters) => [...orderQueryKeys.orderGroups.lists(), filters] as const,
+    byCustomer: (customerId: string) =>
       [...orderQueryKeys.orderGroups.lists(), 'customer', customerId] as const,
-    details: () => [...orderQueryKeys.orderGroups.all, 'detail'] as const,
-    detail: (id: string) => [...orderQueryKeys.orderGroups.details(), id] as const,
+    details:    () => [...orderQueryKeys.orderGroups.all, 'detail'] as const,
+    detail:     (id: string) => [...orderQueryKeys.orderGroups.details(), id] as const,
   },
 } as const;
 
+// ==========================================
+// TYPES FOR ORDER CREATION
+// ==========================================
+
+export interface CreateOrderItem {
+  product_id: string;
+  qty:        number;
+}
+
+export interface CreateOrderPayload {
+  vendor_id:            string;
+  delivery_address_id:  string;
+  order_number:         string;
+  item_count:           number;
+  subtotal:             number;
+  tax:                  number;
+  tax_percentage:       number;
+  discount:             number;
+  // ✅ Pre-calculated discounted fee from useDeliveryFees hook
+  // First vendor = full fee, additional vendors = 50% off
+  // SQL reads this directly — no recalculation
+  delivery_fee:         number;
+  // ✅ Kept for SQL sorting (distance ASC = closest vendor first)
+  distance_km:          number;
+  special_instructions: string;
+  items:                CreateOrderItem[];
+}
+
+export interface CreateOrderGroupParams {
+  orders:        CreateOrderPayload[];
+  paymentMethod: string;
+  subtotal:      number;
+  tax:           number;
+  discount:      number;
+  couponCode:    string | null;
+}
+
+// ==========================================
+// MUTATION: Create Order Group
+// ==========================================
+
+export function useCreateOrderGroup() {
+  const queryClient = useQueryClient();
+  const session     = useAuthStore((state) => state.session);
+
+  return useMutation({
+    mutationFn: async ({
+      orders,
+      paymentMethod,
+      subtotal,
+      tax,
+      discount,
+      couponCode,
+    }: CreateOrderGroupParams): Promise<string> => {
+      const customerId = session?.user?.id;
+      if (!customerId) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.rpc(
+        'create_order_group_with_orders',
+        {
+          p_customer_id:    customerId,
+          p_orders:         JSON.stringify(orders),
+          p_payment_method: paymentMethod,
+          p_subtotal:       subtotal,
+          p_tax:            tax,
+          p_discount:       discount,
+          p_coupon_code:    couponCode ?? '',
+        }
+      );
+
+      if (error) throw error;
+      return data as string;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orderGroups.all });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    },
+  });
+}
+
+// ==========================================
+// QUERY: Customer Order Groups (list)
+// ==========================================
 
 export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus }) {
-  const session = useAuthStore((state) => state.session);
+  const session    = useAuthStore((state) => state.session);
   const customerId = session?.user?.id;
 
   return useQuery({
@@ -58,6 +141,7 @@ export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus
           total_amount,
           created_at,
           updated_at,
+          delivery_otp,
           customers!inner(
             user_id,
             first_name,
@@ -85,14 +169,17 @@ export function useCustomerOrderGroups(filters?: { paymentStatus?: PaymentStatus
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
-
       if (error) throw error;
       return data;
     },
-    enabled: !!customerId,
+    enabled:   !!customerId,
     staleTime: 1000 * 30,
   });
 }
+
+// ==========================================
+// QUERY: Order Group Full Info (admin/vendor)
+// ==========================================
 
 export function useOrderGroupDetailFullInfo(orderGroupId: string) {
   return useQuery({
@@ -155,8 +242,12 @@ export function useOrderGroupDetailFullInfo(orderGroupId: string) {
   });
 }
 
+// ==========================================
+// QUERY: Orders by Group
+// ==========================================
+
 export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
-  const session = useAuthStore((state) => state.session);
+  const session    = useAuthStore((state) => state.session);
   const customerId = session?.user?.id;
 
   return useQuery({
@@ -239,20 +330,23 @@ export function useOrdersByGroup(groupId: string, filters?: OrderFilters) {
       }
 
       if (filters?.startDate) query = query.gte('created_at', filters.startDate);
-      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+      if (filters?.endDate)   query = query.lte('created_at', filters.endDate);
 
       const { data, error } = await query.order('created_at', { ascending: false });
-
       if (error) throw error;
       return data as Order[];
     },
-    enabled: !!customerId && !!groupId,
+    enabled:   !!customerId && !!groupId,
     staleTime: 1000 * 30,
   });
 }
 
+// ==========================================
+// QUERY: Customer Orders
+// ==========================================
+
 export function useCustomerOrders(filters?: OrderFilters) {
-  const session = useAuthStore((state) => state.session);
+  const session    = useAuthStore((state) => state.session);
   const customerId = session?.user?.id;
 
   return useQuery({
@@ -334,29 +428,37 @@ export function useCustomerOrders(filters?: OrderFilters) {
       }
 
       if (filters?.startDate) query = query.gte('created_at', filters.startDate);
-      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+      if (filters?.endDate)   query = query.lte('created_at', filters.endDate);
 
       if (filters?.search) {
-        query = query.or(`order_number.ilike.%${filters.search}%,vendors.store_name.ilike.%${filters.search}%`);
+        query = query.or(
+          `order_number.ilike.%${filters.search}%,vendors.store_name.ilike.%${filters.search}%`
+        );
       }
 
-      if (filters?.limit) query = query.limit(filters.limit);
+      if (filters?.limit)  query = query.limit(filters.limit);
       if (filters?.offset) {
-        query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+        query = query.range(
+          filters.offset,
+          filters.offset + (filters.limit || 10) - 1
+        );
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
-
       if (error) throw error;
       return data as Order[];
     },
-    enabled: !!customerId,
+    enabled:   !!customerId,
     staleTime: 1000 * 30,
   });
 }
 
+// ==========================================
+// QUERY: Vendor Orders
+// ==========================================
+
 export function useVendorOrders(filters?: OrderFilters) {
-  const session = useAuthStore((state) => state.session);
+  const session  = useAuthStore((state) => state.session);
   const vendorId = session?.user?.id;
 
   return useQuery({
@@ -389,6 +491,7 @@ export function useVendorOrders(filters?: OrderFilters) {
           cancellation_reason,
           confirmed_at,
           delivered_at,
+          order_group_id,
           customers!inner(
             user_id,
             first_name,
@@ -425,21 +528,21 @@ export function useVendorOrders(filters?: OrderFilters) {
         .eq('vendor_id', vendorId);
 
       if (filters?.startDate) query = query.gte('created_at', filters.startDate);
-      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+      if (filters?.endDate)   query = query.lte('created_at', filters.endDate);
 
       const { data, error } = await query.order('created_at', { ascending: false });
-
       if (error) throw error;
       return data;
     },
-    enabled: !!vendorId,
+    enabled:         !!vendorId,
     refetchInterval: 1000 * 30,
   });
 }
 
-// ============================================================================
-// QUERY: Get Order Detail
-// ============================================================================
+// ==========================================
+// QUERY: Order Detail
+// ==========================================
+
 export function useOrderDetail(orderId: string) {
   return useQuery({
     queryKey: orderQueryKeys.orders.detail(orderId),
@@ -448,6 +551,7 @@ export function useOrderDetail(orderId: string) {
         .from('orders')
         .select(`
           *,
+          order_group_id,
           vendors(
             user_id,
             store_name,
@@ -515,239 +619,14 @@ export function useOrderDetail(orderId: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!orderId,
+    enabled:   !!orderId,
     staleTime: 0,
   });
 }
 
-// ============================================================================
-// MUTATION: Cancel a single order item (vendor)
-//
-// Strategy — two-phase update for instant UI response:
-//
-// 1. OPTIMISTIC UPDATE (onMutate)
-//    — Immediately mark the item as 'cancelled' in the cache
-//    — Immediately update subtotal / total_commission / vendor_payout
-//      on the order using values returned from the previous successful RPC,
-//      or by re-computing from the remaining active items in the cache.
-//    — Snapshot the previous cache value so we can roll back on error.
-//
-// 2. RPC CALL
-//    — Calls `vendor_cancel_order_item` which recalculates all totals in the
-//      DB and returns { new_subtotal, new_commission, new_vendor_payout }.
-//
-// 3. ON SUCCESS — patch cache with exact DB values + schedule a background
-//    refetch to sync any edge-cases (e.g. order auto-cancelled).
-//
-// 4. ON ERROR   — roll back to the snapshot captured in onMutate.
-// ============================================================================
-
-interface CancelOrderItemParams {
-  orderId: string;
-  orderItemId: string;
-  reason: string;
-}
-
-interface CancelOrderItemResponse {
-  success: boolean;
-  order_cancelled: boolean;
-  active_items_remaining?: number;
-  new_subtotal?: number;
-  new_commission?: number;
-  new_vendor_payout?: number;
-}
-
-export function useVendorCancelOrderItem() {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-
-  return useMutation<CancelOrderItemResponse, Error, CancelOrderItemParams>({
-    // ── 1. Optimistic update ───────────────────────────────────────────────
-    onMutate: async ({ orderId, orderItemId }) => {
-      // Cancel any in-flight refetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({
-        queryKey: orderQueryKeys.orders.detail(orderId),
-      });
-
-      // Snapshot current cache value for rollback
-      const previousOrder = queryClient.getQueryData(
-        orderQueryKeys.orders.detail(orderId)
-      );
-
-      // Apply optimistic update
-      queryClient.setQueryData(
-        orderQueryKeys.orders.detail(orderId),
-        (old: any) => {
-          if (!old) return old;
-
-          // Mark the cancelled item in place
-          const updatedItems = (old.order_items ?? []).map((item: any) =>
-            item.id === orderItemId ? { ...item, status: 'cancelled' } : item
-          );
-
-          // Re-compute totals from the remaining active items
-          const activeItems = updatedItems.filter(
-            (i: any) => i.status !== 'cancelled'
-          );
-
-          const newSubtotal = activeItems.reduce(
-            (sum: number, i: any) => sum + (i.total_price ?? 0),
-            0
-          );
-          const newCommission = activeItems.reduce(
-            (sum: number, i: any) => sum + (i.commission_amount ?? 0),
-            0
-          );
-          const newVendorPayout = newSubtotal - newCommission;
-          const newItemCount = activeItems.reduce(
-            (sum: number, i: any) => sum + (i.quantity ?? 0),
-            0
-          );
-
-          return {
-            ...old,
-            order_items: updatedItems,
-            subtotal: newSubtotal,
-            total_commission: newCommission,
-            vendor_payout: newVendorPayout,
-            item_count: newItemCount,
-          };
-        }
-      );
-
-      // Return snapshot for potential rollback
-      return { previousOrder };
-    },
-
-    // ── 2. RPC call ────────────────────────────────────────────────────────
-    mutationFn: async ({ orderId, orderItemId, reason }) => {
-      const vendorId = session?.user?.id;
-      if (!vendorId) throw new Error('User not authenticated');
-
-      const { data, error } = await supabase.rpc('vendor_cancel_order_item', {
-        p_order_id: orderId,
-        p_order_item_id: orderItemId,
-        p_vendor_id: vendorId,
-        p_reason: reason,
-      });
-
-      if (error) throw error;
-
-      const result = data as CancelOrderItemResponse;
-      if (!result?.success) {
-        throw new Error((result as any)?.error ?? 'Failed to cancel item');
-      }
-
-      return result;
-    },
-
-    // ── 3. On success — patch cache with exact DB values ──────────────────
-    onSuccess: (data, { orderId }) => {
-      if (!data.order_cancelled) {
-        // Patch the order-level financial fields with exact DB-confirmed values
-        queryClient.setQueryData(
-          orderQueryKeys.orders.detail(orderId),
-          (old: any) => {
-            if (!old) return old;
-            return {
-              ...old,
-              subtotal: data.new_subtotal ?? old.subtotal,
-              total_commission: data.new_commission ?? old.total_commission,
-              vendor_payout: data.new_vendor_payout ?? old.vendor_payout,
-            };
-          }
-        );
-      }
-
-      // Background refetch to catch edge-cases (order auto-cancelled, etc.)
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(orderId),
-      });
-
-      // Also invalidate vendor order lists so the list view stays in sync
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.all,
-      });
-    },
-
-    // ── 4. On error — roll back to snapshot ───────────────────────────────
-    onError: (_error, { orderId }, context: any) => {
-      if (context?.previousOrder) {
-        queryClient.setQueryData(
-          orderQueryKeys.orders.detail(orderId),
-          context.previousOrder
-        );
-      }
-    },
-  });
-}
-
-export function useOrderTimeline(orderId: string) {
-  return useQuery({
-    queryKey: orderQueryKeys.orders.timeline(orderId),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          status,
-          created_at,
-          confirmed_at,
-          vendor_accepted_at,
-          picked_up_at,
-          delivered_at,
-          cancelled_at
-        `)
-        .eq('id', orderId)
-        .single();
-
-      if (error) throw error;
-
-      const timeline = [];
-
-      timeline.push({
-        status: 'Order Placed',
-        completed: !!data.created_at,
-        timestamp: data.created_at,
-      });
-
-      if (data.cancelled_at) {
-        timeline.push({
-          status: 'Cancelled',
-          completed: true,
-          timestamp: data.cancelled_at,
-        });
-        return timeline;
-      }
-
-      timeline.push({
-        status: 'Confirmed',
-        completed: !!data.vendor_accepted_at,
-        timestamp: data.vendor_accepted_at,
-      });
-
-      timeline.push({
-        status: 'Preparing Order',
-        completed: !!data.vendor_accepted_at,
-        timestamp: data.vendor_accepted_at,
-      });
-
-      timeline.push({
-        status: 'Out for Delivery',
-        completed: !!data.picked_up_at,
-        timestamp: data.picked_up_at,
-      });
-
-      timeline.push({
-        status: 'Delivered',
-        completed: !!data.delivered_at,
-        timestamp: data.delivered_at,
-      });
-
-      return timeline;
-    },
-    enabled: !!orderId,
-  });
-}
+// ==========================================
+// QUERY: Order Group Detail (customer screen)
+// ==========================================
 
 export function useOrderGroupDetail(orderGroupId: string) {
   return useQuery({
@@ -793,24 +672,93 @@ export function useOrderGroupDetail(orderGroupId: string) {
   });
 }
 
+// ==========================================
+// QUERY: Order Timeline
+// ==========================================
+
+export function useOrderTimeline(orderId: string) {
+  return useQuery({
+    queryKey: orderQueryKeys.orders.timeline(orderId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          status,
+          created_at,
+          confirmed_at,
+          vendor_accepted_at,
+          picked_up_at,
+          delivered_at,
+          cancelled_at
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (error) throw error;
+
+      const timeline = [];
+
+      timeline.push({
+        status:    'Order Placed',
+        completed: !!data.created_at,
+        timestamp: data.created_at,
+      });
+
+      if (data.cancelled_at) {
+        timeline.push({
+          status:    'Cancelled',
+          completed: true,
+          timestamp: data.cancelled_at,
+        });
+        return timeline;
+      }
+
+      timeline.push({
+        status:    'Confirmed',
+        completed: !!data.vendor_accepted_at,
+        timestamp: data.vendor_accepted_at,
+      });
+
+      timeline.push({
+        status:    'Preparing Order',
+        completed: !!data.vendor_accepted_at,
+        timestamp: data.vendor_accepted_at,
+      });
+
+      timeline.push({
+        status:    'Out for Delivery',
+        completed: !!data.picked_up_at,
+        timestamp: data.picked_up_at,
+      });
+
+      timeline.push({
+        status:    'Delivered',
+        completed: !!data.delivered_at,
+        timestamp: data.delivered_at,
+      });
+
+      return timeline;
+    },
+    enabled: !!orderId,
+  });
+}
+
+// ==========================================
+// MUTATION: Cancel Order
+// ==========================================
+
 export function useCancelOrder() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
-    mutationFn: async ({
-      orderId,
-      reason,
-    }: {
-      orderId: string;
-      reason: string;
-    }) => {
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason: string }) => {
       const customerId = session?.user?.id;
       if (!customerId) throw new Error('User not authenticated');
 
       const { error } = await supabase.rpc('customer_cancel_order', {
-        p_order_id: orderId,
-        p_customer_id: customerId,
+        p_order_id:            orderId,
+        p_customer_id:         customerId,
         p_cancellation_reason: reason,
       });
 
@@ -818,49 +766,119 @@ export function useCancelOrder() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(variables.orderId),
-      });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(variables.orderId) });
     },
   });
 }
 
-// ============================================================================
-// Response Types for RPC Functions
-// ============================================================================
+// ==========================================
+// MUTATION: Vendor Cancel Order Item
+// ==========================================
+
+interface CancelOrderItemParams {
+  orderId:     string;
+  orderItemId: string;
+  reason:      string;
+}
+
+interface CancelOrderItemResponse {
+  success:                boolean;
+  order_cancelled:        boolean;
+  active_items_remaining?: number;
+  new_subtotal?:          number;
+  new_commission?:        number;
+  new_vendor_payout?:     number;
+}
+
+export function useVendorCancelOrderItem() {
+  const queryClient = useQueryClient();
+  const session     = useAuthStore((state) => state.session);
+
+  return useMutation<CancelOrderItemResponse, Error, CancelOrderItemParams>({
+    onMutate: async ({ orderId, orderItemId }) => {
+      await queryClient.cancelQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
+
+      const previousOrder = queryClient.getQueryData(orderQueryKeys.orders.detail(orderId));
+
+      queryClient.setQueryData(orderQueryKeys.orders.detail(orderId), (old: any) => {
+        if (!old) return old;
+
+        const updatedItems = (old.order_items ?? []).map((item: any) =>
+          item.id === orderItemId ? { ...item, status: 'cancelled' } : item
+        );
+        const activeItems    = updatedItems.filter((i: any) => i.status !== 'cancelled');
+        const newSubtotal    = activeItems.reduce((s: number, i: any) => s + (i.total_price ?? 0), 0);
+        const newCommission  = activeItems.reduce((s: number, i: any) => s + (i.commission_amount ?? 0), 0);
+        const newItemCount   = activeItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
+
+        return {
+          ...old,
+          order_items:      updatedItems,
+          subtotal:         newSubtotal,
+          total_commission: newCommission,
+          vendor_payout:    newSubtotal - newCommission,
+          item_count:       newItemCount,
+        };
+      });
+
+      return { previousOrder };
+    },
+    mutationFn: async ({ orderId, orderItemId, reason }) => {
+      const vendorId = session?.user?.id;
+      if (!vendorId) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase.rpc('vendor_cancel_order_item', {
+        p_order_id:      orderId,
+        p_order_item_id: orderItemId,
+        p_vendor_id:     vendorId,
+        p_reason:        reason,
+      });
+
+      if (error) throw error;
+
+      const result = data as CancelOrderItemResponse;
+      if (!result?.success) throw new Error((result as any)?.error ?? 'Failed to cancel item');
+      return result;
+    },
+    onSuccess: (data, { orderId }) => {
+      if (!data.order_cancelled) {
+        queryClient.setQueryData(orderQueryKeys.orders.detail(orderId), (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            subtotal:         data.new_subtotal      ?? old.subtotal,
+            total_commission: data.new_commission    ?? old.total_commission,
+            vendor_payout:    data.new_vendor_payout ?? old.vendor_payout,
+          };
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+    },
+    onError: (_error, { orderId }, context: any) => {
+      if (context?.previousOrder) {
+        queryClient.setQueryData(orderQueryKeys.orders.detail(orderId), context.previousOrder);
+      }
+    },
+  });
+}
+
+// ==========================================
+// MUTATION: Vendor Accept Order
+// ==========================================
 
 interface VendorAcceptOrderResponse {
-  success: boolean;
-  order_id: string;
-  status: string;
-  vendor_payout: number;
+  success:          boolean;
+  order_id:         string;
+  status:           string;
+  vendor_payout:    number;
   total_commission: number;
-  items_total: number;
-}
-
-interface VendorRejectOrderResponse {
-  success: boolean;
-  order_id: string;
-  status: string;
-  reason: string;
-}
-
-interface MarkOrderReadyResponse {
-  success: boolean;
-  order_id: string;
-  status: string;
-}
-
-interface AssignDeliveryPartnerResponse {
-  success: boolean;
-  order_id: string;
-  delivery_boy_id: string;
-  delivery_boy_name: string;
+  items_total:      number;
 }
 
 export function useVendorAcceptOrder() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (orderId: string): Promise<VendorAcceptOrderResponse> => {
@@ -868,7 +886,7 @@ export function useVendorAcceptOrder() {
       if (!vendorId) throw new Error('User not authenticated');
 
       const { data, error } = await supabase.rpc('vendor_accept_order', {
-        p_order_id: orderId,
+        p_order_id:  orderId,
         p_vendor_id: vendorId,
       });
 
@@ -879,15 +897,23 @@ export function useVendorAcceptOrder() {
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
-    onError: (error: any) => {
-      console.error('Failed to accept order:', error.message);
-    },
   });
+}
+
+// ==========================================
+// MUTATION: Vendor Reject Order
+// ==========================================
+
+interface VendorRejectOrderResponse {
+  success:  boolean;
+  order_id: string;
+  status:   string;
+  reason:   string;
 }
 
 export function useVendorRejectOrder() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async ({
@@ -895,37 +921,45 @@ export function useVendorRejectOrder() {
       reason,
     }: {
       orderId: string;
-      reason: string;
+      reason:  string;
     }): Promise<VendorRejectOrderResponse> => {
       const vendorId = session?.user?.id;
       if (!vendorId) throw new Error('User not authenticated');
 
-      if (!reason || reason.trim().length === 0) {
-        throw new Error('Rejection reason is required');
-      }
+      if (!reason?.trim()) throw new Error('Rejection reason is required');
 
       const { data, error } = await supabase.rpc('vendor_reject_order', {
-        p_order_id: orderId,
-        p_vendor_id: vendorId,
+        p_order_id:         orderId,
+        p_vendor_id:        vendorId,
         p_rejection_reason: reason.trim(),
       });
 
       if (error) throw error;
       return data as VendorRejectOrderResponse;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_, { orderId }) => {
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
-      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(variables.orderId) });
-    },
-    onError: (error: any) => {
-      console.error('Failed to reject order:', error.message);
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
   });
 }
 
+// ==========================================
+// MUTATION: Mark Order Ready
+// ==========================================
+
+interface MarkOrderReadyResponse {
+  success:     boolean;
+  order_id:    string;
+  ready_count: number;
+  total_count: number;
+  all_ready:   boolean;
+  message:     string;
+}
+
 export function useMarkOrderReady() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (orderId: string): Promise<MarkOrderReadyResponse> => {
@@ -933,59 +967,77 @@ export function useMarkOrderReady() {
       if (!vendorId) throw new Error('User not authenticated');
 
       const { data, error } = await supabase.rpc('mark_order_ready', {
-        p_order_id: orderId,
+        p_order_id:  orderId,
         p_vendor_id: vendorId,
       });
 
       if (error) throw error;
-      return data as MarkOrderReadyResponse;
+
+      const result = data as MarkOrderReadyResponse;
+      if (!result?.success) {
+        throw new Error((result as any)?.message ?? 'Failed to mark order as ready');
+      }
+      return result;
     },
-    onSuccess: (_, orderId) => {
-      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+    onSuccess: (data, orderId) => {
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
-    },
-    onError: (error: any) => {
-      console.error('Failed to mark order as ready:', error.message);
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
+
+      if (data.all_ready) {
+        queryClient.invalidateQueries({ queryKey: ['delivery-groups', 'available'] });
+      }
     },
   });
 }
 
+// ==========================================
+// MUTATION: Assign Delivery Partner
+// ==========================================
+
+interface AssignDeliveryPartnerResponse {
+  success:            boolean;
+  order_id:           string;
+  delivery_boy_id:    string;
+  delivery_boy_name:  string;
+}
+
 export function useAssignDeliveryPartner() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async ({
       orderId,
       deliveryBoyId,
     }: {
-      orderId: string;
+      orderId:       string;
       deliveryBoyId: string;
     }): Promise<AssignDeliveryPartnerResponse> => {
       const vendorId = session?.user?.id;
       if (!vendorId) throw new Error('User not authenticated');
 
       const { data, error } = await supabase.rpc('assign_delivery_partner', {
-        p_order_id: orderId,
-        p_vendor_id: vendorId,
+        p_order_id:        orderId,
+        p_vendor_id:       vendorId,
         p_delivery_boy_id: deliveryBoyId,
       });
 
       if (error) throw error;
       return data as AssignDeliveryPartnerResponse;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_, { orderId }) => {
       queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.all });
-      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(variables.orderId) });
-    },
-    onError: (error: any) => {
-      console.error('Failed to assign delivery partner:', error.message);
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
   });
 }
 
+// ==========================================
+// QUERY: Available Delivery Partners
+// ==========================================
+
 export function useAvailableDeliveryPartners(location?: {
-  latitude: number;
+  latitude:  number;
   longitude: number;
 }) {
   return useQuery({
@@ -993,7 +1045,7 @@ export function useAvailableDeliveryPartners(location?: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('delivery_boys')
-        .select(`*,users(phone)`)
+        .select(`*, users(phone)`)
         .eq('is_available', true)
         .eq('is_verified', true)
         .order('rating', { ascending: false })
@@ -1006,6 +1058,10 @@ export function useAvailableDeliveryPartners(location?: {
   });
 }
 
+// ==========================================
+// MUTATION: Update Order Status
+// ==========================================
+
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
@@ -1014,18 +1070,15 @@ export function useUpdateOrderStatus() {
       orderId,
       status,
     }: {
-      orderId: string;
-      status: OrderStatus;
+      orderId:      string;
+      status:       OrderStatus;
       description?: string;
     }) => {
-      const updates: any = {
-        status,
-        updated_at: new Date().toISOString(),
-      };
+      const updates: any = { status, updated_at: new Date().toISOString() };
 
-      if (status === 'confirmed') updates.confirmed_at = new Date().toISOString();
-      else if (status === 'picked_up') updates.picked_up_at = new Date().toISOString();
-      else if (status === 'delivered') updates.delivered_at = new Date().toISOString();
+      if (status === 'confirmed')  updates.confirmed_at  = new Date().toISOString();
+      if (status === 'picked_up')  updates.picked_up_at  = new Date().toISOString();
+      if (status === 'delivered')  updates.delivered_at  = new Date().toISOString();
 
       const { data, error } = await supabase
         .from('orders')
@@ -1043,6 +1096,10 @@ export function useUpdateOrderStatus() {
     },
   });
 }
+
+// ==========================================
+// MUTATION: Reorder
+// ==========================================
 
 export function useReorder() {
   const queryClient = useQueryClient();
@@ -1063,6 +1120,10 @@ export function useReorder() {
   });
 }
 
+// ==========================================
+// MUTATION: Rate Order
+// ==========================================
+
 export function useRateOrder() {
   const queryClient = useQueryClient();
 
@@ -1073,7 +1134,7 @@ export function useRateOrder() {
       review,
     }: {
       orderId: string;
-      rating: number;
+      rating:  number;
       review?: string;
     }) => {
       const { data, error } = await supabase
@@ -1085,26 +1146,15 @@ export function useRateOrder() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: orderQueryKeys.orders.detail(variables.orderId),
-      });
+    onSuccess: (_, { orderId }) => {
+      queryClient.invalidateQueries({ queryKey: orderQueryKeys.orders.detail(orderId) });
     },
   });
 }
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+// ==========================================
+// QUERY: Vendor Order Stats
+// ==========================================
 
 export function useVendorOrderStats(vendorId: string) {
   return useQuery({
@@ -1118,26 +1168,24 @@ export function useVendorOrderStats(vendorId: string) {
       if (error) throw error;
 
       const today = new Date();
-      const stats = {
-        total: data.length,
-        new: data.filter((o) => o.status === 'pending' || o.status === 'confirmed').length,
+      return {
+        total:    data.length,
+        new:      data.filter((o) => ['pending', 'confirmed'].includes(o.status)).length,
         preparing: data.filter((o) => o.status === 'processing').length,
-        ready: data.filter((o) => o.status === 'ready_for_pickup').length,
+        ready:    data.filter((o) => o.status === 'ready_for_pickup').length,
         completed: data.filter((o) => o.status === 'delivered').length,
         cancelled: data.filter((o) => o.status === 'cancelled').length,
         todayRevenue: data
           .filter((o) => {
             const d = new Date(o.created_at);
             return (
-              d.getDate() === today.getDate() &&
-              d.getMonth() === today.getMonth() &&
+              d.getDate()     === today.getDate()  &&
+              d.getMonth()    === today.getMonth() &&
               d.getFullYear() === today.getFullYear()
             );
           })
           .reduce((sum, o) => sum + parseFloat(o.total_amount), 0),
       };
-
-      return stats;
     },
     enabled: !!vendorId,
   });
@@ -1148,9 +1196,9 @@ export function useVendorOrderStats(vendorId: string) {
 // ==========================================
 
 export const couponQueryKeys = {
-  all: ['coupons'] as const,
-  active: () => ['coupons', 'active'] as const,
-  byCode: (code: string) => ['coupons', 'code', code] as const,
+  all:     ['coupons'] as const,
+  active:  () => ['coupons', 'active'] as const,
+  byCode:  (code: string) => ['coupons', 'code', code] as const,
   myUsage: (userId: string) => ['coupon-usage', 'mine', userId] as const,
 };
 
@@ -1205,7 +1253,7 @@ export function useValidateCoupon() {
       couponCode,
       orderAmount,
     }: {
-      couponCode: string;
+      couponCode:  string;
       orderAmount: number;
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
@@ -1221,7 +1269,7 @@ export function useValidateCoupon() {
 
       const now = new Date();
       if (now < new Date(coupon.start_date)) throw new Error('Coupon is not active yet');
-      if (now > new Date(coupon.end_date)) throw new Error('Coupon has expired');
+      if (now > new Date(coupon.end_date))   throw new Error('Coupon has expired');
 
       if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) {
         throw new Error(`Minimum order of ₹${coupon.min_order_amount} required`);
@@ -1242,20 +1290,20 @@ export function useValidateCoupon() {
       if (usageError) throw usageError;
 
       const used = usedCount ?? 0;
-
       if (used >= perUserLimit) {
         throw new Error(
           perUserLimit === 1
             ? 'You have already used this coupon'
-            : `You've reached the limit for this coupon (used ${used}/${perUserLimit} times)`,
+            : `You've reached the limit for this coupon (used ${used}/${perUserLimit} times)`
         );
       }
 
+      const discountAmount = calculateCouponDiscount(coupon, orderAmount);
       return {
         coupon,
-        discountAmount: calculateCouponDiscount(coupon, orderAmount),
-        finalAmount: Math.max(orderAmount - calculateCouponDiscount(coupon, orderAmount), 0),
-        usedCount: used,
+        discountAmount,
+        finalAmount: Math.max(orderAmount - discountAmount, 0),
+        usedCount,
         perUserLimit,
       };
     },
@@ -1264,7 +1312,7 @@ export function useValidateCoupon() {
 
 export function useRecordCouponUsage() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async ({
@@ -1272,8 +1320,8 @@ export function useRecordCouponUsage() {
       orderId,
       discountAmount,
     }: {
-      couponId: string;
-      orderId: string;
+      couponId:       string;
+      orderId:        string;
       discountAmount: number;
     }) => {
       if (!session?.user?.id) throw new Error('User not authenticated');
@@ -1281,9 +1329,9 @@ export function useRecordCouponUsage() {
       const { data, error } = await supabase
         .from('coupon_usage')
         .insert({
-          coupon_id: couponId,
-          customer_id: session.user.id,
-          order_id: orderId,
+          coupon_id:       couponId,
+          customer_id:     session.user.id,
+          order_id:        orderId,
           discount_amount: discountAmount,
         })
         .select()
@@ -1296,7 +1344,6 @@ export function useRecordCouponUsage() {
         }
         throw error;
       }
-
       return data;
     },
     onSuccess: () => {
@@ -1314,7 +1361,9 @@ export function calculateCouponDiscount(coupon: Coupon, orderAmount: number): nu
   let discount = 0;
   if (coupon.discount_type === 'percentage') {
     discount = (orderAmount * coupon.discount_value) / 100;
-    if (coupon.max_discount_amount) discount = Math.min(discount, coupon.max_discount_amount);
+    if (coupon.max_discount_amount) {
+      discount = Math.min(discount, coupon.max_discount_amount);
+    }
   } else if (coupon.discount_type === 'flat') {
     discount = coupon.discount_value;
   }
@@ -1363,17 +1412,17 @@ export function useVendorReviews(vendorId: string) {
 
 export function useAddReview() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (reviewData: {
-      order_id: string;
-      vendor_id?: string;
-      product_id?: string;
+      order_id:        string;
+      vendor_id?:      string;
+      product_id?:     string;
       delivery_boy_id?: string;
-      rating: number;
-      comment: string;
-      review_type: 'vendor' | 'product' | 'delivery';
+      rating:          number;
+      comment:         string;
+      review_type:     'vendor' | 'product' | 'delivery';
     }) => {
       const { data, error } = await supabase
         .from('reviews')
@@ -1400,7 +1449,7 @@ export function useAddReview() {
 
 export function useNotifications() {
   const session = useAuthStore((state) => state.session);
-  const userId = session?.user?.id;
+  const userId  = session?.user?.id;
 
   return useQuery({
     queryKey: queryKeys.notifications.all(userId!),
@@ -1414,14 +1463,14 @@ export function useNotifications() {
       if (error) throw error;
       return data;
     },
-    enabled: !!userId,
+    enabled:         !!userId,
     refetchInterval: 1000 * 60,
   });
 }
 
 export function useUnreadNotificationCount() {
   const session = useAuthStore((state) => state.session);
-  const userId = session?.user?.id;
+  const userId  = session?.user?.id;
 
   return useQuery({
     queryKey: queryKeys.notifications.count(userId!),
@@ -1434,14 +1483,14 @@ export function useUnreadNotificationCount() {
       if (error) throw error;
       return count || 0;
     },
-    enabled: !!userId,
+    enabled:         !!userId,
     refetchInterval: 1000 * 30,
   });
 }
 
 export function useMarkNotificationAsRead() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
@@ -1460,7 +1509,7 @@ export function useMarkNotificationAsRead() {
 
 export function useMarkAllNotificationsAsRead() {
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
+  const session     = useAuthStore((state) => state.session);
 
   return useMutation({
     mutationFn: async () => {

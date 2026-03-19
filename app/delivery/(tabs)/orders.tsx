@@ -1,3 +1,4 @@
+// app/delivery/orders.tsx
 import DeliveryOTPVerificationModal from '@/components/DeliveryOTPVerificationModal';
 import DeliveryConfirmationModal from '@/components/Deliveryconfirmationmodal';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
@@ -5,266 +6,245 @@ import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  Linking,
+  View, Text, TouchableOpacity, ScrollView,
+  ActivityIndicator, RefreshControl, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  useAvailableDeliveryOrders,
-  useActiveDeliveryOrders,
-  useCompletedDeliveryOrders,
-  useDeliveryBoyStats,
-  useAcceptDeliveryOrder,
-  useMarkOrderPickedUp,
-  useCompleteDelivery,
-} from '@/hooks/queries/useDeliveryOrders';
-import { DeliveryOrder } from '@/types/delivery-orders.types';
 import Toast from 'react-native-toast-message';
+import {
+  useAvailableDeliveryGroups,
+  useActiveDeliveryGroups,
+  useCompletedDeliveryGroups,
+  useDeliveryBoyStats,
+  useAcceptDeliveryGroup,
+  useCompleteGroupDelivery,
+  useReportCodDeposit,
+  type DeliveryGroup,
+} from '@/hooks/queries/useDeliveryGroups';
 
-/* ---------------- MAIN COMPONENT ---------------- */
 const DeliveryOrderScreen = () => {
-
-  const router = useRouter();
-  const store = useDeliveryStore();
-  const { partner, setPartner, isKycCompleted, setKycCompleted, setAdminVerificationStatus, adminVerificationStatus, toggleOnline } = store;
+  const router  = useRouter();
+  const store   = useDeliveryStore();
+  const { adminVerificationStatus, isKycCompleted } = store;
   const isVerified = adminVerificationStatus === 'approved' && isKycCompleted;
 
   const [activeTab, setActiveTab] = useState<'available' | 'active' | 'completed'>('available');
 
-  // OTP Modal State
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [selectedOrderForOtp, setSelectedOrderForOtp] = useState<DeliveryOrder | null>(null);
-  const [otpInput, setOtpInput] = useState('');
-
-  // Accept Order Confirmation Modal State
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [selectedOrderForAccept, setSelectedOrderForAccept] = useState<DeliveryOrder | null>(null);
-
-  // Pickup Confirmation Modal State
-  const [showPickupModal, setShowPickupModal] = useState(false);
-  const [selectedOrderForPickup, setSelectedOrderForPickup] = useState<DeliveryOrder | null>(null);
-
-  // Queries
-  const {
-    data: availableOrders = [],
-    isLoading: loadingAvailable,
-    refetch: refetchAvailable,
-    isRefetching: refetchingAvailable,
-  } = useAvailableDeliveryOrders();
+  const [showAcceptModal, setShowAcceptModal]           = useState(false);
+  const [selectedGroup, setSelectedGroup]               = useState<DeliveryGroup | null>(null);
+  const [showOtpModal, setShowOtpModal]                 = useState(false);
+  const [otpInput, setOtpInput]                         = useState('');
+  const [selectedGroupForOtp, setSelectedGroupForOtp]   = useState<DeliveryGroup | null>(null);
+  const [showDepositModal, setShowDepositModal]         = useState(false);
+  const [selectedGroupForDeposit, setSelectedGroupForDeposit] = useState<DeliveryGroup | null>(null);
 
   const {
-    data: activeOrders = [],
-    isLoading: loadingActive,
-    refetch: refetchActive,
-    isRefetching: refetchingActive,
-  } = useActiveDeliveryOrders();
+    data: availableGroups = [], isLoading: loadingAvailable,
+    refetch: refetchAvailable, isRefetching: refetchingAvailable,
+  } = useAvailableDeliveryGroups();
 
   const {
-    data: completedOrders = [],
-    isLoading: loadingCompleted,
-    refetch: refetchCompleted,
-    isRefetching: refetchingCompleted,
-  } = useCompletedDeliveryOrders();
+    data: activeGroups = [], isLoading: loadingActive,
+    refetch: refetchActive, isRefetching: refetchingActive,
+  } = useActiveDeliveryGroups();
+
+  const {
+    data: completedGroups = [], isLoading: loadingCompleted,
+    refetch: refetchCompleted, isRefetching: refetchingCompleted,
+  } = useCompletedDeliveryGroups();
 
   const { data: stats } = useDeliveryBoyStats();
 
-  // Mutations
-  const acceptOrderMutation = useAcceptDeliveryOrder();
-  const markPickedUpMutation = useMarkOrderPickedUp();
-  const completeDeliveryMutation = useCompleteDelivery();
+  const acceptGroupMutation       = useAcceptDeliveryGroup();
+  const completeGroupMutation     = useCompleteGroupDelivery();
+  const reportDepositMutation     = useReportCodDeposit();
 
   const handleRefresh = () => {
-    if (activeTab === 'available') refetchAvailable();
-    else if (activeTab === 'active') refetchActive();
-    else refetchCompleted();
+    if (activeTab === 'available')      refetchAvailable();
+    else if (activeTab === 'active')    refetchActive();
+    else                                refetchCompleted();
   };
 
-  // Accept Order Flow
-  const handleAcceptOrderPress = (order: DeliveryOrder) => {
-    setSelectedOrderForAccept(order);
+  const getGroupsForTab = () => {
+    switch (activeTab) {
+      case 'available': return availableGroups;
+      case 'active':    return activeGroups;
+      case 'completed': return completedGroups;
+      default:          return [];
+    }
+  };
+
+  // ── Accept flow ──────────────────────────────────────────────────────────
+  const handleAcceptPress = (group: DeliveryGroup) => {
+    setSelectedGroup(group);
     setShowAcceptModal(true);
   };
 
-  const handleConfirmAcceptOrder = async () => {
-    if (!selectedOrderForAccept) return;
-
+  const handleConfirmAccept = async () => {
+    if (!selectedGroup) return;
     try {
-      await acceptOrderMutation.mutateAsync(selectedOrderForAccept.id);
+      await acceptGroupMutation.mutateAsync(selectedGroup.id);
       setShowAcceptModal(false);
-      setSelectedOrderForAccept(null);
+      setSelectedGroup(null);
       Toast.show({
-        type: 'success',
-        text1: 'Order accepted successfully! 🎉',
+        type:  'success',
+        text1: 'Order group accepted!',
+        text2: `Pick up from ${selectedGroup.vendors.length} vendor(s)`,
         position: 'top',
       });
       setActiveTab('active');
     } catch (error: any) {
       setShowAcceptModal(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to accept order',
-        position: 'top',
-      });
+      Toast.show({ type: 'error', text1: error.message || 'Failed to accept.', position: 'top' });
     }
   };
 
-  // Mark Picked Up Flow
-  const handleMarkPickedUpPress = (order: DeliveryOrder) => {
-    setSelectedOrderForPickup(order);
-    setShowPickupModal(true);
-  };
-
-  const handleConfirmMarkPickedUp = async () => {
-    if (!selectedOrderForPickup) return;
-
-    try {
-      await markPickedUpMutation.mutateAsync(selectedOrderForPickup.id);
-      setShowPickupModal(false);
-      setSelectedOrderForPickup(null);
-      Toast.show({
-        type: 'success',
-        text1: 'Order marked as picked up! 📦',
-        position: 'top',
-      });
-    } catch (error: any) {
-      setShowPickupModal(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to mark order as picked up',
-        position: 'top',
-      });
-    }
-  };
-
-  // Complete Delivery Flow
-  const handleStartDelivery = (order: DeliveryOrder) => {
-    setSelectedOrderForOtp(order);
+  // ── Complete delivery flow ────────────────────────────────────────────────
+  const handleDeliverPress = (group: DeliveryGroup) => {
+    setSelectedGroupForOtp(group);
     setShowOtpModal(true);
     setOtpInput('');
   };
 
   const handleVerifyOtp = async () => {
-    if (!selectedOrderForOtp) return;
-
+    if (!selectedGroupForOtp) return;
     try {
-      await completeDeliveryMutation.mutateAsync({
-        orderId: selectedOrderForOtp.id,
-        otp: otpInput,
+      await completeGroupMutation.mutateAsync({
+        groupId: selectedGroupForOtp.id,
+        otp:     otpInput,
       });
-
       setShowOtpModal(false);
       setOtpInput('');
-      setSelectedOrderForOtp(null);
-
+      setSelectedGroupForOtp(null);
       Toast.show({
-        type: 'success',
-        text1: 'Order delivered successfully! 🎉',
+        type:  'success',
+        text1: 'Delivery complete!',
+        text2: selectedGroupForOtp.payment_method === 'cod'
+          ? 'Please deposit cash at the office.'
+          : `₹${selectedGroupForOtp.delivery_fee.toFixed(2)} earned`,
         position: 'top',
-        onPress: () => setActiveTab('completed'),
       });
       setActiveTab('completed');
     } catch (error: any) {
-      console.error(error);
+      Toast.show({ type: 'error', text1: error.message || 'Invalid OTP.', position: 'top' });
+    }
+  };
+
+  // ── COD deposit flow ─────────────────────────────────────────────────────
+  const handleDepositPress = (group: DeliveryGroup) => {
+    setSelectedGroupForDeposit(group);
+    setShowDepositModal(true);
+  };
+
+  const handleConfirmDeposit = async () => {
+    if (!selectedGroupForDeposit) return;
+    try {
+      await reportDepositMutation.mutateAsync(selectedGroupForDeposit.id);
+      setShowDepositModal(false);
+      setSelectedGroupForDeposit(null);
       Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Invalid OTP. Please try again.',
+        type:  'success',
+        text1: 'Deposit reported!',
+        text2: 'Admin will verify and credit your wallet.',
         position: 'top',
       });
+      refetchCompleted();
+    } catch (error: any) {
+      setShowDepositModal(false);
+      Toast.show({ type: 'error', text1: error.message || 'Failed to report deposit.', position: 'top' });
     }
   };
 
-  const handleNavigate = (order: DeliveryOrder) => {
-    const { lat, lng } = order.customer;
-    if (lat && lng) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-      Linking.openURL(url);
+  const handleNavigate = (group: DeliveryGroup) => {
+    const { lat, lng } = group.customer;
+    if (lat && lng)
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+  };
+
+  const getPickedUpCount = (group: DeliveryGroup) =>
+    group.vendors.filter((v) =>
+      ['picked_up', 'out_for_delivery', 'delivered'].includes(v.status)
+    ).length;
+
+  // ── COD status helpers ───────────────────────────────────────────────────
+  const getCodBadge = (group: DeliveryGroup) => {
+    if (group.payment_method !== 'cod') return null;
+    switch (group.cod_status) {
+      case 'pending_deposit':
+        return { label: 'Deposit needed', bg: 'bg-amber-100', text: 'text-amber-700' };
+      case 'deposit_reported':
+        return { label: 'Under review', bg: 'bg-blue-100', text: 'text-blue-700' };
+      case 'deposited':
+        return { label: 'Deposit confirmed', bg: 'bg-green-100', text: 'text-green-700' };
+      default:
+        return { label: 'COD', bg: 'bg-amber-100', text: 'text-amber-700' };
     }
   };
 
-  const getOrdersForTab = () => {
-    switch (activeTab) {
-      case 'available': return availableOrders;
-      case 'active': return activeOrders;
-      case 'completed': return completedOrders;
-      default: return [];
-    }
-  };
-
-  const getCollectedVendorsCount = (order: DeliveryOrder) => {
-    return order.vendors.filter(v => v.collected).length;
-  };
-
-  const isLoading = loadingAvailable || loadingActive || loadingCompleted;
+  const isLoading    = loadingAvailable || loadingActive || loadingCompleted;
   const isRefreshing = refetchingAvailable || refetchingActive || refetchingCompleted;
 
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
       <View className="px-4 pt-4 pb-2">
-        <Text className="text-3xl font-bold text-white mb-4">Orders</Text>
+        <Text className="text-3xl font-bold text-white mb-4">Deliveries</Text>
 
-        {/* Stats Row */}
+        {/* Stats */}
         {isVerified && stats && (
           <View className="flex-row gap-3 mb-4">
             <View className="flex-1 bg-white/20 border border-white/30 px-3 py-2 rounded-xl">
-              <Text className="text-xs text-indigo-100 mb-0.5">Total Orders</Text>
-              <Text className="text-xl font-bold text-white">{stats.totalOrders}</Text>
+              <Text className="text-xs text-indigo-100 mb-0.5">Total</Text>
+              <Text className="text-xl font-bold text-white">{stats.totalGroups}</Text>
             </View>
             <View className="flex-1 bg-white/20 border border-white/30 px-3 py-2 rounded-xl">
-              <Text className="text-xs text-indigo-100 mb-0.5">Distance</Text>
-              <Text className="text-xl font-bold text-white">{stats.totalDistance} km</Text>
+              <Text className="text-xs text-indigo-100 mb-0.5">Today</Text>
+              <Text className="text-xl font-bold text-white">₹{stats.earningsToday}</Text>
             </View>
             <View className="flex-1 bg-white/20 border border-white/30 px-3 py-2 rounded-xl">
-              <Text className="text-xs text-indigo-100 mb-0.5">Earnings</Text>
-              <Text className="text-xl font-bold text-white">₹{stats.totalEarnings}</Text>
+              <Text className="text-xs text-indigo-100 mb-0.5">Wallet</Text>
+              <Text className="text-xl font-bold text-white">₹{stats.availableBalance}</Text>
             </View>
           </View>
         )}
 
-        {/* Tab Bar */}
+        {/* Tab bar */}
         <View className="bg-indigo-500 rounded-2xl p-1 flex-row">
           {(['available', 'active', 'completed'] as const).map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
-              className={`flex-1 py-3 rounded-xl ${activeTab === tab ? 'bg-white' : 'bg-transparent'}`}
+              className={`flex-1 py-3 rounded-xl ${
+                activeTab === tab ? 'bg-white' : 'bg-transparent'
+              }`}
               activeOpacity={0.8}
             >
-              <Text className={`text-center font-bold text-sm ${activeTab === tab ? 'text-indigo-600' : 'text-white/70'}`}>
-                {tab === 'available' ? 'Available' : tab === 'active' ? `Active (${activeOrders.length})` : 'Completed'}
+              <Text className={`text-center font-bold text-sm ${
+                activeTab === tab ? 'text-indigo-600' : 'text-white/70'
+              }`}>
+                {tab === 'available' ? 'Available'
+                  : tab === 'active' ? `Active (${activeGroups.length})`
+                  : 'Completed'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      {/* Verification Gate */}
+      {/* Verification gate */}
       {!isVerified ? (
         <View className="px-4 pt-4">
-          <View className="bg-orange-50 border-l-4 border-orange-400 p-5 rounded-2xl flex-row gap-4 shadow-sm">
-            <View className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center">
-              <Feather name="alert-circle" size={20} color="#ea580c" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-bold text-orange-900 mb-1">Verification Required</Text>
-              <Text className="text-sm text-orange-800 leading-5">
-                Complete KYC and admin verification to receive and manage orders.
-              </Text>
-            </View>
+          <View className="bg-orange-50 border-l-4 border-orange-400 p-5 rounded-2xl">
+            <Text className="font-bold text-orange-900 mb-1">Verification Required</Text>
+            <Text className="text-sm text-orange-800">
+              Complete KYC and admin verification to receive orders.
+            </Text>
           </View>
         </View>
       ) : isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="white" />
-          <Text className="text-white mt-4">Loading orders...</Text>
+          <Text className="text-white mt-4">Loading...</Text>
         </View>
       ) : (
         <ScrollView
@@ -278,213 +258,301 @@ const DeliveryOrderScreen = () => {
             />
           }
         >
-          {getOrdersForTab().length === 0 ? (
+          {getGroupsForTab().length === 0 ? (
             <View className="bg-white/10 border border-white/20 rounded-3xl p-8 items-center mt-8">
-              <View className="w-20 h-20 bg-white/20 rounded-full items-center justify-center mb-4">
-                <Feather name="inbox" size={40} color="white" />
-              </View>
-              <Text className="text-white font-bold text-lg mb-2">No Orders</Text>
+              <Feather name="inbox" size={40} color="white" />
+              <Text className="text-white font-bold text-lg mt-4 mb-2">No Orders</Text>
               <Text className="text-indigo-100 text-sm text-center">
-                {activeTab === 'available' && 'No orders available at the moment'}
-                {activeTab === 'active' && 'You have no active orders'}
-                {activeTab === 'completed' && 'No completed orders yet'}
+                {activeTab === 'available' && 'No orders available right now'}
+                {activeTab === 'active'    && 'No active deliveries'}
+                {activeTab === 'completed' && 'No completed deliveries yet'}
               </Text>
             </View>
           ) : (
-            getOrdersForTab().map((order, idx) => (
-              <TouchableOpacity
-                key={order.id}
-                onPress={() => router.push(`/delivery/order/${order.id}`)}
-                activeOpacity={0.9}
-              >
-                <View className="bg-white rounded-3xl p-5 mb-4 shadow-lg">
-                  {/* Order Header */}
-                  <View className="flex-row items-center justify-between mb-4">
-                    <View className="flex-1">
-                      <Text className="text-xs text-gray-500 font-bold tracking-wider mb-1">
-                        ORDER #{idx + 1}
-                      </Text>
-                      <Text className="text-lg font-bold text-gray-900">{order.order_number}</Text>
-                    </View>
-                    <View className={`px-4 py-2 rounded-full ${
-                      order.status === 'ready_for_pickup' ? 'bg-yellow-100' :
-                      order.status === 'out_for_delivery' ? 'bg-blue-100' : 'bg-green-100'
-                    }`}>
-                      <Text className={`font-bold text-sm ${
-                        order.status === 'ready_for_pickup' ? 'text-yellow-700' :
-                        order.status === 'out_for_delivery' ? 'text-blue-700' : 'text-green-700'
-                      }`}>
-                        {order.status === 'ready_for_pickup' ? 'Ready' :
-                         order.status === 'out_for_delivery' ? 'Delivering' : 'Completed'}
-                      </Text>
-                    </View>
-                  </View>
+            getGroupsForTab().map((group) => {
+              const codBadge    = getCodBadge(group);
+              const codPending  = group.payment_method === 'cod' && group.cod_status === 'pending_deposit';
+              const codReported = group.payment_method === 'cod' && group.cod_status === 'deposit_reported';
+              const codDone     = group.payment_method === 'cod' && group.cod_status === 'deposited';
 
-                  {/* Progress Bar for Active Orders */}
-                  {order.status !== 'delivered' && activeTab === 'active' && (
-                    <View className="mb-4">
-                      <View className="flex-row items-center justify-between mb-2">
-                        <Text className="text-xs font-semibold text-gray-600">Pickup Progress</Text>
-                        <Text className="text-xs font-bold text-indigo-600">
-                          {getCollectedVendorsCount(order)}/{order.vendors.length} vendors
+              return (
+                <TouchableOpacity
+                  key={group.id}
+                  onPress={() => router.push(`/delivery/order/${group.id}`)}
+                  activeOpacity={0.9}
+                >
+                  <View className={`bg-white rounded-3xl p-5 mb-4 shadow-lg ${
+                    codPending ? 'border-2 border-amber-300' : ''
+                  }`}>
+
+                    {/* Header */}
+                    <View className="flex-row items-center justify-between mb-4">
+                      <View className="flex-1">
+                        <View className="flex-row items-center gap-2 mb-1">
+                          <Text className="text-xs text-gray-500 font-bold tracking-wider">
+                            {group.vendors.length} VENDOR{group.vendors.length > 1 ? 'S' : ''}
+                          </Text>
+                          {/* COD badge */}
+                          {codBadge && (
+                            <View className={`px-2 py-0.5 rounded-full ${codBadge.bg}`}>
+                              <Text className={`text-xs font-bold ${codBadge.text}`}>
+                                {codBadge.label}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text className="text-lg font-bold text-gray-900">
+                          {group.orders.length} order{group.orders.length > 1 ? 's' : ''}
                         </Text>
                       </View>
-                      <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <View
-                          className="h-full bg-indigo-600 rounded-full"
-                          style={{ width: `${(getCollectedVendorsCount(order) / order.vendors.length) * 100}%` }}
-                        />
+                      <View className={`px-4 py-2 rounded-full ${
+                        group.assignment_status === 'broadcasting' ? 'bg-yellow-100'
+                        : group.assignment_status === 'assigned'   ? 'bg-blue-100'
+                        : group.assignment_status === 'delivering' ? 'bg-purple-100'
+                        : 'bg-green-100'
+                      }`}>
+                        <Text className={`font-bold text-sm ${
+                          group.assignment_status === 'broadcasting' ? 'text-yellow-700'
+                          : group.assignment_status === 'assigned'   ? 'text-blue-700'
+                          : group.assignment_status === 'delivering' ? 'text-purple-700'
+                          : 'text-green-700'
+                        }`}>
+                          {group.assignment_status === 'broadcasting' ? 'Available'
+                            : group.assignment_status === 'assigned'   ? 'Assigned'
+                            : group.assignment_status === 'delivering' ? 'Delivering'
+                            : 'Completed'}
+                        </Text>
                       </View>
                     </View>
-                  )}
 
-                  {/* Vendors Section */}
-                  <View className="flex-row items-center justify-between mb-3 pb-3 border-b border-gray-100">
-                    <View className="flex-row items-center">
-                      <Feather name="shopping-bag" size={16} color="#374151" />
-                      <Text className="text-sm font-bold text-gray-700 ml-2">
-                        {order.vendors.length} Vendor{order.vendors.length > 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                    <Text className="text-xs text-gray-500">{order.totalItems} items</Text>
-                  </View>
+                    {/* Pickup progress for active */}
+                    {activeTab === 'active' && (
+                      <View className="mb-4">
+                        <View className="flex-row justify-between mb-2">
+                          <Text className="text-xs font-semibold text-gray-600">
+                            Pickup progress
+                          </Text>
+                          <Text className="text-xs font-bold text-indigo-600">
+                            {getPickedUpCount(group)}/{group.vendors.length} vendors
+                          </Text>
+                        </View>
+                        <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <View
+                            className="h-full bg-indigo-600 rounded-full"
+                            style={{
+                              width: `${(getPickedUpCount(group) / group.vendors.length) * 100}%`,
+                            }}
+                          />
+                        </View>
+                      </View>
+                    )}
 
-                  {/* Customer Delivery */}
-                  <View className="flex-row p-4 bg-green-50 rounded-2xl border-2 border-green-200 mb-4">
-                    <View className="w-10 h-10 bg-green-500 rounded-full items-center justify-center shadow-md mr-3">
-                      <Feather name="map-pin" size={20} color="white" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-xs text-green-700 font-bold mb-1">DELIVER TO</Text>
-                      <Text className="font-bold text-gray-900">{order.customer.name}</Text>
-                      <Text className="text-xs text-gray-600 mb-1" numberOfLines={2}>{order.customer.address}</Text>
-                      <Text className="text-xs text-gray-500">📞 {order.customer.phone}</Text>
-                    </View>
-                  </View>
-
-                  {/* Order Info */}
-                  <View className="flex-row gap-2 mb-4">
-                    <View className="flex-1 bg-gray-50 rounded-xl p-3">
-                      <Text className="text-xs text-gray-500 mb-1">Distance</Text>
-                      <Text className="font-bold text-gray-900">{order.distance.toFixed(1)} km</Text>
-                    </View>
-                    <View className="flex-1 bg-gray-50 rounded-xl p-3">
-                      <Text className="text-xs text-gray-500 mb-1">Items</Text>
-                      <Text className="font-bold text-gray-900">{order.totalItems}</Text>
-                    </View>
-                    <View className="flex-1 bg-green-50 rounded-xl p-3">
-                      <Text className="text-xs text-green-600 mb-1">Payout</Text>
-                      <Text className="font-bold text-green-600">₹{order.payout}</Text>
-                    </View>
-                  </View>
-
-                  {/* Action Buttons */}
-                  {activeTab === 'available' && (
-                    <TouchableOpacity
-                      onPress={() => handleAcceptOrderPress(order)}
-                      className="bg-indigo-600 py-3 rounded-xl shadow-md flex-row items-center justify-center"
-                      activeOpacity={0.8}
-                    >
-                      <Feather name="check-circle" size={18} color="white" />
-                      <Text className="text-white font-bold ml-2">Accept Order</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {activeTab === 'active' && (
-                    <View className="flex-row gap-3">
-                      <TouchableOpacity
-                        onPress={() => handleNavigate(order)}
-                        className="flex-1 bg-blue-500 py-3 rounded-xl shadow-md flex-row items-center justify-center"
-                        activeOpacity={0.8}
-                      >
-                        <Feather name="navigation" size={18} color="white" />
-                        <Text className="text-white font-bold ml-2">Navigate</Text>
-                      </TouchableOpacity>
-
-                      {order.status === 'ready_for_pickup' ? (
-                        <TouchableOpacity
-                          onPress={() => handleMarkPickedUpPress(order)}
-                          className="flex-1 bg-orange-500 py-3 rounded-xl shadow-md flex-row items-center justify-center"
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="package" size={18} color="white" />
-                          <Text className="text-white font-bold ml-2">Picked Up</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity
-                          onPress={() => handleStartDelivery(order)}
-                          className="flex-1 bg-green-500 py-3 rounded-xl shadow-md flex-row items-center justify-center"
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="check-circle" size={18} color="white" />
-                          <Text className="text-white font-bold ml-2">Deliver</Text>
-                        </TouchableOpacity>
+                    {/* Vendor list */}
+                    <View className="mb-3 pb-3 border-b border-gray-100">
+                      {group.vendors.slice(0, 2).map((v, idx) => (
+                        <View key={v.vendor_id} className="flex-row items-center mb-1">
+                          <View className="w-5 h-5 bg-indigo-100 rounded-full items-center justify-center mr-2">
+                            <Text className="text-xs font-bold text-indigo-600">{idx + 1}</Text>
+                          </View>
+                          <Text className="text-sm text-gray-700 flex-1" numberOfLines={1}>
+                            {v.vendor_name}
+                          </Text>
+                          {['picked_up', 'out_for_delivery'].includes(v.status) && (
+                            <Feather name="check-circle" size={14} color="#22c55e" />
+                          )}
+                        </View>
+                      ))}
+                      {group.vendors.length > 2 && (
+                        <Text className="text-xs text-gray-400 ml-7">
+                          +{group.vendors.length - 2} more vendor(s)
+                        </Text>
                       )}
                     </View>
-                  )}
 
-                  {activeTab === 'completed' && (
-                    <View className="bg-green-100 py-3 rounded-xl flex-row items-center justify-center">
-                      <Feather name="check-circle" size={18} color="#16a34a" />
-                      <Text className="text-green-700 font-bold ml-2">Delivered Successfully</Text>
+                    {/* Customer delivery */}
+                    <View className="flex-row items-center p-3 bg-green-50 rounded-2xl mb-4">
+                      <Feather name="map-pin" size={16} color="#22c55e" />
+                      <View className="ml-2 flex-1">
+                        <Text className="text-xs text-green-700 font-bold">DELIVER TO</Text>
+                        <Text className="font-bold text-gray-900 text-sm">{group.customer.name}</Text>
+                        <Text className="text-xs text-gray-500" numberOfLines={1}>
+                          {group.customer.address}
+                        </Text>
+                      </View>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))
+
+                    {/* Info row */}
+                    <View className="flex-row gap-2 mb-4">
+                      <View className="flex-1 bg-gray-50 rounded-xl p-3">
+                        <Text className="text-xs text-gray-500 mb-1">Distance</Text>
+                        <Text className="font-bold text-gray-900">
+                          {group.distance.toFixed(1)} km
+                        </Text>
+                      </View>
+                      <View className="flex-1 bg-gray-50 rounded-xl p-3">
+                        <Text className="text-xs text-gray-500 mb-1">Orders</Text>
+                        <Text className="font-bold text-gray-900">{group.orders.length}</Text>
+                      </View>
+                      <View className="flex-1 bg-green-50 rounded-xl p-3">
+                        <Text className="text-xs text-green-600 mb-1">Payout</Text>
+                        <Text className="font-bold text-green-600">
+                          ₹{group.delivery_fee.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* ── Action buttons ── */}
+
+                    {activeTab === 'available' && (
+                      <TouchableOpacity
+                        onPress={(e) => { e.stopPropagation(); handleAcceptPress(group); }}
+                        className="bg-indigo-600 py-3 rounded-xl flex-row items-center justify-center"
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="check-circle" size={18} color="white" />
+                        <Text className="text-white font-bold ml-2">Accept Group</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {activeTab === 'active' && (
+                      <View className="flex-row gap-3">
+                        <TouchableOpacity
+                          onPress={(e) => { e.stopPropagation(); handleNavigate(group); }}
+                          className="flex-1 bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="navigation" size={18} color="white" />
+                          <Text className="text-white font-bold ml-2">Navigate</Text>
+                        </TouchableOpacity>
+
+                        {group.assignment_status === 'delivering' && (
+                          <TouchableOpacity
+                            onPress={(e) => { e.stopPropagation(); handleDeliverPress(group); }}
+                            className="flex-1 bg-green-500 py-3 rounded-xl flex-row items-center justify-center"
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="lock" size={18} color="white" />
+                            <Text className="text-white font-bold ml-2">Enter OTP</Text>
+                          </TouchableOpacity>
+                        )}
+
+                        {group.assignment_status === 'assigned' && (
+                          <TouchableOpacity
+                            onPress={(e) => { e.stopPropagation(); router.push(`/delivery/order/${group.id}`); }}
+                            className="flex-1 bg-orange-500 py-3 rounded-xl flex-row items-center justify-center"
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="package" size={18} color="white" />
+                            <Text className="text-white font-bold ml-2">Pickup</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+
+                    {activeTab === 'completed' && (
+                      <View className="gap-2">
+                        {/* Delivered row */}
+                        <View className="bg-green-50 py-3 rounded-xl flex-row items-center justify-center">
+                          <Feather name="check-circle" size={16} color="#16a34a" />
+                          <Text className="text-green-700 font-bold ml-2 text-sm">
+                            Delivered · ₹{group.delivery_fee.toFixed(2)} payout
+                          </Text>
+                        </View>
+
+                        {/* COD deposit pending */}
+                        {codPending && (
+                          <TouchableOpacity
+                            onPress={(e) => { e.stopPropagation(); handleDepositPress(group); }}
+                            className="bg-amber-500 py-3 rounded-xl flex-row items-center justify-center"
+                            activeOpacity={0.8}
+                            disabled={reportDepositMutation.isPending}
+                          >
+                            {reportDepositMutation.isPending ? (
+                              <ActivityIndicator color="white" size="small" />
+                            ) : (
+                              <>
+                                <Feather name="send" size={16} color="white" />
+                                <Text className="text-white font-bold ml-2 text-sm">
+                                  Deposit ₹{group.cod_amount?.toFixed(2)} at office
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        )}
+
+                        {/* COD under review */}
+                        {codReported && (
+                          <View className="bg-blue-50 border border-blue-200 py-3 rounded-xl flex-row items-center justify-center gap-2">
+                            <ActivityIndicator size="small" color="#3b82f6" />
+                            <Text className="text-blue-700 font-bold text-sm">
+                              Deposit under review — ₹{group.delivery_fee.toFixed(2)} pending
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* COD confirmed */}
+                        {codDone && (
+                          <View className="bg-green-50 border border-green-200 py-3 rounded-xl flex-row items-center justify-center gap-2">
+                            <Feather name="check-circle" size={16} color="#16a34a" />
+                            <Text className="text-green-700 font-bold text-sm">
+                              ₹{group.delivery_fee.toFixed(2)} credited to wallet
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
           <View className="h-6" />
         </ScrollView>
       )}
 
-      {/* Blur Background for Modals */}
-      {(showOtpModal || showAcceptModal || showPickupModal) && (
+      {/* Blur overlay */}
+      {(showAcceptModal || showOtpModal || showDepositModal) && (
         <BlurView
           intensity={10}
-          experimentalBlurMethod='dimezisBlurView'
-          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+          experimentalBlurMethod="dimezisBlurView"
+          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
         />
       )}
 
-      {/* Accept Order Confirmation Modal */}
+      {/* Accept modal */}
       <DeliveryConfirmationModal
         visible={showAcceptModal}
-        onClose={() => {
-          setShowAcceptModal(false);
-          setSelectedOrderForAccept(null);
-        }}
-        onConfirm={handleConfirmAcceptOrder}
-        title="Accept Order?"
-        message={`Are you sure you want to accept order ${selectedOrderForAccept?.order_number}? You'll need to pick up items from ${selectedOrderForAccept?.vendors.length} vendor(s) and deliver to the customer.`}
+        onClose={() => { setShowAcceptModal(false); setSelectedGroup(null); }}
+        onConfirm={handleConfirmAccept}
+        title="Accept This Group?"
+        message={`Pick up from ${selectedGroup?.vendors.length} vendor(s) and deliver to ${selectedGroup?.customer.name}. Payout: ₹${selectedGroup?.delivery_fee.toFixed(2)}`}
         confirmText="Accept"
         cancelText="Cancel"
-        isLoading={acceptOrderMutation.isPending}
+        isLoading={acceptGroupMutation.isPending}
         icon="check-circle"
         iconColor="#6366f1"
       />
 
-      {/* Mark Picked Up Confirmation Modal */}
+      {/* COD deposit confirmation modal */}
       <DeliveryConfirmationModal
-        visible={showPickupModal}
-        onClose={() => {
-          setShowPickupModal(false);
-          setSelectedOrderForPickup(null);
-        }}
-        onConfirm={handleConfirmMarkPickedUp}
-        title="Mark as Picked Up?"
-        message={`Confirm that you have collected all items from ${selectedOrderForPickup?.vendors[0]?.name}. This will change the order status to "Out for Delivery".`}
-        confirmText="Confirm Pickup"
+        visible={showDepositModal}
+        onClose={() => { setShowDepositModal(false); setSelectedGroupForDeposit(null); }}
+        onConfirm={handleConfirmDeposit}
+        title="Confirm Cash Deposit?"
+        message={`You are confirming that you have deposited ₹${selectedGroupForDeposit?.cod_amount?.toFixed(2)} at the office. Admin will verify and credit ₹${selectedGroupForDeposit?.delivery_fee.toFixed(2)} to your wallet.`}
+        confirmText="Yes, I've Deposited"
         cancelText="Cancel"
-        isLoading={markPickedUpMutation.isPending}
-        icon="package"
-        iconColor="#f97316"
+        isLoading={reportDepositMutation.isPending}
+        icon="dollar-sign"
+        iconColor="#d97706"
       />
 
-      {/* OTP Verification Modal */}
+      {/* OTP modal */}
       <DeliveryOTPVerificationModal
         showOtpModal={showOtpModal}
         setShowOtpModal={setShowOtpModal}
-        selectedOrderForOtp={selectedOrderForOtp}
+        selectedOrderForOtp={selectedGroupForOtp}
         otpInput={otpInput}
         setOtpInput={setOtpInput}
         handleVerifyOtp={handleVerifyOtp}

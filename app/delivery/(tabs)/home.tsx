@@ -1,4 +1,3 @@
-import DeliveryActiveOrderCard from '@/components/DeliveryActiveOrderCard';
 import DeliveryOTPVerificationModal from '@/components/DeliveryOTPVerificationModal';
 import DeliveryConfirmationModal from '@/components/Deliveryconfirmationmodal';
 import { Feather } from '@expo/vector-icons';
@@ -14,10 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-
-// ==========================================
-// IMPORT EXISTING HOOKS
-// ==========================================
 import { useAuthStore } from '@/store/authStore';
 import {
   useDeliveryBoyProfile,
@@ -26,105 +21,96 @@ import {
   useUpdateDeliveryBoyProfile,
 } from '@/hooks/queries/useDeliveryBoy';
 import {
-  useAvailableDeliveryOrders,
-  useActiveDeliveryOrders,
-  useAcceptDeliveryOrder,
+  useAvailableDeliveryGroups,
+  useActiveDeliveryGroups,
+  useAcceptDeliveryGroup,
   useMarkOrderPickedUp,
-  useCompleteDelivery,
+  useCompleteGroupDelivery,
   useDeliveryBoyStats,
-} from '@/hooks/queries/useDeliveryOrders';
-import { DeliveryOrder } from '@/types/delivery-orders.types';
+  type DeliveryGroup,
+} from '@/hooks/queries/useDeliveryGroups';
 import Toast from 'react-native-toast-message';
 
 // ==========================================
 // KYC DOCUMENT TYPES
 // ==========================================
 const KYC_DOCUMENTS = {
-  aadhaar: 'Aadhaar Card',
-  pan: 'PAN Card',
+  aadhaar:         'Aadhaar Card',
+  pan:             'PAN Card',
   driving_license: 'Driving License',
-  bank_passbook: 'Bank Passbook',
-  profile_photo: 'Profile Photo',
+  bank_passbook:   'Bank Passbook',
+  profile_photo:   'Profile Photo',
 } as const;
 
 type KycDocumentType = keyof typeof KYC_DOCUMENTS;
 
 /* ---------------- MAIN COMPONENT ---------------- */
 const DeliveryPartnerHome = () => {
-  const router = useRouter();
+  const router  = useRouter();
   const session = useAuthStore((state) => state.session);
-  const userId = session?.user?.id;
+  const userId  = session?.user?.id;
 
   // Profile and verification data
-  const profile = useDeliveryBoyProfile(userId);
-  const kycSummary = useDeliveryBoyKycSummary(userId || '');
+  const profile      = useDeliveryBoyProfile(userId);
+  const kycSummary   = useDeliveryBoyKycSummary(userId || '');
   const kycDocuments = useDeliveryBoyKycDocuments(userId || '');
-  const stats = useDeliveryBoyStats();
+  const stats        = useDeliveryBoyStats();
 
-  // Orders data
-  const availableOrders = useAvailableDeliveryOrders();
-  const activeOrders = useActiveDeliveryOrders();
+  // ✅ Group-level order hooks
+  const availableGroups = useAvailableDeliveryGroups();
+  const activeGroups    = useActiveDeliveryGroups();
 
   // Mutations
-  const updateProfile = useUpdateDeliveryBoyProfile();
-  const acceptOrder = useAcceptDeliveryOrder();
-  const markPickedUp = useMarkOrderPickedUp();
-  const completeDelivery = useCompleteDelivery();
+  const updateProfile    = useUpdateDeliveryBoyProfile();
+  const acceptGroup      = useAcceptDeliveryGroup();
+  const markPickedUp     = useMarkOrderPickedUp();
+  const completeDelivery = useCompleteGroupDelivery();
 
   // ==========================================
   // LOCAL STATE
   // ==========================================
-  const [showOrdersModal, setShowOrdersModal] = useState(false);
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [selectedOrderForOtp, setSelectedOrderForOtp] = useState<DeliveryOrder | null>(null);
-  const [otpInput, setOtpInput] = useState('');
+  const [showOrdersModal, setShowOrdersModal]   = useState(false);
+  const [showOtpModal, setShowOtpModal]         = useState(false);
+  const [selectedGroupForOtp, setSelectedGroupForOtp] = useState<DeliveryGroup | null>(null);
+  const [otpInput, setOtpInput]                 = useState('');
 
-  // Accept Order Confirmation Modal State
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [selectedOrderForAccept, setSelectedOrderForAccept] = useState<DeliveryOrder | null>(null);
-
-  // Pickup Confirmation Modal State
-  const [showPickupModal, setShowPickupModal] = useState(false);
-  const [selectedOrderForPickup, setSelectedOrderForPickup] = useState<DeliveryOrder | null>(null);
+  const [showAcceptModal, setShowAcceptModal]   = useState(false);
+  const [selectedGroupForAccept, setSelectedGroupForAccept] = useState<DeliveryGroup | null>(null);
 
   // ==========================================
   // EXTRACT DATA
   // ==========================================
-
   const name = profile.data
     ? `${profile.data.first_name || ''} ${profile.data.last_name || ''}`.trim()
     : 'User';
 
-  const isOnline = profile.data?.is_online || false;
+  const isOnline    = profile.data?.is_online || false;
   const adminStatus = profile.data?.admin_verification_status || 'pending';
-  const isKycCompleted = kycSummary.isComplete;
-  const isVerified = adminStatus === 'approved' && isKycCompleted;
+  const isVerified  = adminStatus === 'approved' && kycSummary.isComplete;
 
   // ==========================================
-  // BUILD KYC STEPS FROM ACTUAL DOCUMENTS
+  // KYC STEPS
   // ==========================================
-
   const isDocumentVerified = (docType: KycDocumentType) => {
-    const doc = kycDocuments.data?.find(d => d.document_type === docType);
+    const doc = kycDocuments.data?.find((d) => d.document_type === docType);
     return doc?.status === 'verified' || doc?.status === 'approved';
   };
 
   const kycSteps = [
-    { id: 'aadhaar', title: KYC_DOCUMENTS.aadhaar, status: isDocumentVerified('aadhaar') ? 'completed' : 'pending' },
-    { id: 'pan', title: KYC_DOCUMENTS.pan, status: isDocumentVerified('pan') ? 'completed' : 'pending' },
+    { id: 'aadhaar',         title: KYC_DOCUMENTS.aadhaar,         status: isDocumentVerified('aadhaar')         ? 'completed' : 'pending' },
+    { id: 'pan',             title: KYC_DOCUMENTS.pan,             status: isDocumentVerified('pan')             ? 'completed' : 'pending' },
     { id: 'driving_license', title: KYC_DOCUMENTS.driving_license, status: isDocumentVerified('driving_license') ? 'completed' : 'pending' },
-    { id: 'bank_passbook', title: KYC_DOCUMENTS.bank_passbook, status: isDocumentVerified('bank_passbook') ? 'completed' : 'pending' },
-    { id: 'profile_photo', title: KYC_DOCUMENTS.profile_photo, status: isDocumentVerified('profile_photo') ? 'completed' : 'pending' },
+    { id: 'bank_passbook',   title: KYC_DOCUMENTS.bank_passbook,   status: isDocumentVerified('bank_passbook')   ? 'completed' : 'pending' },
+    { id: 'profile_photo',   title: KYC_DOCUMENTS.profile_photo,   status: isDocumentVerified('profile_photo')   ? 'completed' : 'pending' },
   ];
 
-  const kycProgress = kycSteps.filter(s => s.status === 'completed').length;
-  const totalKycSteps = kycSteps.length;
-  const kycPercentage = (kycProgress / totalKycSteps) * 100;
+  const kycProgress    = kycSteps.filter((s) => s.status === 'completed').length;
+  const totalKycSteps  = kycSteps.length;
+  const kycPercentage  = (kycProgress / totalKycSteps) * 100;
 
   const todayStats = {
-    todayOrders: stats.data?.completedOrders || 0,
-    distanceKm: stats.data?.totalDistance || 0,
-    earnings: stats.data?.totalEarnings || 0,
+    todayOrders: stats.data?.completedGroups  || 0,
+    earnings:    stats.data?.earningsToday    || 0,
   };
 
   // ==========================================
@@ -134,107 +120,69 @@ const DeliveryPartnerHome = () => {
   const handleToggleOnline = async () => {
     try {
       await updateProfile.mutateAsync({
-        is_online: !isOnline,
+        is_online:    !isOnline,
         is_available: !isOnline,
       });
-    } catch (error) {
-      console.error('Error toggling online status:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to update online status',
-        position: 'top',
-      });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Failed to update online status', position: 'top' });
     }
   };
 
-  // Accept Order Flow
-  const handleAcceptOrderPress = (order: DeliveryOrder) => {
-    setSelectedOrderForAccept(order);
+  // Accept group flow
+  const handleAcceptGroupPress = (group: DeliveryGroup) => {
+    setSelectedGroupForAccept(group);
     setShowAcceptModal(true);
   };
 
-  const handleConfirmAcceptOrder = async () => {
-    if (!selectedOrderForAccept) return;
-
+  const handleConfirmAcceptGroup = async () => {
+    if (!selectedGroupForAccept) return;
     try {
-      await acceptOrder.mutateAsync(selectedOrderForAccept.id);
+      await acceptGroup.mutateAsync(selectedGroupForAccept.id);
       setShowAcceptModal(false);
-      setSelectedOrderForAccept(null);
+      setSelectedGroupForAccept(null);
       setShowOrdersModal(false);
       Toast.show({
-        type: 'success',
-        text1: 'Order accepted successfully! 🎉',
+        type:  'success',
+        text1: 'Group accepted! 🎉',
+        text2: `Pick up from ${selectedGroupForAccept.vendors.length} vendor(s)`,
         position: 'top',
       });
     } catch (error: any) {
       setShowAcceptModal(false);
       Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to accept order',
+        type:  'error',
+        text1: error.message || 'Failed to accept group',
         position: 'top',
       });
     }
   };
 
-  // Mark Picked Up Flow
-  const handleMarkPickedUpPress = (order: DeliveryOrder) => {
-    setSelectedOrderForPickup(order);
-    setShowPickupModal(true);
-  };
-
-  const handleConfirmMarkPickedUp = async () => {
-    if (!selectedOrderForPickup) return;
-
-    try {
-      await markPickedUp.mutateAsync(selectedOrderForPickup.id);
-      setShowPickupModal(false);
-      setSelectedOrderForPickup(null);
-      Toast.show({
-        type: 'success',
-        text1: 'Order marked as picked up! 📦',
-        position: 'top',
-      });
-    } catch (error: any) {
-      setShowPickupModal(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to mark order as picked up',
-        position: 'top',
-      });
-    }
-  };
-
-  // Complete Delivery Flow
-  const handleStartDelivery = (order: DeliveryOrder) => {
-    setSelectedOrderForOtp(order);
+  // Complete delivery (OTP)
+  const handleStartDelivery = (group: DeliveryGroup) => {
+    setSelectedGroupForOtp(group);
     setShowOtpModal(true);
     setOtpInput('');
   };
 
   const handleVerifyOtp = async () => {
-    if (!selectedOrderForOtp) return;
-
+    if (!selectedGroupForOtp) return;
     try {
       await completeDelivery.mutateAsync({
-        orderId: selectedOrderForOtp.id,
-        otp: otpInput,
+        groupId: selectedGroupForOtp.id,
+        otp:     otpInput,
       });
-
       setShowOtpModal(false);
       setOtpInput('');
-      setSelectedOrderForOtp(null);
+      setSelectedGroupForOtp(null);
       Toast.show({
-        type: 'success',
-        text1: 'Order delivered successfully! 🎉',
+        type:  'success',
+        text1: 'Delivered successfully! 🎉',
+        text2: `₹${selectedGroupForOtp.payout.toFixed(2)} earned`,
         position: 'top',
       });
     } catch (error: any) {
-      console.error('Error completing delivery:', error);
       Toast.show({
-        type: 'error',
+        type:  'error',
         text1: 'Invalid OTP',
         text2: error.message || 'Please try again.',
         position: 'top',
@@ -245,7 +193,6 @@ const DeliveryPartnerHome = () => {
   // ==========================================
   // LOADING STATE
   // ==========================================
-
   const isLoading = profile.isLoading || stats.isLoading || kycDocuments.isLoading;
 
   if (isLoading) {
@@ -260,134 +207,18 @@ const DeliveryPartnerHome = () => {
   // ==========================================
   // RENDER
   // ==========================================
-
   return (
     <SafeAreaView className="flex-1 bg-indigo-600">
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         <View className="px-4 py-6">
-          {isVerified ? (
-            <>
-              <View className="items-center mb-8 mt-4">
-                <View className="w-20 h-20 bg-white/20 rounded-full items-center justify-center mb-4">
-                  <Feather name="package" size={40} color="white" />
-                </View>
-                <Text className="text-3xl font-bold text-white mb-2 text-center">
-                  Welcome {name}
-                </Text>
-                <Text className="text-indigo-100 text-sm text-center">
-                  Complete verification to start earning
-                </Text>
-              </View>
 
-              {/* Verification Status Alert */}
-              <View className="bg-orange-50 border-l-4 border-orange-400 p-5 rounded-2xl mb-6 shadow-sm">
-                <View className="flex-row gap-4">
-                  <View className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center">
-                    <Feather name="alert-circle" size={20} color="#ea580c" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-bold text-orange-900 mb-1">Verification Required</Text>
-                    <Text className="text-sm text-orange-800 leading-5">
-                      Complete KYC and admin verification to receive and manage orders.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Admin Verification Status */}
-              <View className="bg-white rounded-3xl p-5 mb-4 shadow-lg">
-                <Text className="text-lg font-bold text-gray-900 mb-4">Admin Approval Status</Text>
-
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-sm font-semibold text-gray-700">Verification Status</Text>
-                  <View className={`px-3 py-1.5 rounded-full ${
-                    adminStatus === 'approved' ? 'bg-green-500' :
-                    adminStatus === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}>
-                    <Text className="text-white text-xs font-bold">
-                      {adminStatus === 'approved' ? 'Approved' :
-                       adminStatus === 'pending' ? 'Pending' : 'Rejected'}
-                    </Text>
-                  </View>
-                </View>
-                <Text className="text-xs text-gray-500 mb-3">
-                  {adminStatus === 'approved' ? 'Orders enabled' :
-                   adminStatus === 'pending' ? 'Verification in progress' : 'Action required'}
-                </Text>
-
-                {adminStatus === 'rejected' && (
-                  <TouchableOpacity
-                    className="bg-red-50 border border-red-200 py-3 rounded-xl"
-                    activeOpacity={0.8}
-                    onPress={() => router.push('/delivery/profile/documents')}
-                  >
-                    <Text className="text-red-600 font-bold text-center">
-                      Fix & Resubmit Details
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* KYC Progress Card */}
-              <View className="bg-white rounded-3xl p-5 mb-6 shadow-lg">
-                <View className="flex-row items-center justify-between mb-4">
-                  <Text className="text-lg font-bold text-gray-900">Identity Verification</Text>
-                  <Text className="text-sm font-bold text-indigo-600">
-                    {kycProgress}/{totalKycSteps}
-                  </Text>
-                </View>
-
-                <View className="h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
-                  <View
-                    className="h-full bg-indigo-600 rounded-full"
-                    style={{ width: `${kycPercentage}%` }}
-                  />
-                </View>
-
-                <View className="gap-y-3 mb-4">
-                  {kycSteps.map((step) => (
-                    <View key={step.id} className="flex-row items-center">
-                      <View className={`w-6 h-6 rounded-full items-center justify-center mr-3 ${
-                        step.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'
-                      }`}>
-                        {step.status === 'completed' ? (
-                          <Feather name="check" size={14} color="white" />
-                        ) : (
-                          <View className="w-2 h-2 rounded-full bg-gray-400" />
-                        )}
-                      </View>
-                      <Text className={`font-semibold ${
-                        step.status === 'completed' ? 'text-gray-900' : 'text-gray-500'
-                      }`}>
-                        {step.title}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  className="bg-indigo-600 py-3 rounded-xl"
-                  activeOpacity={0.8}
-                  onPress={() => router.push('/delivery/profile/documents')}
-                >
-                  <Text className="text-white font-bold text-center">
-                    {kycSummary.isComplete ? 'View Documents' : 'Complete Verification'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
               {/* Header */}
               <View className="mb-6 mt-4">
                 <View className="flex-row items-center justify-between mb-6">
                   <View>
-                    <Text className="text-2xl font-bold text-white mb-1">
-                      Hello, {name}
-                    </Text>
+                    <Text className="text-2xl font-bold text-white mb-1">Hello, {name}</Text>
                     <Text className="text-indigo-100 text-sm">Ready to deliver excellence</Text>
                   </View>
-
                   <TouchableOpacity
                     onPress={handleToggleOnline}
                     className={`px-6 py-3 rounded-full shadow-lg flex-row items-center gap-2 ${
@@ -406,9 +237,9 @@ const DeliveryPartnerHome = () => {
                 {/* Stats Row */}
                 <View className="flex-row gap-3">
                   <View className="flex-1 bg-white/20 border border-white/30 px-4 py-3 rounded-2xl">
-                    <Text className="text-xs text-indigo-100 mb-1">Active Orders</Text>
+                    <Text className="text-xs text-indigo-100 mb-1">Active Groups</Text>
                     <Text className="text-2xl font-bold text-white">
-                      {activeOrders.data?.length || 0}
+                      {activeGroups.data?.length || 0}
                     </Text>
                   </View>
                   <View className="flex-1 bg-white/20 border border-white/30 px-4 py-3 rounded-2xl">
@@ -420,12 +251,12 @@ const DeliveryPartnerHome = () => {
                 </View>
               </View>
 
-              {/* Active Orders */}
-              {activeOrders.data && activeOrders.data.length > 0 ? (
+              {/* Active Groups */}
+              {activeGroups.data && activeGroups.data.length > 0 ? (
                 <View className="mb-6">
                   <View className="flex-row items-center justify-between mb-4">
                     <Text className="text-xl font-bold text-white">
-                      Active Orders ({activeOrders.data.length})
+                      Active Orders ({activeGroups.data.length})
                     </Text>
                     {isOnline && (
                       <TouchableOpacity
@@ -438,14 +269,96 @@ const DeliveryPartnerHome = () => {
                     )}
                   </View>
 
-                  {activeOrders.data.map((order, idx) => (
-                    <DeliveryActiveOrderCard
-                      key={order.id}
-                      order={order}
-                      idx={idx}
-                      handleMarkPickedUp={handleMarkPickedUpPress}
-                      handleStartDelivery={handleStartDelivery}
-                    />
+                  {activeGroups.data.map((group) => (
+                    <View key={group.id} className="bg-white rounded-3xl p-5 mb-4 shadow-lg">
+                      {/* Group header */}
+                      <View className="flex-row items-center justify-between mb-3">
+                        <View>
+                          <Text className="text-xs text-gray-500 font-bold mb-1">
+                            {group.vendors.length} VENDOR{group.vendors.length > 1 ? 'S' : ''}
+                          </Text>
+                          <Text className="text-lg font-bold text-gray-900">
+                            {group.orders.length} order{group.orders.length > 1 ? 's' : ''}
+                          </Text>
+                        </View>
+                        <View className={`px-3 py-1.5 rounded-full ${
+                          group.assignment_status === 'assigned'   ? 'bg-blue-100' :
+                          group.assignment_status === 'delivering' ? 'bg-purple-100' :
+                          'bg-green-100'
+                        }`}>
+                          <Text className={`text-xs font-bold ${
+                            group.assignment_status === 'assigned'   ? 'text-blue-700' :
+                            group.assignment_status === 'delivering' ? 'text-purple-700' :
+                            'text-green-700'
+                          }`}>
+                            {group.assignment_status === 'assigned'   ? 'Collecting'  :
+                             group.assignment_status === 'delivering' ? 'Delivering'  :
+                             'Completed'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Vendor stops */}
+                      {group.vendors.slice(0, 2).map((vendor, idx) => (
+                        <View key={vendor.vendor_id} className="flex-row items-center p-2 bg-blue-50 rounded-lg mb-2">
+                          <View className="w-5 h-5 bg-indigo-100 rounded-full items-center justify-center mr-2">
+                            <Text className="text-xs font-bold text-indigo-600">{idx + 1}</Text>
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+                              {vendor.vendor_name}
+                            </Text>
+                            <Text className="text-xs text-gray-500" numberOfLines={1}>
+                              {vendor.address}
+                            </Text>
+                          </View>
+                          {(vendor.status === 'picked_up' || vendor.status === 'out_for_delivery') && (
+                            <Feather name="check-circle" size={14} color="#22c55e" />
+                          )}
+                        </View>
+                      ))}
+                      {group.vendors.length > 2 && (
+                        <Text className="text-xs text-gray-400 mb-2 ml-2">
+                          +{group.vendors.length - 2} more vendor(s)
+                        </Text>
+                      )}
+
+                      {/* Customer */}
+                      <View className="flex-row items-center p-2 bg-green-50 rounded-lg mb-3">
+                        <Feather name="map-pin" size={14} color="#22c55e" />
+                        <View className="flex-1 ml-2">
+                          <Text className="text-xs text-green-600 font-bold">DELIVER TO</Text>
+                          <Text className="text-sm font-semibold text-gray-900">{group.customer.name}</Text>
+                        </View>
+                      </View>
+
+                      {/* Payout */}
+                      <View className="flex-row items-center justify-between mb-3">
+                        <Text className="text-xs text-gray-500">Payout</Text>
+                        <Text className="font-bold text-green-600">₹{group.payout.toFixed(2)}</Text>
+                      </View>
+
+                      {/* Action buttons */}
+                      {group.assignment_status === 'delivering' ? (
+                        <TouchableOpacity
+                          onPress={() => handleStartDelivery(group)}
+                          className="bg-green-500 py-3 rounded-xl flex-row items-center justify-center"
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="lock" size={16} color="white" />
+                          <Text className="text-white font-bold ml-2">Enter OTP to Deliver</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => router.push(`/delivery/order/${group.id}`)}
+                          className="bg-indigo-600 py-3 rounded-xl flex-row items-center justify-center"
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="package" size={16} color="white" />
+                          <Text className="text-white font-bold ml-2">View Pickup Details</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   ))}
                 </View>
               ) : (
@@ -477,17 +390,31 @@ const DeliveryPartnerHome = () => {
               <View className="mb-6">
                 <Text className="text-xl font-bold text-white mb-4">Today's Performance</Text>
                 <View className="flex-row gap-3">
-                  <StatCard icon="package" label="Orders" value={todayStats.todayOrders} bgColor="bg-indigo-500" />
-                  <StatCard icon="navigation" label="Distance" value={`${todayStats.distanceKm} km`} bgColor="bg-blue-500" />
-                  <StatCard icon="dollar-sign" label="Earned" value={`₹${todayStats.earnings}`} bgColor="bg-green-500" />
+                  <StatCard
+                    icon="package"
+                    label="Deliveries"
+                    value={todayStats.todayOrders}
+                    bgColor="bg-indigo-500"
+                  />
+                  <StatCard
+                    icon="dollar-sign"
+                    label="Today"
+                    value={`₹${todayStats.earnings}`}
+                    bgColor="bg-green-500"
+                  />
+                  <StatCard
+                    icon="award"
+                    label="Wallet"
+                    value={`₹${stats.data?.availableBalance ?? 0}`}
+                    bgColor="bg-blue-500"
+                  />
                 </View>
               </View>
-            </>
-          )}
+          
         </View>
       </ScrollView>
 
-      {/* Available Orders Modal */}
+      {/* ── Available Orders Modal ──────────────────────────────────────── */}
       <Modal
         visible={showOrdersModal}
         animationType="slide"
@@ -504,87 +431,107 @@ const DeliveryPartnerHome = () => {
                 </TouchableOpacity>
               </View>
               <Text className="text-sm text-gray-500">
-                {availableOrders.data?.length || 0} orders waiting for delivery
+                {availableGroups.data?.length || 0} order groups available
               </Text>
             </View>
 
-            {availableOrders.isLoading ? (
+            {availableGroups.isLoading ? (
               <View className="p-8 items-center">
                 <ActivityIndicator size="large" color="#4f46e5" />
                 <Text className="text-gray-500 mt-4">Loading orders...</Text>
               </View>
-            ) : availableOrders.data && availableOrders.data.length > 0 ? (
+            ) : availableGroups.data && availableGroups.data.length > 0 ? (
               <FlatList
-                data={availableOrders.data}
+                data={availableGroups.data}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ padding: 16 }}
-                renderItem={({ item }) => (
+                renderItem={({ item: group }) => (
                   <View className="bg-white border border-gray-200 rounded-2xl p-5 mb-4 shadow-sm">
+
+                    {/* Header */}
                     <View className="flex-row items-center justify-between mb-4">
                       <View className="flex-1">
-                        <Text className="text-xs text-gray-500 font-bold mb-1">ORDER ID</Text>
-                        <Text className="text-md font-bold text-gray-900">#{item.order_number}</Text>
+                        <Text className="text-xs text-gray-500 font-bold mb-1">
+                          {group.vendors.length} VENDOR{group.vendors.length > 1 ? 'S' : ''}
+                          {' · '}
+                          {group.payment_method.toUpperCase()}
+                        </Text>
+                        <Text className="text-md font-bold text-gray-900">
+                          {group.orders.length} order{group.orders.length > 1 ? 's' : ''}
+                        </Text>
                       </View>
                       <View className="bg-indigo-50 px-4 py-2 rounded-full">
-                        <Text className="text-indigo-600 font-bold">₹{item.payout}</Text>
+                        <Text className="text-indigo-600 font-bold">₹{group.payout.toFixed(2)}</Text>
                       </View>
                     </View>
 
-                    <View className="mb-4">
-                      {item.vendors.map((vendor, idx) => (
-                        <View
-                          key={vendor.id}
-                          className="flex-row items-start p-3 bg-blue-50 rounded-lg mb-2"
-                        >
-                          <Feather name="shopping-bag" size={16} color="#3b82f6" />
-                          <View className="flex-1 ml-2">
-                            <Text className="text-xs text-blue-600 font-bold">PICKUP {idx + 1}</Text>
-                            <Text className="font-semibold text-gray-900">{vendor.name}</Text>
-                            <Text className="text-xs text-gray-600" numberOfLines={1}>
-                              {vendor.address}
-                            </Text>
-                            <Text className="text-xs text-gray-500 mt-1">{vendor.items.length} items</Text>
-                          </View>
-                        </View>
-                      ))}
-
-                      <View className="flex-row items-start p-3 bg-green-50 rounded-lg">
-                        <Feather name="map-pin" size={16} color="#22c55e" />
+                    {/* Vendor stops */}
+                    {group.vendors.map((vendor, idx) => (
+                      <View key={vendor.vendor_id} className="flex-row items-start p-3 bg-blue-50 rounded-lg mb-2">
+                        <Feather name="shopping-bag" size={16} color="#3b82f6" />
                         <View className="flex-1 ml-2">
-                          <Text className="text-xs text-green-600 font-bold">DELIVERY</Text>
-                          <Text className="font-semibold text-gray-900">{item.customer.name}</Text>
+                          <Text className="text-xs text-blue-600 font-bold">PICKUP {idx + 1}</Text>
+                          <Text className="font-semibold text-gray-900">{vendor.vendor_name}</Text>
                           <Text className="text-xs text-gray-600" numberOfLines={1}>
-                            {item.customer.address}
+                            {vendor.address}
+                          </Text>
+                          <Text className="text-xs text-gray-500 mt-1">
+                            {vendor.items.filter((i) => i.status !== 'cancelled').length} items
                           </Text>
                         </View>
                       </View>
+                    ))}
+
+                    {/* Customer */}
+                    <View className="flex-row items-start p-3 bg-green-50 rounded-lg mb-4">
+                      <Feather name="map-pin" size={16} color="#22c55e" />
+                      <View className="flex-1 ml-2">
+                        <Text className="text-xs text-green-600 font-bold">DELIVER TO</Text>
+                        <Text className="font-semibold text-gray-900">{group.customer.name}</Text>
+                        <Text className="text-xs text-gray-600" numberOfLines={1}>
+                          {group.customer.address}
+                        </Text>
+                      </View>
                     </View>
 
+                    {/* Info row */}
                     <View className="flex-row gap-2 mb-4">
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
                         <Text className="text-xs text-gray-500">Distance</Text>
-                        <Text className="font-bold text-gray-900 text-sm">{item.distance.toFixed(1)} km</Text>
+                        <Text className="font-bold text-gray-900 text-sm">
+                          {group.distance.toFixed(1)} km
+                        </Text>
                       </View>
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
-                        <Text className="text-xs text-gray-500">Total Items</Text>
-                        <Text className="font-bold text-gray-900 text-sm">{item.totalItems}</Text>
+                        <Text className="text-xs text-gray-500">Items</Text>
+                        <Text className="font-bold text-gray-900 text-sm">{group.totalItems}</Text>
                       </View>
                       <View className="flex-1 bg-gray-50 rounded-lg p-2">
                         <Text className="text-xs text-gray-500">Vendors</Text>
-                        <Text className="font-bold text-gray-900 text-sm">{item.vendors.length}</Text>
+                        <Text className="font-bold text-gray-900 text-sm">{group.vendors.length}</Text>
                       </View>
                     </View>
 
+                    {/* COD badge */}
+                    {group.payment_method === 'cod' && (
+                      <View className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3 flex-row items-center gap-2">
+                        <Feather name="alert-circle" size={14} color="#d97706" />
+                        <Text className="text-amber-700 text-xs font-medium">
+                          COD — Collect ₹{group.total_amount} cash at delivery
+                        </Text>
+                      </View>
+                    )}
+
                     <TouchableOpacity
-                      onPress={() => handleAcceptOrderPress(item)}
+                      onPress={() => handleAcceptGroupPress(group)}
                       className="bg-indigo-600 py-3 rounded-xl shadow-md"
                       activeOpacity={0.8}
-                      disabled={acceptOrder.isPending}
+                      disabled={acceptGroup.isPending}
                     >
-                      {acceptOrder.isPending ? (
+                      {acceptGroup.isPending ? (
                         <ActivityIndicator size="small" color="white" />
                       ) : (
-                        <Text className="text-white font-bold text-center">Accept Order</Text>
+                        <Text className="text-white font-bold text-center">Accept Group</Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -602,45 +549,25 @@ const DeliveryPartnerHome = () => {
         </View>
       </Modal>
 
-      {/* Accept Order Confirmation Modal */}
+      {/* Accept Confirmation Modal */}
       <DeliveryConfirmationModal
         visible={showAcceptModal}
-        onClose={() => {
-          setShowAcceptModal(false);
-          setSelectedOrderForAccept(null);
-        }}
-        onConfirm={handleConfirmAcceptOrder}
-        title="Accept Order?"
-        message={`Are you sure you want to accept order ${selectedOrderForAccept?.order_number}? You'll need to pick up items from ${selectedOrderForAccept?.vendors.length} vendor(s) and deliver to the customer.`}
+        onClose={() => { setShowAcceptModal(false); setSelectedGroupForAccept(null); }}
+        onConfirm={handleConfirmAcceptGroup}
+        title="Accept Group?"
+        message={`Pick up from ${selectedGroupForAccept?.vendors.length} vendor(s) and deliver to ${selectedGroupForAccept?.customer.name}. Payout: ₹${selectedGroupForAccept?.payout.toFixed(2)}`}
         confirmText="Accept"
         cancelText="Cancel"
-        isLoading={acceptOrder.isPending}
+        isLoading={acceptGroup.isPending}
         icon="check-circle"
         iconColor="#6366f1"
-      />
-
-      {/* Mark Picked Up Confirmation Modal */}
-      <DeliveryConfirmationModal
-        visible={showPickupModal}
-        onClose={() => {
-          setShowPickupModal(false);
-          setSelectedOrderForPickup(null);
-        }}
-        onConfirm={handleConfirmMarkPickedUp}
-        title="Mark as Picked Up?"
-        message={`Confirm that you have collected all items from the vendor(s). This will change the order status to "Out for Delivery".`}
-        confirmText="Confirm Pickup"
-        cancelText="Cancel"
-        isLoading={markPickedUp.isPending}
-        icon="package"
-        iconColor="#f97316"
       />
 
       {/* OTP Verification Modal */}
       <DeliveryOTPVerificationModal
         showOtpModal={showOtpModal}
         setShowOtpModal={setShowOtpModal}
-        selectedOrderForOtp={selectedOrderForOtp}
+        selectedOrderForOtp={selectedGroupForOtp}
         otpInput={otpInput}
         setOtpInput={setOtpInput}
         handleVerifyOtp={handleVerifyOtp}
@@ -649,12 +576,9 @@ const DeliveryPartnerHome = () => {
   );
 };
 
-/* ---------------- STAT CARD COMPONENT ---------------- */
+/* ---------------- STAT CARD ─────────────────── */
 const StatCard = ({
-  icon,
-  label,
-  value,
-  bgColor,
+  icon, label, value, bgColor,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
@@ -662,7 +586,7 @@ const StatCard = ({
   bgColor: string;
 }) => (
   <View className="flex-1 bg-white rounded-2xl p-4 shadow-md">
-    <View className={`w-10 h-10 ${bgColor} rounded-xl items-center justify-center mb-3 shadow-md`}>
+    <View className={`w-10 h-10 ${bgColor} rounded-xl items-center justify-center mb-3`}>
       <Feather name={icon} size={20} color="white" />
     </View>
     <Text className="text-xs text-gray-500 mb-1 font-semibold">{label}</Text>

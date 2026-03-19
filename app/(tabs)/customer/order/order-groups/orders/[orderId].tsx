@@ -508,7 +508,7 @@ export default function OrderDetailsScreen() {
               {order?.is_free_delivery ? (
                 <Text className="text-green-600">Free</Text>
               ) : (
-                `₹${Number(order.delivery_fee).toFixed(2)}`
+                `₹${Number(order.delivery_fee_paid_by_customer).toFixed(2)}`
               )}
             </Text>
           </View>

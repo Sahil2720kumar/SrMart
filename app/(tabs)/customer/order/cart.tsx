@@ -40,6 +40,7 @@ export default function CartScreen() {
     vendorCount,
     isCalculating: isCalculatingDelivery,
     isFreeDelivery,
+    freeDeliveryReason
   } = useDeliveryFees({
     subtotal: totalPrice,
     selectedAddress,
@@ -194,6 +195,7 @@ export default function CartScreen() {
             isCalculating={isCalculatingDelivery}
             isFreeDelivery={isFreeDelivery}
             showBreakdown={true}
+            freeDeliveryReason={freeDeliveryReason}   // ← add this
             className="mb-3"
           />
 

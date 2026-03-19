@@ -22,7 +22,7 @@ import {
   useMarkOrderReady,
   useAssignDeliveryPartner,
   useAvailableDeliveryPartners,
-  useVendorCancelOrderItem,   // ← new hook, replaces inline supabase.rpc call
+  useVendorCancelOrderItem,
 } from '@/hooks/queries/orders';
 import { useAuthStore } from '@/store/authStore';
 import { DeliveryBoy } from '@/types/users.types';
@@ -38,6 +38,7 @@ const statusConfig = {
   confirmed:        { label: 'New',              color: 'bg-orange-500'  },
   processing:       { label: 'Preparing',        color: 'bg-blue-500'    },
   ready_for_pickup: { label: 'Ready',            color: 'bg-purple-500'  },
+  assigned:         { label: 'Partner Assigned', color: 'bg-indigo-500'  },
   picked_up:        { label: 'Picked Up',        color: 'bg-indigo-500'  },
   out_for_delivery: { label: 'Out for Delivery', color: 'bg-cyan-500'    },
   delivered:        { label: 'Completed',        color: 'bg-emerald-500' },
@@ -65,11 +66,9 @@ export default function VendorOrderDetailScreen() {
   const [showRejectModal, setShowRejectModal]     = useState(false);
   const [selectedPartner, setSelectedPartner]     = useState<DeliveryBoy | null>(null);
 
-  // Order-level confirmation modals
   const [acceptModal, setAcceptModal]       = useState(false);
   const [markReadyModal, setMarkReadyModal] = useState(false);
 
-  // Item cancellation
   const [cancelItemModal, setCancelItemModal]           = useState(false);
   const [cancellingItem, setCancellingItem]             = useState<{ id: string; name: string } | null>(null);
   const [selectedCancelReason, setSelectedCancelReason] = useState('');
@@ -89,9 +88,7 @@ export default function VendorOrderDetailScreen() {
   const rejectMutation        = useVendorRejectOrder();
   const markReadyMutation     = useMarkOrderReady();
   const assignPartnerMutation = useAssignDeliveryPartner();
-
-  // Handles optimistic UI update + DB sync + rollback on error
-  const cancelItemMutation = useVendorCancelOrderItem();
+  const cancelItemMutation    = useVendorCancelOrderItem();
 
   // ─── Item cancellation ────────────────────────────────────────────────────
 
@@ -115,17 +112,12 @@ export default function VendorOrderDetailScreen() {
     }
 
     cancelItemMutation.mutate(
-      {
-        orderId,
-        orderItemId: cancellingItem.id,
-        reason,
-      },
+      { orderId, orderItemId: cancellingItem.id, reason },
       {
         onSuccess: (data) => {
           const itemName = cancellingItem.name;
           setCancelItemModal(false);
           setCancellingItem(null);
-
           Toast.show({
             type:  'success',
             text1: data.order_cancelled ? 'Order Cancelled' : 'Item Cancelled',
@@ -134,10 +126,7 @@ export default function VendorOrderDetailScreen() {
               : `"${itemName}" has been removed from the order.`,
             position: 'top',
           });
-
-          if (data.order_cancelled) {
-            router.back();
-          }
+          if (data.order_cancelled) router.back();
         },
         onError: (err: any) => {
           Toast.show({
@@ -182,17 +171,47 @@ export default function VendorOrderDetailScreen() {
           router.back();
         },
         onError: (error: any) => {
-          Toast.show({ type: 'error', text1: 'Error', text2: error.message || 'Failed to reject order.', position: 'top' });
+          Toast.show({
+            type: 'error', text1: 'Error',
+            text2: error.message || 'Failed to reject order.', position: 'top',
+          });
         },
       }
     );
   };
 
+  // ✅ UPDATED: shows ready_count / total_count feedback
   const handleConfirmMarkReady = () => {
     markReadyMutation.mutate(orderId, {
-      onSuccess: () => {
+      onSuccess: (data: any) => {
         setMarkReadyModal(false);
-        Toast.show({ type: 'success', text1: 'Order marked as ready!', position: 'top' });
+
+        // data may be undefined if hook doesn't return it — safe fallback
+        const readyCount = data?.ready_count;
+        const totalCount = data?.total_count;
+        const allReady   = data?.all_ready;
+
+        if (allReady) {
+          Toast.show({
+            type:  'success',
+            text1: 'All vendors ready! 🎉',
+            text2: 'Delivery partner is being assigned.',
+            position: 'top',
+          });
+        } else if (readyCount != null && totalCount != null) {
+          Toast.show({
+            type:  'success',
+            text1: 'Order marked as ready ✓',
+            text2: `${readyCount} of ${totalCount} vendors ready. Waiting for others.`,
+            position: 'top',
+          });
+        } else {
+          Toast.show({
+            type:  'success',
+            text1: 'Order marked as ready!',
+            position: 'top',
+          });
+        }
       },
       onError: (error: any) => {
         setMarkReadyModal(false);
@@ -274,14 +293,6 @@ export default function VendorOrderDetailScreen() {
   const cancelledItems = allItems.filter((i) => (i as any).status === 'cancelled');
   const totalItems     = activeItems.reduce((sum, i) => sum + i.quantity, 0);
 
-  // ── Totals ─────────────────────────────────────────────────────────────────
-  // Primary source: order-level DB fields (subtotal / total_commission /
-  // vendor_payout) — these are patched instantly by the optimistic update in
-  // useVendorCancelOrderItem and confirmed with exact DB values on success.
-  //
-  // Fallback: re-derive from active item rows for orders that haven't been
-  // accepted yet (where the DB fields are not yet populated).
-
   const itemsTotal = (order.subtotal != null && Number(order.subtotal) > 0)
     ? Number(order.subtotal)
     : activeItems.reduce((sum, item) => sum + item.total_price, 0);
@@ -290,11 +301,14 @@ export default function VendorOrderDetailScreen() {
     ? Number(order.total_commission)
     : activeItems.reduce((sum, item) => sum + ((item as any).commission_amount ?? 0), 0);
 
-  const vendorPayout = (order.vendor_payout != "0.00")
-    ? Number(order.vendor_payout) 
+  const vendorPayout = (order.vendor_payout != '0.00')
+    ? Number(order.vendor_payout)
     : itemsTotal - totalCommission;
 
-    
+  // ✅ Is a delivery partner already broadcasting / assigned for this order's group?
+  const hasPartnerAssigned = !!order.delivery_boys;
+  const isPartnerBroadcasting = !hasPartnerAssigned && 
+    ['assigned', 'ready_for_pickup', 'picked_up', 'out_for_delivery'].includes(order.status);
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -312,12 +326,39 @@ export default function VendorOrderDetailScreen() {
             })}
           </Text>
         </View>
-        <View className={`${config.color} rounded-full px-3 py-2`}>
-          <Text className="text-white text-xs font-semibold">{config.label}</Text>
+        <View className={`${config?.color ?? 'bg-gray-500'} rounded-full px-3 py-2`}>
+          <Text className="text-white text-xs font-semibold">{config?.label ?? order.status}</Text>
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+
+        {/* ✅ NEW: Multi-vendor info banner */}
+        {order.order_group_id && (
+          <View className="bg-indigo-50 border border-indigo-200 mx-4 mt-4 rounded-2xl p-4">
+            <View className="flex-row items-center gap-3">
+              <View className="w-9 h-9 bg-indigo-100 rounded-full items-center justify-center">
+                <Feather name="layers" size={16} color="#4f46e5" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-bold text-indigo-900 text-sm">
+                  Multi-vendor order
+                </Text>
+                <Text className="text-indigo-700 text-xs mt-0.5">
+                  {order.status === 'processing'
+                    ? 'Prepare your items. Delivery partner searching while you cook.'
+                    : order.status === 'ready_for_pickup'
+                    ? 'Your items are ready. Partner will collect when they arrive.'
+                    : order.status === 'assigned'
+                    ? 'Partner assigned and heading to vendors.'
+                    : order.status === 'picked_up' || order.status === 'out_for_delivery'
+                    ? 'Partner has collected items and is delivering.'
+                    : 'Part of a group order with multiple vendors.'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Order Summary */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
@@ -325,7 +366,9 @@ export default function VendorOrderDetailScreen() {
 
           <View className="flex-row justify-between items-center py-2 border-b border-gray-100">
             <Text className="text-gray-600 text-sm">Payment Method</Text>
-            <Text className={`font-semibold text-sm ${order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>
+            <Text className={`font-semibold text-sm ${
+              order.payment_status === 'paid' ? 'text-green-600' : 'text-orange-600'
+            }`}>
               {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Paid Online'}
             </Text>
           </View>
@@ -384,10 +427,13 @@ export default function VendorOrderDetailScreen() {
           <View className="flex-row items-start gap-2">
             <Feather name="map-pin" size={18} color="#6b7280" />
             <View className="flex-1">
-              <Text className="text-gray-600 text-xs mb-1">{order.customer_addresses?.label || 'Home'}</Text>
+              <Text className="text-gray-600 text-xs mb-1">
+                {order.customer_addresses?.label || 'Home'}
+              </Text>
               <Text className="text-gray-900 font-semibold text-sm leading-5">
                 {order.customer_addresses?.address_line1}
-                {order.customer_addresses?.address_line2 && `, ${order.customer_addresses.address_line2}`}
+                {order.customer_addresses?.address_line2 &&
+                  `, ${order.customer_addresses.address_line2}`}
               </Text>
               <Text className="text-gray-600 text-sm mt-1">
                 {order.customer_addresses?.city}, {order.customer_addresses?.state} -{' '}
@@ -470,7 +516,7 @@ export default function VendorOrderDetailScreen() {
             </View>
           ))}
 
-          {/* Cancelled items — dimmed + strikethrough */}
+          {/* Cancelled items */}
           {cancelledItems.length > 0 && (
             <View className="mt-3 pt-3 border-t border-dashed border-gray-200">
               <Text className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">
@@ -510,11 +556,12 @@ export default function VendorOrderDetailScreen() {
           )}
         </View>
 
-        {/* Delivery Partner */}
+        {/* ✅ UPDATED: Delivery Partner section */}
         <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
           <Text className="text-sm font-semibold text-gray-600 mb-3">DELIVERY PARTNER</Text>
 
           {order.delivery_boys ? (
+            // Partner assigned — show partner details
             <View>
               <View className="flex-row items-center">
                 <View className="relative">
@@ -576,8 +623,9 @@ export default function VendorOrderDetailScreen() {
                     <View className="w-8 h-8 bg-green-100 rounded-full items-center justify-center mr-3">
                       <MaterialCommunityIcons
                         name={
-                          order.status === 'delivered' ? 'check-circle'   :
-                          order.status === 'picked_up' ? 'truck-delivery' :
+                          order.status === 'delivered'        ? 'check-circle'   :
+                          order.status === 'out_for_delivery' ? 'truck-delivery' :
+                          order.status === 'picked_up'        ? 'truck-delivery' :
                           'clipboard-check'
                         }
                         size={16}
@@ -587,9 +635,10 @@ export default function VendorOrderDetailScreen() {
                     <View>
                       <Text className="text-gray-500 text-xs uppercase tracking-wide">Status</Text>
                       <Text className="text-gray-900 font-semibold text-sm mt-0.5">
-                        {order.status === 'delivered' ? 'Delivered ✓' :
-                         order.status === 'picked_up' ? 'On the way'  :
-                         'Assigned'}
+                        {order.status === 'delivered'        ? 'Delivered ✓'  :
+                         order.status === 'out_for_delivery' ? 'Out for delivery' :
+                         order.status === 'picked_up'        ? 'Picked up'    :
+                         'On the way to you'}
                       </Text>
                     </View>
                   </View>
@@ -620,14 +669,20 @@ export default function VendorOrderDetailScreen() {
               )}
             </View>
           ) : (
-            <TouchableOpacity
-              // onPress={() => setShowDeliverySheet(true)}
-              className="bg-green-50 border border-green-200 rounded-xl p-3 flex-row items-center justify-center gap-2"
-            >
-              <Feather name="truck" size={18} color="#059669" />
-              {/* <Text className="text-green-700 font-semibold text-sm">Assign Delivery Partner</Text> */}
-              <Text className="text-green-700 font-semibold text-sm">Delivery Partner Not Assigned Yet</Text>
-            </TouchableOpacity>
+            // ✅ UPDATED: No partner yet — show searching state
+            <View className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <View className="flex-row items-center gap-3">
+                <ActivityIndicator size="small" color="#d97706" />
+                <View className="flex-1">
+                  <Text className="font-bold text-amber-900 text-sm">
+                    Searching for delivery partner...
+                  </Text>
+                  <Text className="text-amber-700 text-xs mt-1">
+                    A partner will be assigned automatically. You can start preparing now.
+                  </Text>
+                </View>
+              </View>
+            </View>
           )}
         </View>
 
@@ -675,10 +730,12 @@ export default function VendorOrderDetailScreen() {
           <View className="flex-row items-start gap-3">
             <Feather name="info" size={18} color="#3b82f6" />
             <View className="flex-1">
-              <Text className="text-blue-900 font-semibold text-sm mb-2">Note on Customer's Total</Text>
+              <Text className="text-blue-900 font-semibold text-sm mb-2">
+                Note on Customer's Total
+              </Text>
               <Text className="text-blue-700 text-xs leading-5">
-                Customer paid ₹{Number(order.total_amount).toFixed(2)}, which includes delivery fees (₹
-                {Number(order.delivery_fee).toFixed(2)}) and platform coupons (₹
+                Customer paid ₹{Number(order.total_amount).toFixed(2)}, which includes delivery
+                fees (₹{Number(order.delivery_fee_paid_by_customer).toFixed(2)}) and platform coupons (₹
                 {Number(order.coupon_discount).toFixed(2)}) that are not deducted from your earnings.
               </Text>
             </View>
@@ -720,7 +777,7 @@ export default function VendorOrderDetailScreen() {
 
       {/* ══════════════════════════ MODALS ══════════════════════════════════ */}
 
-      {/* Cancel Item Bottom Sheet */}
+      {/* Cancel Item Modal */}
       <Modal
         visible={cancelItemModal}
         transparent
@@ -733,10 +790,14 @@ export default function VendorOrderDetailScreen() {
             activeOpacity={1}
             onPress={() => !cancelItemMutation.isPending && setCancelItemModal(false)}
           />
-
           <TouchableOpacity
             activeOpacity={1}
-            style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}
+            style={{
+              backgroundColor: 'white',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 24,
+            }}
           >
             <View className="w-10 h-1 bg-gray-200 rounded-full self-center mb-5" />
 
@@ -792,7 +853,8 @@ export default function VendorOrderDetailScreen() {
             <View className="bg-orange-50 border border-orange-100 rounded-xl p-3 mb-5 flex-row items-start gap-2">
               <Feather name="alert-triangle" size={14} color="#f97316" style={{ marginTop: 1 }} />
               <Text className="text-orange-700 text-xs leading-5 flex-1">
-                The customer will be notified. If this is the only active item, the entire order will be cancelled.
+                The customer will be notified. If this is the only active item, the entire order
+                will be cancelled.
               </Text>
             </View>
 
@@ -805,17 +867,19 @@ export default function VendorOrderDetailScreen() {
               }
               className="bg-red-500 py-4 rounded-xl items-center justify-center mb-3"
               style={{
-                opacity: (
+                opacity:
                   cancelItemMutation.isPending ||
                   !selectedCancelReason ||
                   (selectedCancelReason === 'Other' && !customCancelReason.trim())
-                ) ? 0.5 : 1,
+                    ? 0.5
+                    : 1,
               }}
             >
-              {cancelItemMutation.isPending
-                ? <ActivityIndicator color="white" />
-                : <Text className="text-white font-bold text-base">Confirm Cancellation</Text>
-              }
+              {cancelItemMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-base">Confirm Cancellation</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -830,8 +894,16 @@ export default function VendorOrderDetailScreen() {
       </Modal>
 
       {/* Accept Order Modal */}
-      <Modal visible={acceptModal} transparent animationType="fade" onRequestClose={() => setAcceptModal(false)}>
-        <Pressable className="flex-1 bg-black/50 justify-center items-center px-6" onPress={() => setAcceptModal(false)}>
+      <Modal
+        visible={acceptModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAcceptModal(false)}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => setAcceptModal(false)}
+        >
           <Pressable className="bg-white rounded-3xl p-6 w-full">
             <View className="items-center mb-5">
               <View className="w-16 h-16 bg-emerald-100 rounded-full items-center justify-center mb-3">
@@ -847,10 +919,11 @@ export default function VendorOrderDetailScreen() {
               onPress={handleConfirmAcceptOrder}
               disabled={acceptMutation.isPending}
             >
-              {acceptMutation.isPending
-                ? <ActivityIndicator color="white" />
-                : <Text className="text-white font-bold text-base">Accept</Text>
-              }
+              {acceptMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-base">Accept</Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
@@ -864,8 +937,16 @@ export default function VendorOrderDetailScreen() {
       </Modal>
 
       {/* Mark as Ready Modal */}
-      <Modal visible={markReadyModal} transparent animationType="fade" onRequestClose={() => setMarkReadyModal(false)}>
-        <Pressable className="flex-1 bg-black/50 justify-center items-center px-6" onPress={() => setMarkReadyModal(false)}>
+      <Modal
+        visible={markReadyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMarkReadyModal(false)}
+      >
+        <Pressable
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+          onPress={() => setMarkReadyModal(false)}
+        >
           <Pressable className="bg-white rounded-3xl p-6 w-full">
             <View className="items-center mb-5">
               <View className="w-16 h-16 bg-purple-100 rounded-full items-center justify-center mb-3">
@@ -873,7 +954,9 @@ export default function VendorOrderDetailScreen() {
               </View>
               <Text className="text-xl font-bold text-gray-900 mb-2">Mark as Ready?</Text>
               <Text className="text-sm text-gray-500 text-center leading-5">
-                Is the order ready for pickup?
+                {order.order_group_id
+                  ? 'Confirm your items are packed and ready for pickup by the delivery partner.'
+                  : 'Is the order ready for pickup?'}
               </Text>
             </View>
             <TouchableOpacity
@@ -881,17 +964,18 @@ export default function VendorOrderDetailScreen() {
               onPress={handleConfirmMarkReady}
               disabled={markReadyMutation.isPending}
             >
-              {markReadyMutation.isPending
-                ? <ActivityIndicator color="white" />
-                : <Text className="text-white font-bold text-base">Yes, Ready</Text>
-              }
+              {markReadyMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-base">Yes, Ready</Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               className="border-2 border-gray-200 py-4 rounded-xl items-center justify-center"
               onPress={() => setMarkReadyModal(false)}
               disabled={markReadyMutation.isPending}
             >
-              <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
+              <Text className="text-gray-700 font-semibold text-base">Not Yet</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
