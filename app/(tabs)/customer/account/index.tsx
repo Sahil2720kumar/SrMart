@@ -47,7 +47,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
 
   const handleMenuPress = (route?: string) => {
     if (route === "Orders") {
-      router.navigate("/(tabs)/customer/order/orders")
+      router.navigate("/(tabs)/customer/order/order-groups")
       return;
     }
     router.navigate(`/(tabs)/customer/account/${route}` as RelativePathString)

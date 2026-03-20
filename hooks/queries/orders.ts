@@ -885,7 +885,7 @@ export function useVendorAcceptOrder() {
       const vendorId = session?.user?.id;
       if (!vendorId) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase.rpc('vendor_accept_order', {
+      const { data, error } = await supabase.rpc('accept_vendor_order', {
         p_order_id:  orderId,
         p_vendor_id: vendorId,
       });

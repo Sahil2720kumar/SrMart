@@ -204,19 +204,37 @@ function mapGroupToDelivery(group: any): DeliveryGroup {
       ].filter(Boolean).join(', ')
     : '';
 
-  const firstVendor = firstOrder?.vendors;
-  const distance = firstVendor?.latitude && customerLat
-    ? calculateDistance(
-        firstVendor.latitude, firstVendor.longitude,
-        customerLat, customerLng!
-      )
-    : 0;
+  // ✅ Use pickup_route for distance + stop ordering
+  // pickup_route is built by start_group_broadcast using real Haversine distances
+  const pickupRoute: Array<{
+    order_id:    string;
+    vendor_id:   string;
+    distance_km: number;
+    stop_index:  number;
+  }> = Array.isArray(group.pickup_route)
+    ? group.pickup_route
+    : (group.pickup_route ? JSON.parse(group.pickup_route) : []);
+
+  // ✅ Total distance = sum of all vendor distances from pickup_route
+  // This is the full route distance the delivery boy rides, not just one vendor
+  const totalDistance = pickupRoute.reduce(
+    (sum, stop) => sum + (Number(stop.distance_km) || 0),
+    0
+  );
+
+  // Build a lookup: order_id → stop_index from pickup_route
+  const stopIndexMap = new Map<string, number>(
+    pickupRoute.map((stop) => [stop.order_id, stop.stop_index])
+  );
 
   const vendors: GroupVendorStop[] = orders
     .filter((o: any) => o.status !== 'cancelled')
-    .sort((a: any, b: any) =>
-      parseFloat(a.delivery_fee || '0') - parseFloat(b.delivery_fee || '0')
-    )
+    // ✅ Sort by stop_index from pickup_route — not by delivery_fee
+    .sort((a: any, b: any) => {
+      const aIdx = stopIndexMap.get(a.id) ?? 999;
+      const bIdx = stopIndexMap.get(b.id) ?? 999;
+      return aIdx - bIdx;
+    })
     .map((o: any, idx: number) => {
       const items: GroupOrderItem[] = (o.order_items || []).map((i: any) => {
         const unitPrice      = Number(i.unit_price      ?? 0);
@@ -249,7 +267,7 @@ function mapGroupToDelivery(group: any): DeliveryGroup {
                                 ?.replace(/^,\s*|,\s*$/g, '').trim(),
         latitude:             o.vendors?.latitude   ?? null,
         longitude:            o.vendors?.longitude  ?? null,
-        stop_index:           idx + 1, 
+        stop_index:           stopIndexMap.get(o.id) ?? idx + 1,  // ✅ from pickup_route
         status:               o.status,
         picked_up_at:         o.picked_up_at        ?? null,
         subtotal:             Number(o.subtotal      ?? 0),
@@ -280,7 +298,8 @@ function mapGroupToDelivery(group: any): DeliveryGroup {
     pickup_route:      group.pickup_route,
     payout:            Number(group.delivery_fee  ?? 0),
     totalItems,
-    distance:          Math.round(distance * 10) / 10,
+    // ✅ sum of all vendor distances from pickup_route, rounded to 1 decimal
+    distance:          Math.round(totalDistance * 10) / 10,
     otp,
     cod_status:           group.cod_status           ?? null,
     cod_amount:           group.cod_amount           ? Number(group.cod_amount) : null,

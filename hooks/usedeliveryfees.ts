@@ -25,6 +25,7 @@ export interface VendorDeliveryInfo {
   isFirstVendor?:  boolean;  // true for the closest vendor (full price)
   discountPercent?: number;  // 0 for first, 50 for others
   savedAmount?:    number;   // how much saved on this vendor
+  discountedFee?:number
 }
 
 export interface UseDeliveryFeesReturn {
@@ -61,7 +62,6 @@ export const useDeliveryFees = ({
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Determine if delivery should be free and why
   const qualifiesForFreeDeliveryByAmount = subtotal >= freeDeliveryMinimum;
   const isFreeDelivery = hasFreeDelivery || qualifiesForFreeDeliveryByAmount;
 
@@ -102,7 +102,6 @@ export const useDeliveryFees = ({
     setError(null);
 
     try {
-      // Group cart items by vendor
       const vendorMap = new Map<string, any[]>();
       for (const item of cartItems) {
         const vendorId = item.product?.vendor_id;
@@ -113,9 +112,8 @@ export const useDeliveryFees = ({
 
       const vendorIds = Array.from(vendorMap.keys());
 
-      // Calculate raw fee for each vendor (no discount applied yet)
       const rawFeeResults = await Promise.all(
-        vendorIds.map(async (vendorId, index) => {
+        vendorIds.map(async (vendorId) => {
           try {
             const { data: vendor, error: vendorError } = await supabase
               .from('vendors')
@@ -127,12 +125,17 @@ export const useDeliveryFees = ({
               return { vendorId, distance: 5, originalFee: 30 };
             }
 
-            const distance = calculateDistance(
+            const rawDistance = calculateDistance(
               vendor.latitude,
               vendor.longitude,
               selectedAddress.latitude,
               selectedAddress.longitude
             );
+
+            // ✅ FIX: always positive, minimum 0.1km
+            // This prevents negative distance from near-zero Haversine results
+            // and matches the GREATEST(ABS(...), 0.1) guard in the DB function
+            const distance = Math.max(Math.abs(Number(rawDistance.toFixed(2))), 0.1);
 
             const { data: calculatedFee, error: feeError } = await supabase.rpc(
               'calculate_delivery_fee',
@@ -145,7 +148,7 @@ export const useDeliveryFees = ({
 
             return {
               vendorId,
-              distance: Number(distance.toFixed(2)),
+              distance,                        // ✅ always positive
               originalFee: Number(calculatedFee),
             };
           } catch (err) {
@@ -155,28 +158,25 @@ export const useDeliveryFees = ({
         })
       );
 
-      // ✅ Apply discount: first vendor full fee, rest 50% off
-      // Sort by distance ascending so the closest vendor pays full price
+      // Sort ascending — closest vendor gets full fee
       const sortedByDistance = [...rawFeeResults].sort(
         (a, b) => a.distance - b.distance
       );
 
       const deliveryInfo: VendorDeliveryInfo[] = sortedByDistance.map(
         (vendor, index) => {
-          // Raw fee is always stored as originalFee for display
           const originalFee = vendor.originalFee;
-
-          // ✅ Discounted fee: first vendor full, rest 50% off
+      
           const discountedFee = index === 0
-            ? originalFee                              // first vendor — full price
-            : Math.round(originalFee * 0.5 * 100) / 100; // additional vendors — 50% off
-
+            ? originalFee
+            : Math.round(originalFee * 0.5 * 100) / 100;
+      
           return {
-            vendorId:    vendor.vendorId,
-            distance:    vendor.distance,
-            originalFee: originalFee,               // raw fee (for display: "was ₹60")
-            deliveryFee: isFreeDelivery ? 0 : discountedFee, // what customer pays
-            // ✅ Extra fields for UI display
+            vendorId:         vendor.vendorId,
+            distance:         vendor.distance,
+            originalFee:      originalFee,
+            discountedFee:    discountedFee,              // ✅ real fee — always set, never 0
+            deliveryFee:      isFreeDelivery ? 0 : discountedFee, // what customer pays
             isFirstVendor:    index === 0,
             discountPercent:  index === 0 ? 0 : 50,
             savedAmount:      index === 0 ? 0 : Math.round((originalFee - discountedFee) * 100) / 100,
@@ -198,19 +198,14 @@ export const useDeliveryFees = ({
     calculateDeliveryFees();
   }, [selectedAddress?.id, cartItems.length, enabled, isFreeDelivery, subtotal]);
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-
-  // What customer actually pays (discounted)
   const totalDeliveryFee = vendorDeliveryFees.reduce(
     (sum, v) => sum + v.deliveryFee, 0
   );
 
-  // What it would have cost without the multi-vendor discount
   const originalDeliveryFee = vendorDeliveryFees.reduce(
     (sum, v) => sum + v.originalFee, 0
   );
 
-  // Total saved from multi-vendor discount
   const totalSaved = vendorDeliveryFees.reduce(
     (sum, v) => sum + (v.savedAmount ?? 0), 0
   );
@@ -219,9 +214,9 @@ export const useDeliveryFees = ({
 
   return {
     vendorDeliveryFees,
-    totalDeliveryFee,       // ✅ discounted total (what customer pays)
-    originalDeliveryFee,    // ✅ raw total (for showing savings)
-    totalSaved,             // ✅ total saved from multi-vendor discount
+    totalDeliveryFee,
+    originalDeliveryFee,
+    totalSaved,
     vendorCount,
     isCalculating,
     error,

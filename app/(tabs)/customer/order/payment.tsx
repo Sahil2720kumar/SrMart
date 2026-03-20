@@ -21,19 +21,19 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 // ✅ delivery_fee is the pre-calculated discounted fee from useDeliveryFees
 // SQL reads it directly — no recalculation, no mismatch possible
 interface CreateOrderInput {
-  vendor_id:            string;
-  delivery_address_id:  string;
-  order_number:         string;
-  item_count:           number;
-  subtotal:             number;
-  delivery_fee:         number;  // ✅ exact fee customer saw on screen
-  tax:                  number;
-  tax_percentage:       number;
-  discount:             number;
-  coupon_discount:      number;
+  vendor_id: string;
+  delivery_address_id: string;
+  order_number: string;
+  item_count: number;
+  subtotal: number;
+  delivery_fee: number;  // ✅ exact fee customer saw on screen
+  tax: number;
+  tax_percentage: number;
+  discount: number;
+  coupon_discount: number;
   special_instructions: string;
-  distance_km:          number;  // ✅ kept for SQL sort order only
-  items:                Array<{ product_id: string; qty: number }>;
+  distance_km: number;  // ✅ kept for SQL sort order only
+  items: Array<{ product_id: string; qty: number }>;
 }
 
 const getRazorpayHTML = (
@@ -113,34 +113,34 @@ const getRazorpayHTML = (
 `;
 
 export default function PaymentScreen() {
-  const [selectedPayment, setSelectedPayment]         = useState<PaymentMethod | "">("");
-  const [showSuccess, setShowSuccess]                 = useState(false);
-  const [isProcessing, setIsProcessing]               = useState(false);
-  const [orderGroupId, setOrderGroupId]               = useState<string | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | "">("");
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [orderGroupId, setOrderGroupId] = useState<string | null>(null);
   const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
-  const [razorpayHTML, setRazorpayHTML]               = useState("");
-  const [isTestMode, setIsTestMode]                   = useState(false);
-  const [razorpayOrderId, setRazorpayOrderId]         = useState<string | null>(null);
+  const [razorpayHTML, setRazorpayHTML] = useState("");
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [razorpayOrderId, setRazorpayOrderId] = useState<string | null>(null);
 
   const [pendingOrderData, setPendingOrderData] = useState<{
-    orders:           CreateOrderInput[];
-    groupSubtotal:    number;
+    orders: CreateOrderInput[];
+    groupSubtotal: number;
     groupDeliveryFee: number;
-    groupTax:         number;
-    groupDiscount:    number;
-    couponCode:       string | null;
+    groupTax: number;
+    groupDiscount: number;
+    couponCode: string | null;
   } | null>(null);
 
   const insets = useSafeAreaInsets();
 
-  const { session }                           = useAuthStore();
-  const { cartItems, totalPrice, clearCart }  = useCartStore();
+  const { session } = useAuthStore();
+  const { cartItems, totalPrice, clearCart } = useCartStore();
   const { activeDiscount, discountAmount, removeDiscount } = useDiscountStore();
-  const isSyncingPrices                       = useCartStore((s) => s.isSyncingPrices);
-  const recordCouponUsage                     = useRecordCouponUsage();
+  const isSyncingPrices = useCartStore((s) => s.isSyncingPrices);
+  const recordCouponUsage = useRecordCouponUsage();
 
-  const { data: addresses,    isLoading: isLoadingAddresses } = useCustomerAddresses();
-  const { data: customerData, isLoading: isLoadingCustomer  } = useCustomerProfile();
+  const { data: addresses, isLoading: isLoadingAddresses } = useCustomerAddresses();
+  const { data: customerData, isLoading: isLoadingCustomer } = useCustomerProfile();
   const selectedAddress = addresses?.find((a) => a.is_default);
 
   const {
@@ -151,13 +151,13 @@ export default function PaymentScreen() {
     isCalculating: isCalculatingDelivery,
     isFreeDelivery,
   } = useDeliveryFees({
-    subtotal:            totalPrice,
+    subtotal: totalPrice,
     selectedAddress,
-    hasFreeDelivery:     activeDiscount?.includes_free_delivery || false,
+    hasFreeDelivery: activeDiscount?.includes_free_delivery || false,
     freeDeliveryMinimum: 499,
   });
 
-  const TAX_RATE  = 0;
+  const TAX_RATE = 0;
   const finalPrice = activeDiscount ? totalPrice - discountAmount : totalPrice;
 
   // ─── Prepare order payload ──────────────────────────────────────────────────
@@ -165,7 +165,6 @@ export default function PaymentScreen() {
   //    This is the already-discounted fee (first vendor full, rest 50% off)
   //    SQL reads it directly — no distance-based recalculation
   const prepareOrderData = () => {
-    // Group cart items by vendor
     const vendorMap = new Map<string, Array<{ productId: string; product: any; quantity: number }>>();
     
     cartItems.forEach((item) => {
@@ -174,57 +173,51 @@ export default function PaymentScreen() {
       if (!vendorMap.has(vendorId)) vendorMap.set(vendorId, []);
       vendorMap.get(vendorId)!.push(item);
     });
-
+  
     const orders: CreateOrderInput[] = [];
     let groupSubtotal    = 0;
     let groupDeliveryFee = 0;
     let groupTax         = 0;
-
+  
     vendorMap.forEach((items, vendorId) => {
-      // Subtotal from actual product prices
       let orderSubtotal = 0;
       items.forEach((item) => {
         const price = item.product?.discount_price || item.product?.price || 0;
         orderSubtotal += price * item.quantity;
       });
-
-      // ✅ Get the pre-calculated delivery fee from the hook
+  
       const vendorFeeInfo = vendorDeliveryFees.find((v) => v.vendorId === vendorId);
-
-      // ✅ Use hook's deliveryFee (already discounted: first vendor full, rest 50% off)
-      // isFreeDelivery → 0 fee
-      // distance = 0 → hook already applied minimum ₹30
-      const orderDeliveryFee = isFreeDelivery
-        ? 0
-        : (vendorFeeInfo?.deliveryFee ?? 30);
-
-      // ✅ Keep distance for SQL sort order only (not for fee calc)
+  
+      // ✅ KEY FIX: always send real fee to DB — never 0
+      // DB function stores this as delivery_fee (for payout tracking)
+      // DB function separately sets delivery_fee_paid_by_customer = 0 when is_free_delivery=true
+      const orderDeliveryFee = vendorFeeInfo?.discountedFee ?? 30;
+  
       const orderDistance = vendorFeeInfo?.distance ?? 0;
-
-      const orderTax    = orderSubtotal * TAX_RATE;
-      const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
+      const orderTax      = orderSubtotal * TAX_RATE;
+      const orderNumber   = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
       orders.push({
         vendor_id:            vendorId,
         delivery_address_id:  selectedAddress!.id,
         order_number:         orderNumber,
         item_count:           items.reduce((sum, i) => sum + i.quantity, 0),
         subtotal:             orderSubtotal,
-        delivery_fee:         orderDeliveryFee,   // ✅ from hook — exact match
+        delivery_fee:         orderDeliveryFee,  // ✅ real fee — never 0
         tax:                  orderTax,
         tax_percentage:       TAX_RATE * 100,
         discount:             0,
         coupon_discount:      0,
         special_instructions: "",
-        distance_km:          orderDistance,      // ✅ for sort only
+        distance_km:          orderDistance,
         items:                items.map((i) => ({ product_id: i.productId, qty: i.quantity })),
       });
-
+  
       groupSubtotal    += orderSubtotal;
-      groupDeliveryFee += orderDeliveryFee;
+      groupDeliveryFee += orderDeliveryFee;  // ✅ real fee for group total
       groupTax         += orderTax;
     });
-
+  
     return { orders, groupSubtotal, groupDeliveryFee, groupTax, groupDiscount: 0 };
   };
 
@@ -244,8 +237,8 @@ export default function PaymentScreen() {
       }
 
       await recordCouponUsage.mutateAsync({
-        couponId:       activeDiscount.couponId,
-        orderId:        orders[0].id,
+        couponId: activeDiscount.couponId,
+        orderId: orders[0].id,
         discountAmount: discountAmount,
       });
     } catch (err) {
@@ -265,13 +258,13 @@ export default function PaymentScreen() {
     const { data: groupId, error } = await supabase.rpc(
       "create_order_group_with_orders",
       {
-        p_customer_id:    customerData.user_id,
+        p_customer_id: customerData.user_id,
         p_payment_method: "online" as PaymentMethod,
-        p_coupon_code:    orderData.couponCode ?? "",
-        p_subtotal:       orderData.groupSubtotal,
-        p_tax:            orderData.groupTax,
-        p_discount:       orderData.groupDiscount,
-        p_orders:         orderData.orders,   // ✅ each order has delivery_fee
+        p_coupon_code: orderData.couponCode ?? "",
+        p_subtotal: orderData.groupSubtotal,
+        p_tax: orderData.groupTax,
+        p_discount: orderData.groupDiscount,
+        p_orders: orderData.orders,   // ✅ each order has delivery_fee
       }
     );
 
@@ -337,13 +330,13 @@ export default function PaymentScreen() {
         const { data: groupId, error } = await supabase.rpc(
           "create_order_group_with_orders",
           {
-            p_customer_id:    customerData.user_id,
+            p_customer_id: customerData.user_id,
             p_payment_method: "cod" as PaymentMethod,
-            p_coupon_code:    couponCode ?? "",
-            p_subtotal:       orderData.groupSubtotal,
-            p_tax:            orderData.groupTax,
-            p_discount:       orderData.groupDiscount,
-            p_orders:         orderData.orders,  // ✅ each order has delivery_fee
+            p_coupon_code: couponCode ?? "",
+            p_subtotal: orderData.groupSubtotal,
+            p_tax: orderData.groupTax,
+            p_discount: orderData.groupDiscount,
+            p_orders: orderData.orders,  // ✅ each order has delivery_fee
           }
         );
 
@@ -360,7 +353,7 @@ export default function PaymentScreen() {
     } catch (error: any) {
       console.error("[order]", error);
       Toast.show({
-        type:  "error",
+        type: "error",
         text1: "Order Failed",
         text2: error.message || "Something went wrong. Please try again.",
         position: "top",
@@ -376,7 +369,7 @@ export default function PaymentScreen() {
     const totalToCharge = finalPrice + totalDeliveryFee;
 
     const { data, error } = await supabase.functions.invoke("create-razorpay-order", {
-      body:    { amount: totalToCharge },
+      body: { amount: totalToCharge },
       headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
@@ -394,7 +387,7 @@ export default function PaymentScreen() {
       .eq("auth_id", session!.user.id)
       .single();
 
-    const customerName  = `${customerData!.first_name} ${customerData!.last_name}`;
+    const customerName = `${customerData!.first_name} ${customerData!.last_name}`;
     const customerPhone = userRecord?.phone || "";
     const customerEmail = userRecord?.email || session!.user.email || "";
 
@@ -418,10 +411,10 @@ export default function PaymentScreen() {
           await handleOrderSuccess(groupId);
         } catch (err: any) {
           Toast.show({
-            type:           "error",
-            text1:          "⚠️ Important",
-            text2:          `Payment successful but order creation failed. Contact support with Payment ID: ${data.razorpay_payment_id}`,
-            position:       "top",
+            type: "error",
+            text1: "⚠️ Important",
+            text2: `Payment successful but order creation failed. Contact support with Payment ID: ${data.razorpay_payment_id}`,
+            position: "top",
             visibilityTime: 6000,
           });
         } finally {
@@ -517,9 +510,9 @@ export default function PaymentScreen() {
           className="flex-row items-center rounded-2xl p-5 mb-4"
           style={{
             backgroundColor: selectedPayment === "cod" ? "#f0fdf4" : "#f9fafb",
-            borderWidth:     selectedPayment === "cod" ? 2 : 0,
-            borderColor:     selectedPayment === "cod" ? "#22c55e" : "transparent",
-            opacity:         isProcessing || isCalculatingDelivery ? 0.6 : 1,
+            borderWidth: selectedPayment === "cod" ? 2 : 0,
+            borderColor: selectedPayment === "cod" ? "#22c55e" : "transparent",
+            opacity: isProcessing || isCalculatingDelivery ? 0.6 : 1,
           }}
         >
           <View className="w-12 h-12 bg-white rounded-full items-center justify-center mr-4">
@@ -531,7 +524,7 @@ export default function PaymentScreen() {
           </View>
           <View style={{
             width: 24, height: 24, borderRadius: 12, borderWidth: 2,
-            borderColor:     selectedPayment === "cod" ? "#22c55e" : "#d1d5db",
+            borderColor: selectedPayment === "cod" ? "#22c55e" : "#d1d5db",
             backgroundColor: "white",
             alignItems: "center", justifyContent: "center",
           }}>
@@ -550,9 +543,9 @@ export default function PaymentScreen() {
           className="flex-row items-center rounded-2xl p-5 mb-4"
           style={{
             backgroundColor: selectedPayment === "online" ? "#f0fdf4" : "#f9fafb",
-            borderWidth:     selectedPayment === "online" ? 2 : 0,
-            borderColor:     selectedPayment === "online" ? "#22c55e" : "transparent",
-            opacity:         isProcessing || isCalculatingDelivery ? 0.6 : 1,
+            borderWidth: selectedPayment === "online" ? 2 : 0,
+            borderColor: selectedPayment === "online" ? "#22c55e" : "transparent",
+            opacity: isProcessing || isCalculatingDelivery ? 0.6 : 1,
           }}
         >
           <View className="w-12 h-12 bg-white rounded-full items-center justify-center mr-4">
@@ -564,7 +557,7 @@ export default function PaymentScreen() {
           </View>
           <View style={{
             width: 24, height: 24, borderRadius: 12, borderWidth: 2,
-            borderColor:     selectedPayment === "online" ? "#22c55e" : "#d1d5db",
+            borderColor: selectedPayment === "online" ? "#22c55e" : "#d1d5db",
             backgroundColor: "white",
             alignItems: "center", justifyContent: "center",
           }}>
@@ -682,7 +675,7 @@ export default function PaymentScreen() {
             ]}
             style={{ flex: 1 }}
             onShouldStartLoadWithRequest={(request) => {
-              const url        = request.url;
+              const url = request.url;
               const upiSchemes = [
                 "gpay://", "phonepe://", "paytmmp://",
                 "bhim://", "upi://", "tez://",
