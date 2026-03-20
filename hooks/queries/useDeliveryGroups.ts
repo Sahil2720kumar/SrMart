@@ -413,44 +413,110 @@ export function useDeliveryBoyStats() {
   const session       = useAuthStore((s) => s.session);
   const deliveryBoyId = session?.user?.id;
 
-  return useQuery({
+  // Fetch wallet first
+  const walletQuery = useQuery({
+    queryKey: ['delivery-wallet', deliveryBoyId],
+    queryFn: async () => {
+      if (!deliveryBoyId) throw new Error('Not authenticated');
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', deliveryBoyId)
+        .eq('user_type', 'delivery_boy')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!deliveryBoyId,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  // Fetch all credit transactions for client-side period calc
+  const txQuery = useQuery({
+    queryKey: ['delivery-wallet-tx', deliveryBoyId],
+    queryFn: async () => {
+      if (!deliveryBoyId) throw new Error('Not authenticated');
+      const walletId = walletQuery.data?.id;
+      if (!walletId) return [];
+
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select('amount, created_at')
+        .eq('wallet_id', walletId)
+        .eq('transaction_type', 'credit')
+        .not('created_at', 'is', null)
+        .order('created_at', { ascending: false, nullsFirst: false });
+
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!deliveryBoyId && !!walletQuery.data?.id,
+    staleTime: 1000 * 60,
+  });
+
+  // Fetch group stats
+  const groupQuery = useQuery({
     queryKey: deliveryQueryKeys.stats(deliveryBoyId!),
     queryFn: async () => {
       if (!deliveryBoyId) throw new Error('Not authenticated');
 
       const { data: groups, error } = await supabase
         .from('order_groups')
-        .select('assignment_status, delivery_fee')
+        .select('assignment_status')
         .eq('delivery_boy_id', deliveryBoyId);
 
       if (error) throw error;
 
-      const totalGroups     = groups?.length || 0;
-      const completedGroups = groups?.filter(
-        (g) => g.assignment_status === 'completed'
-      ).length || 0;
-      const activeGroups    = groups?.filter(
-        (g) => ['assigned', 'picking_up', 'delivering'].includes(g.assignment_status || '')
-      ).length || 0;
-
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('lifetime_earnings, available_balance, earnings_today')
-        .eq('user_id', deliveryBoyId)
-        .eq('user_type', 'delivery_boy')
-        .single();
-
       return {
-        totalGroups,
-        activeGroups,
-        completedGroups,
-        totalEarnings:    Number(wallet?.lifetime_earnings ?? 0),
-        availableBalance: Number(wallet?.available_balance ?? 0),
-        earningsToday:    Number(wallet?.earnings_today    ?? 0),
+        totalGroups:     groups?.length || 0,
+        completedGroups: groups?.filter((g) => g.assignment_status === 'completed').length || 0,
+        activeGroups:    groups?.filter((g) =>
+          ['assigned', 'picking_up', 'delivering'].includes(g.assignment_status || '')
+        ).length || 0,
       };
     },
     enabled: !!deliveryBoyId,
+    staleTime: 1000 * 60 * 2,
   });
+
+  // Client-side period calculation — no stale DB columns
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+  const weekStartMs = weekStart.getTime();
+
+  const earningsToday = (txQuery.data ?? []).reduce((sum, tx) => {
+    if (!tx.created_at) return sum;
+    const raw = tx.created_at.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
+    return new Date(raw).getTime() >= todayStartMs
+      ? sum + Number(tx.amount)
+      : sum;
+  }, 0);
+
+  const earningsThisWeek = (txQuery.data ?? []).reduce((sum, tx) => {
+    if (!tx.created_at) return sum;
+    const raw = tx.created_at.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
+    return new Date(raw).getTime() >= weekStartMs
+      ? sum + Number(tx.amount)
+      : sum;
+  }, 0);
+
+  return {
+    data: groupQuery.data ? {
+      totalGroups:      groupQuery.data.totalGroups,
+      activeGroups:     groupQuery.data.activeGroups,
+      completedGroups:  groupQuery.data.completedGroups,
+      totalEarnings:    Number(walletQuery.data?.lifetime_earnings ?? 0),
+      availableBalance: Number(walletQuery.data?.available_balance ?? 0),
+      earningsToday,
+      earningsThisWeek,
+    } : undefined,
+    isLoading: walletQuery.isLoading || groupQuery.isLoading || txQuery.isLoading,
+  };
 }
 
 // ─── MUTATION: Accept Group ───────────────────────────────────────────────────

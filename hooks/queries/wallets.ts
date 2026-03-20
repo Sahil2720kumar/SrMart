@@ -154,7 +154,7 @@ export function useRecentWalletTransactions(walletId: string, limit: number = 10
         .from('wallet_transactions')
         .select('*')
         .eq('wallet_id', walletId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false, nullsFirst: false }) // ← nulls last
         .limit(limit);
 
       if (error) throw error;
