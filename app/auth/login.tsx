@@ -195,7 +195,7 @@ export default function LoginScreen() {
                   <EmailIcon />
                   <TextInput
                     className="flex-1 py-4 px-3 text-black text-base focus:outline-none bg-white"
-                    placeholder="Enter your email"
+                    placeholder="Enter your email (example@example.com)"
                     placeholderTextColor="#666"
                     value={email}
                     onChangeText={(text) => {
@@ -220,7 +220,7 @@ export default function LoginScreen() {
                   <LockIcon />
                   <TextInput
                     className="flex-1 py-4 px-3 text-black text-base focus:outline-none bg-white"
-                    placeholder="Enter your password"
+                    placeholder="Enter your password (at least 6 characters)"
                     placeholderTextColor="#666"
                     value={password}
                     onChangeText={(text) => {
