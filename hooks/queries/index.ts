@@ -763,7 +763,9 @@ export function useProducts(filters?: {
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select('*, vendors(store_name, store_image), categories(name)');
+        .select('*, vendors(store_name, store_image), categories(name)')
+        .eq('is_available', true)
+        .neq('stock_status', 'out_of_stock');
 
       if (filters?.vendorId) {
         query = query.eq('vendor_id', filters.vendorId);

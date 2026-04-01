@@ -202,7 +202,7 @@ const useCartStore = create<CartState>()(
           for (const [productId, cartItem] of newCart.entries()) {
             const fresh = freshPriceMap.get(productId);
 
-            if (!fresh) {
+            if (!fresh || fresh.stock_status === 'out_of_stock' || !fresh.is_available) {
               // Product no longer exists in DB — remove from cart
               newCart.delete(productId);
               hadChanges = true;
