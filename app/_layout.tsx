@@ -13,6 +13,7 @@ import { OneSignal } from 'react-native-onesignal';
 import * as Device from "expo-device"
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCartPriceSync } from '@/hooks/usecartpricesync';
+import { useAppUpdates } from '@/hooks/useAppUpdates';
 
 
 // AsyncStorage.removeItem('discount-store').then(() => {
@@ -52,6 +53,12 @@ export default Sentry.wrap(function Layout() {
   }, [initialized, initialize]);
 
 
+  const { checkAndFetch } = useAppUpdates(); // ✅ ADD THIS
+
+  // ✅ ADD THIS — fires once on launch, hook handles __DEV__ guard internally
+  useEffect(() => {
+    checkAndFetch();
+  }, []);
   useEffect(() => {
     
     const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
