@@ -18,7 +18,7 @@ export type DiscountType =
   | 'flat'
   | 'bogo';
 
-export type CouponApplicableTo = 'all' | 'category' | 'vendor' | 'product';
+export type CouponApplicableTo = 'all' | 'category' | 'vendor' | 'product' | 'subcategory';
 
 export interface Offer {
   id: string;                     // uuid

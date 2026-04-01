@@ -349,7 +349,7 @@ export default function DiscountCouponScreen() {
         <View className="bg-white px-4 py-5 mb-2">
           <Text className="text-base font-bold text-gray-900 mb-3">Enter Coupon Code</Text>
           <View className="flex-row items-center gap-3">
-            <View className="flex-1 flex-row items-center bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+            <View className="flex-1 flex-row items-center bg-gray-50 rounded-xl px-4 py-2 border border-gray-200">
               <Feather name="tag" size={20} color="#9ca3af" />
               <TextInput
                 className="flex-1 ml-2 text-base text-gray-900"
@@ -368,7 +368,7 @@ export default function DiscountCouponScreen() {
             <TouchableOpacity
               onPress={handleManualApply}
               disabled={couponCode.length === 0 || validateCoupon.isPending}
-              className={`px-6 py-3.5 rounded-xl ${
+              className={`px-6 py-5 rounded-xl  ${
                 couponCode.length > 0 && !validateCoupon.isPending ? 'bg-green-500' : 'bg-gray-200'
               }`}
             >

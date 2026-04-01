@@ -50,6 +50,47 @@ export const useProductCategories = (productIds: string[]) => {
   });
 };
 
+export const useCategoriesId = () => {
+  return useQuery({
+    queryKey: ['categoriesId'],
+    queryFn: async () => {
+      try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, slug');
+
+      if (error) throw error;
+      return data as { id: string; name: string; slug: string }[] | null;
+    } catch (error) {
+      console.error('Error fetching categoriesId', error);
+      return null;
+    }
+  },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+};
+
+
+export const useSubCategoriesId = () => {
+  return useQuery({
+    queryKey: ['subCategoriesId'],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('sub_categories')
+          .select('id, name, slug');
+  
+          if (error) throw error;
+          return data as { id: string; name: string; slug: string }[] | null;
+        } catch (error) {
+          console.error('Error fetching subCategoriesId', error);
+          return null;
+        }
+      },
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+  };
+
 /**
  * Fetch category details
  */
@@ -94,14 +135,16 @@ export const useFilteredCoupons = (
   
 
   // Get unique category IDs
-  const categoryIds = useMemo(() => {
-    if (!productCategories) return [];
-    return [...new Set(productCategories.map(p => p.category_id))];
-  }, [productCategories]);
-
-  const { data: categories } = useCategoryDetails(categoryIds);
-
+  // const categoryIds = useMemo(() => {
+  //   if (!productCategories) return [];
+  //   return [...new Set(productCategories.map(p => p.category_id))];
+  // }, [productCategories]);
   
+  // console.log('categoryIds', categoryIds);
+  // const { data: categories } = useCategoryDetails(categoryIds);
+
+  const { data: categories } = useCategoriesId();
+  const { data: subCategories } = useSubCategoriesId();
 
   // Merge cart items with their category info
   const cartItemsWithDetails = useMemo(() => {
@@ -142,7 +185,8 @@ export const useFilteredCoupons = (
         coupon,
         cartItemsWithDetails,
         totalPrice,
-        categories
+        categories ?? [],
+        subCategories ?? []
       );
 
       

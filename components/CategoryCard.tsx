@@ -2,6 +2,8 @@ import { Text, TouchableOpacity, View } from "react-native"
 import SkeletonImage from "./SkeletonImage"
 import Svg, { Path } from "react-native-svg"
 import { Category } from "@/types/categories-products.types"
+import { Image } from "expo-image"
+import { blurhash } from "@/types/categories-products.types"
 
 
 interface CategoryCardProps {
@@ -12,7 +14,7 @@ interface CategoryCardProps {
 export default function CategoryCard({
   category,
   onPress,
-}:CategoryCardProps) {  
+}: CategoryCardProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -21,10 +23,28 @@ export default function CategoryCard({
     >
       {/* Category image skeleton with colored background */}
       <View
-        className="w-20 h-20 rounded-2xl items-center justify-center mr-4"
-        style={{ backgroundColor: category.color }}
+        className="w-20 h-20 mr-4"
+        style={{
+          backgroundColor: category.color,
+          borderRadius: 16,
+          overflow: "hidden",
+        }}
       >
-        <SkeletonImage/>
+        {category.image ? (
+          <Image
+            source={category.image}
+            placeholder={{ blurhash }}
+            contentFit="cover"
+            transition={1000}
+            style={{
+              width: "100%",
+              height: "100%",
+              borderRadius: 16, // 👈 IMPORTANT
+            }}
+          />
+        ) : (
+          <SkeletonImage />
+        )}
       </View>
 
       {/* Category info */}

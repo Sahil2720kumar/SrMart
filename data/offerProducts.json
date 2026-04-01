@@ -1,0 +1,26 @@
+[
+  {
+    "id": "beb4d5b7-7b62-45fc-942d-4eceea7a3726",
+    "offer_id": "26e4d0c0-8511-4122-babc-72de8019128a",
+    "product_id": "687d90e5-ccda-40ed-bb5f-7f456488634f",
+    "created_at": "2026-01-31 08:11:36.294521+00"
+  },
+  {
+    "id": "faee87ba-0021-4d04-8006-c960c90f3965",
+    "offer_id": "26e4d0c0-8511-4122-babc-72de8019128a",
+    "product_id": "b0a182a4-84d8-4c23-844a-7db784f60764",
+    "created_at": "2026-01-31 08:41:54.776221+00"
+  },
+  {
+    "id": "609830c7-b679-4d80-97ad-36a203243b07",
+    "offer_id": "68370bfc-9f25-4bd8-8c41-6afbcd75040f",
+    "product_id": "51ac26cd-1960-4a8b-8e23-bc8ca22642cf",
+    "created_at": "2026-02-17 00:21:09.586649+00"
+  },
+  {
+    "id": "85c1fbaa-ad57-4f42-9f33-4af5afef3efa",
+    "offer_id": "68370bfc-9f25-4bd8-8c41-6afbcd75040f",
+    "product_id": "bb0fa976-ad4b-4c18-9830-06ab99a7e614",
+    "created_at": "2026-02-17 00:21:09.586649+00"
+  }
+]

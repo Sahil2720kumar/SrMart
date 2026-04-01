@@ -1,5 +1,5 @@
 import { Coupon } from '@/types/offers.types';
-import { Product } from '@/types/categories-products.types';
+import { Product, SubCategory } from '@/types/categories-products.types';
 import { CartProduct } from '@/store/cartStore';
 
 export interface CouponEligibility {
@@ -13,22 +13,24 @@ export interface CouponEligibility {
 export interface ProductWithCategory extends Product {
   categoryName?: string;
   categorySlug?: string;
+  subCategoryName?: string;
+  subCategorySlug?: string;
 }
 
 export interface CartItemWithDetails extends CartProduct {
   productDetails?: ProductWithCategory;
 }
 
-/**
- * Check if a coupon is eligible based on cart contents
- */
+// ─── Public entry point ───────────────────────────────────────────────────────
+
 export const checkCouponEligibility = (
   coupon: Coupon,
   cartItems: CartItemWithDetails[],
   totalPrice: number,
-  categories?: Array<{ id: string; name: string; slug: string }>
+  categories?: Array<{ id: string; name: string; slug: string }>,
+  subCategories?: Array<{ id: string; name: string; slug: string }>,
 ): CouponEligibility => {
-  // 1. Check minimum order amount
+  // 1. Minimum order amount
   if (totalPrice < coupon.min_order_amount) {
     return {
       isEligible: false,
@@ -38,250 +40,220 @@ export const checkCouponEligibility = (
     };
   }
 
-  // 2. Check if applicable to all items
+  // 2. Applicable to everything
   if (coupon.applicable_to === 'all') {
-    return { 
-      isEligible: true,
-      requirementsMet: true,
-    };
+    return { isEligible: true, requirementsMet: true };
   }
 
-  // 3. Check category-specific coupons
+  // 3. Category-specific
   if (coupon.applicable_to === 'category' && coupon.applicable_id) {
     return checkCategoryEligibility(coupon, cartItems, categories);
   }
 
-  // 4. Check product-specific coupons
+  // 4. Sub-category-specific  ← was wrongly calling checkCategoryEligibility before
+  if (coupon.applicable_to === 'subcategory' && coupon.applicable_id) {
+    return checkSubCategoryEligibility(coupon, cartItems, subCategories);
+  }
+
+  // 5. Product-specific
   if (coupon.applicable_to === 'product' && coupon.applicable_id) {
     return checkProductEligibility(coupon, cartItems);
   }
 
-  return { 
-    isEligible: true,
-    requirementsMet: true,
-  };
+  // 6. Vendor coupons — not supported client-side yet
+  if (coupon.applicable_to === 'vendor') {
+    return {
+      isEligible: false,
+      reason: 'This coupon is only valid for a specific vendor',
+      requirementsMet: false,
+    };
+  }
+
+  return { isEligible: true, requirementsMet: true };
 };
 
-/**
- * Check category-specific coupon eligibility
- */
+// ─── Category ─────────────────────────────────────────────────────────────────
+
 const checkCategoryEligibility = (
   coupon: Coupon,
   cartItems: CartItemWithDetails[],
-  categories?: Array<{ id: string; name: string; slug: string }>
+  categories?: Array<{ id: string; name: string; slug: string }>,
 ): CouponEligibility => {
- 
   const targetCategory = categories?.find(c => c.id === coupon.applicable_id);
+  const categoryName = targetCategory?.name ?? 'this category';
+  const categorySlug = targetCategory?.slug ?? '';
 
-  
-  const categoryName = targetCategory?.name || 'this category';
-  const categorySlug = targetCategory?.slug || '';
-
-  // Find items from the target category
-  const applicableItems = cartItems.filter(item => 
-    item.product?.category_id === coupon.applicable_id
+  const applicableItems = cartItems.filter(
+    item => item.product?.category_id === coupon.applicable_id,
   );
 
   if (applicableItems.length === 0) {
     return {
       isEligible: false,
-      reason: `No items from ${categoryName} in cart`,
+      reason: `Add items from ${categoryName} to use this coupon`,
       requirementsMet: false,
     };
   }
 
-  // Check for veg/non-veg conflicts
-  const vegConflict = checkVegNonVegConflict(
-    categorySlug,
-    categoryName,
-    cartItems
-  );
+  const vegConflict = checkVegNonVegConflict(categorySlug, categoryName, cartItems);
+  if (!vegConflict.isEligible) return vegConflict;
 
-  if (!vegConflict.isEligible) {
-    return vegConflict;
-  }
-
-  return { 
-    isEligible: true,
-    requirementsMet: true,
-  };
+  return { isEligible: true, requirementsMet: true };
 };
 
-/**
- * Check for veg/non-veg conflicts
- */
-const checkVegNonVegConflict = (
-  categorySlug: string,
-  categoryName: string,
-  cartItems: CartItemWithDetails[]
+// ─── Sub-category ─────────────────────────────────────────────────────────────
+
+const checkSubCategoryEligibility = (
+  coupon: Coupon,
+  cartItems: CartItemWithDetails[],
+  subCategories?: Array<{ id: string; name: string; slug: string }>,
 ): CouponEligibility => {
-  const isVegCoupon = 
-    categorySlug.includes('veg') || 
-    categorySlug.includes('vegetable') ||
-    categoryName.toLowerCase().includes('veg');
+  const targetSubCategory = subCategories?.find(sc => sc.id === coupon.applicable_id);
+  const subCategoryName = targetSubCategory?.name ?? 'this sub-category';
+  const subCategorySlug = targetSubCategory?.slug ?? '';
 
-  const isMeatCoupon = 
-    categorySlug.includes('meat') || 
-    categorySlug.includes('chicken') ||
-    categorySlug.includes('fish') ||
-    categorySlug.includes('seafood') ||
-    categoryName.toLowerCase().includes('meat') ||
-    categoryName.toLowerCase().includes('non-veg');
+  // Match on sub_category_id — the field that actually exists on the product
+  const applicableItems = cartItems.filter(
+    item => item.product?.sub_category_id === coupon.applicable_id,
+  );
 
-  // If it's a veg coupon, check for non-veg items
+  if (applicableItems.length === 0) {
+    return {
+      isEligible: false,
+      reason: `Add items from ${subCategoryName} to use this coupon`,
+      requirementsMet: false,
+    };
+  }
+
+  const vegConflict = checkVegNonVegConflict(subCategorySlug, subCategoryName, applicableItems);
+  if (!vegConflict.isEligible) return vegConflict;
+
+  return { isEligible: true, requirementsMet: true };
+};
+
+// ─── Veg / Non-veg conflict ───────────────────────────────────────────────────
+
+const checkVegNonVegConflict = (
+  slug: string,
+  name: string,
+  cartItems: CartItemWithDetails[],
+): CouponEligibility => {
+  const lowerSlug = slug.toLowerCase();
+  const lowerName = name.toLowerCase();
+
+  const isVegCoupon =
+    lowerSlug.includes('veg') ||
+    lowerSlug.includes('vegetable') ||
+    lowerName.includes('veg');
+
   if (isVegCoupon) {
-    const nonVegItems = cartItems.filter(item => 
-      item.product?.is_veg === false
-    );
+    const nonVegItems = cartItems.filter(item => item.product?.is_veg === false);
 
     if (nonVegItems.length > 0) {
-      const conflictingProducts = nonVegItems.map(item => ({
-        id: item.productId,
-        name: item.product?.name || 'Unknown',
-        category: item.productDetails?.categoryName,
-      }));
-
       return {
         isEligible: false,
         reason: 'Remove non-veg items to apply this coupon',
-        conflictingItems: conflictingProducts,
+        conflictingItems: nonVegItems.map(item => ({
+          id: item.productId,
+          name: item.product?.name ?? 'Unknown',
+          category: item.productDetails?.categoryName,
+        })),
         requirementsMet: false,
       };
     }
   }
 
-  // If it's a meat/non-veg coupon, optionally check for veg-only scenarios
-  // (This is less common, but you can add logic here if needed)
-
-  return { 
-    isEligible: true,
-    requirementsMet: true,
-  };
+  return { isEligible: true, requirementsMet: true };
 };
 
-/**
- * Check product-specific coupon eligibility
- */
+// ─── Product ──────────────────────────────────────────────────────────────────
+
 const checkProductEligibility = (
   coupon: Coupon,
-  cartItems: CartItemWithDetails[]
+  cartItems: CartItemWithDetails[],
 ): CouponEligibility => {
-  const hasProduct = cartItems.some(item => 
-    item.productId === coupon.applicable_id
-  );
+  const hasProduct = cartItems.some(item => item.productId === coupon.applicable_id);
 
   if (!hasProduct) {
     return {
       isEligible: false,
-      reason: 'Required product not in cart',
+      reason: 'Required product is not in your cart',
       requirementsMet: false,
     };
   }
 
-  return { 
-    isEligible: true,
-    requirementsMet: true,
-  };
+  return { isEligible: true, requirementsMet: true };
 };
 
-/**
- * Get conflicting items that prevent a coupon from being applied
- */
+// ─── Utilities (exported for use in hooks / UI) ───────────────────────────────
+
 export const getConflictingItems = (
   coupon: Coupon,
   cartItems: CartItemWithDetails[],
-  categories?: Array<{ id: string; name: string; slug: string }>
+  categories?: Array<{ id: string; name: string; slug: string }>,
 ): Array<{ id: string; name: string; reason: string }> => {
-  const conflicts: Array<{ id: string; name: string; reason: string }> = [];
+  if (coupon.applicable_to !== 'category' || !coupon.applicable_id) return [];
 
-  if (coupon.applicable_to === 'category' && coupon.applicable_id) {
-    const targetCategory = categories?.find(c => c.id === coupon.applicable_id);
-    const categorySlug = targetCategory?.slug || '';
-    const categoryName = targetCategory?.name || '';
+  const targetCategory = categories?.find(c => c.id === coupon.applicable_id);
+  const isVegCoupon =
+    (targetCategory?.slug ?? '').toLowerCase().includes('veg') ||
+    (targetCategory?.name ?? '').toLowerCase().includes('veg');
 
-    const isVegCoupon = 
-      categorySlug.includes('veg') || 
-      categoryName.toLowerCase().includes('veg');
+  if (!isVegCoupon) return [];
 
-    if (isVegCoupon) {
-      const nonVegItems = cartItems.filter(item => 
-        item.product?.is_veg === false
-      );
-
-      conflicts.push(...nonVegItems.map(item => ({
-        id: item.productId,
-        name: item.product?.name || 'Unknown',
-        reason: 'Non-veg item conflicts with veg coupon',
-      })));
-    }
-  }
-
-  return conflicts;
+  return cartItems
+    .filter(item => item.product?.is_veg === false)
+    .map(item => ({
+      id: item.productId,
+      name: item.product?.name ?? 'Unknown',
+      reason: 'Non-veg item conflicts with veg coupon',
+    }));
 };
 
-/**
- * Calculate the value of items that would be discounted
- */
 export const calculateDiscountableValue = (
   coupon: Coupon,
-  cartItems: CartItemWithDetails[]
+  cartItems: CartItemWithDetails[],
 ): number => {
+  const price = (item: CartItemWithDetails) =>
+    (item.product?.discount_price ?? 0) * item.quantity;
+
   if (coupon.applicable_to === 'all') {
-    return cartItems.reduce((total, item) => 
-      total + (item.product?.discount_price || 0) * item.quantity, 0
-    );
+    return cartItems.reduce((sum, item) => sum + price(item), 0);
   }
 
   if (coupon.applicable_to === 'category' && coupon.applicable_id) {
     return cartItems
       .filter(item => item.product?.category_id === coupon.applicable_id)
-      .reduce((total, item) => 
-        total + (item.product?.discount_price || 0) * item.quantity, 0
-      );
+      .reduce((sum, item) => sum + price(item), 0);
+  }
+
+  if (coupon.applicable_to === 'subcategory' && coupon.applicable_id) {
+    return cartItems
+      .filter(item => item.product?.sub_category_id === coupon.applicable_id)
+      .reduce((sum, item) => sum + price(item), 0);
   }
 
   if (coupon.applicable_to === 'product' && coupon.applicable_id) {
     return cartItems
       .filter(item => item.productId === coupon.applicable_id)
-      .reduce((total, item) => 
-        total + (item.product?.discount_price || 0) * item.quantity, 0
-      );
+      .reduce((sum, item) => sum + price(item), 0);
   }
 
   return 0;
 };
 
-/**
- * Sort coupons by eligibility and potential savings
- */
-export const sortCouponsByValue = (
-  couponsWithEligibility: Array<{
-    coupon: Coupon;
-    eligibility: CouponEligibility;
-    discount: number;
-  }>
-): Array<{
-  coupon: Coupon;
-  eligibility: CouponEligibility;
-  discount: number;
-}> => {
-  return couponsWithEligibility.sort((a, b) => {
-    // Eligible coupons first
-    if (a.eligibility.isEligible && !b.eligibility.isEligible) return -1;
-    if (!a.eligibility.isEligible && b.eligibility.isEligible) return 1;
+export const sortCouponsByValue = <T extends { eligibility: CouponEligibility; discount: number }>(
+  coupons: T[],
+): T[] =>
+  [...coupons].sort((a, b) => {
+    if (a.eligibility.isEligible !== b.eligibility.isEligible)
+      return a.eligibility.isEligible ? -1 : 1;
 
-    // Among eligible, sort by discount amount (highest first)
-    if (a.eligibility.isEligible && b.eligibility.isEligible) {
+    if (a.eligibility.isEligible && b.eligibility.isEligible)
       return b.discount - a.discount;
-    }
 
-    // Among ineligible, sort by shortfall (closest to eligible first)
-    if (!a.eligibility.isEligible && !b.eligibility.isEligible) {
-      const shortfallA = a.eligibility.shortfall || Infinity;
-      const shortfallB = b.eligibility.shortfall || Infinity;
-      return shortfallA - shortfallB;
-    }
-
-    return 0;
+    // Both ineligible — surface the ones closest to qualifying
+    const sa = a.eligibility.shortfall ?? Infinity;
+    const sb = b.eligibility.shortfall ?? Infinity;
+    return sa - sb;
   });
-};

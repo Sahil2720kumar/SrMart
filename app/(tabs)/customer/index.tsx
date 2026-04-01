@@ -61,9 +61,10 @@ export default function HomeScreen() {
   const CategoryItem = ({ item }: { item: (typeof categories)[0] }) => (
     <TouchableOpacity
       onPress={() => router.push(`/customer/category/${item.id}`)}
-      className="items-center w-[80px] mr-2 mb-4"
+      className="items-center w-[80px] mr-2 mb-4 justify-start"
+      style={{ height: 110 }} // 👈 FIX: same height for all
     >
-      <View className="w-[70px] h-[70px] bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
+      <View className="w-[70px] h-[70px] overflow-hidden bg-gray-50 rounded-2xl items-center justify-center mb-2 border border-gray-100">
         {item.image ? (
           <Image
             source={item.image}
@@ -166,7 +167,7 @@ export default function HomeScreen() {
               <Text className="text-green-500 font-medium">See All</Text>
             </TouchableOpacity>
           </View>
-          <View className="flex-row flex-wrap items-center justify-start">
+          <View className="flex-row flex-wrap items-center justify-between">
             {categories.map((category) => (
               <CategoryItem key={category.id} item={category} />
             ))}
