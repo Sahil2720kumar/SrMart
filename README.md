@@ -2,8 +2,9 @@
 
 > **Your Neighborhood, Delivered.** — A hyperlocal grocery & daily essentials marketplace built for Dibrugarh and beyond.
 
-![SrMart Banner](./assets/screenshots/banner.png)
-
+<p align="center">
+  <img src="./assets/screenshots/banner.png" width="200" alt="SrMart Logo"/>
+</p>
 ---
 
 ## 📖 Table of Contents
